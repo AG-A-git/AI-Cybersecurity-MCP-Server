@@ -9,16 +9,26 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Results from "./pages/Results";
 
+import ProtectedRoute from "./components/ProtectedRoute";
+
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<Dashboard />} />
-      <Route path="/upload" element={<Upload />} />
-      <Route path="/reports" element={<Reports />} />
-      <Route path="/history" element={<History />} />
+
+      {/* Public Routes */}
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
-      <Route path="/results" element={<Results />} />
+
+      {/* Protected Routes */}
+      <Route element={<ProtectedRoute />}>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/upload" element={<Upload />} />
+        <Route path="/reports" element={<Reports />} />
+        <Route path="/history" element={<History />} />
+        <Route path="/results" element={<Results />} />
+      </Route>
+
     </Routes>
   );
 }
