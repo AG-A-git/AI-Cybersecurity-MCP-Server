@@ -140,3 +140,48 @@ RECOMMENDATION_MAP = {
     "Command Injection": COMMAND_INJECTION_RECOMMENDATION,
     "Hardcoded Credentials": HARDCODED_CREDENTIALS_RECOMMENDATION,
 }
+BASE_PROMPT = """
+You are a cybersecurity expert.
+
+Analyze the given vulnerability and provide:
+
+1. Explanation
+2. Severity
+3. Risk Score
+4. OWASP Mapping
+5. CWE Mapping
+6. Recommendation
+"""
+
+SQL_INJECTION_PROMPT = BASE_PROMPT + """
+
+Vulnerability: SQL Injection
+
+Explain how SQL Injection works, its impact, and prevention methods.
+"""
+
+XSS_PROMPT = BASE_PROMPT + """
+
+Vulnerability: XSS
+
+Explain Cross-Site Scripting (XSS), its impact, and prevention methods.
+"""
+
+HARDCODED_CREDENTIALS_PROMPT = BASE_PROMPT + """
+
+Vulnerability: Hardcoded Credentials
+
+Explain why hardcoded credentials are dangerous and how to prevent them.
+"""
+
+def get_prompt(vulnerability):
+    vulnerability = vulnerability.lower()
+
+    if vulnerability == "sql injection":
+        return SQL_INJECTION_PROMPT
+    elif vulnerability == "xss":
+        return XSS_PROMPT
+    elif vulnerability == "hardcoded credentials":
+        return HARDCODED_CREDENTIALS_PROMPT
+    else:
+        return BASE_PROMPT + f"\n\nVulnerability: {vulnerability}"

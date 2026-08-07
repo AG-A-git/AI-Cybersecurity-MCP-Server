@@ -1,4 +1,5 @@
 import requests
+from .prompts import get_prompt
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL_NAME = "llama3"
@@ -21,7 +22,6 @@ class OllamaClient:
             response.raise_for_status()
 
             result = response.json()
-
             return result.get("response", "").strip()
 
         except requests.exceptions.RequestException as e:
