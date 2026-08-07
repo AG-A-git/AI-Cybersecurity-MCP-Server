@@ -1,5 +1,47 @@
 import os
 
+
+def read_file(file_path):
+    """
+    Read the contents of a source code file.
+    """
+    try:
+        with open(file_path, "r", encoding="utf-8") as file:
+            return file.read()
+
+    except Exception as e:
+        print(f"Error reading {file_path}: {e}")
+        return ""
+
+
+def get_extension(file_path):
+    """
+    Return the file extension.
+    """
+    return os.path.splitext(file_path)[1].lower()
+
+
+def supported_language(file_path):
+    """
+    Check whether the language is supported.
+    """
+    supported_extensions = {
+        ".py",
+        ".java",
+        ".js",
+        ".html"
+    }
+
+    return get_extension(file_path) in supported_extensions
+
+
+def get_lines(file_path):
+    """
+    Return file contents as a list of lines.
+    """
+    return read_file(file_path).splitlines()
+
+
 # Supported file extensions
 SUPPORTED_EXTENSIONS = {
     ".py": "Python",
@@ -24,9 +66,7 @@ def parse_file(file_path):
     _, extension = os.path.splitext(file_path)
 
     if extension.lower() not in SUPPORTED_EXTENSIONS:
-        raise ValueError(
-            f"Unsupported file type: {extension}"
-        )
+        raise ValueError(f"Unsupported file type: {extension}")
 
     language = SUPPORTED_EXTENSIONS[extension.lower()]
 
