@@ -9,10 +9,9 @@ def load_rules():
     ]
 
     return rules
-
 def run_all_rules(file_path, code):
     """
-    Execute all vulnerability detection rules.
+    Execute all loaded rules.
     """
 
     findings = []
@@ -26,4 +25,3 @@ def run_all_rules(file_path, code):
         findings.extend(result)
 
     return findings
-
