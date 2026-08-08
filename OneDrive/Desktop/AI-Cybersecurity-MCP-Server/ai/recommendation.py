@@ -1,5 +1,5 @@
-from ai.llm import OllamaClient
-from ai.prompts import RECOMMENDATION_MAP
+from .prompts import RECOMMENDATION_MAP
+from .llm import OllamaClient
 
 
 class RecommendationGenerator:
@@ -24,6 +24,37 @@ Code:
 {finding.get("code")}
 """
 
-        prompt = template.format(details=details)
+        prompt = template.format(
+            details=details
+        )
 
-        return self.client.generate(prompt)
+        response = self.client.generate(prompt)
+
+        return {
+            "vulnerability": vulnerability,
+            "recommendation": response
+        }
+
+
+if __name__ == "__main__":
+
+    generator = RecommendationGenerator()
+
+    finding = {
+        "type": "SQL Injection",
+        "file": "login.py",
+        "line": 25,
+        "code": "query = 'SELECT * FROM users WHERE id=' + user_id"
+    }
+
+    result = generator.generate_recommendation(finding)
+
+    print("\n==============================")
+    print("SECURITY RECOMMENDATION")
+    print("==============================")
+
+    print("\nVulnerability:")
+    print(result["vulnerability"])
+
+    print("\nRecommendation:")
+    print(result["recommendation"])

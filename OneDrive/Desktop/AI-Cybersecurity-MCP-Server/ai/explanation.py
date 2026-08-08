@@ -1,37 +1,31 @@
-from ai.llm import OllamaClient
-from ai.prompts import PROMPT_MAP
+from .llm import OllamaClient
+from .prompts import get_prompt
 
 
 class ExplanationGenerator:
+
     def __init__(self):
         self.client = OllamaClient()
 
-    def generate_explanation(self, finding):
-        """
-        finding should be a dictionary like:
-        {
-            "type": "SQL Injection",
-            "file": "login.py",
-            "line": 42,
-            "code": "query = ..."
+    def generate_explanation(self, vulnerability):
+
+        prompt = get_prompt(vulnerability)
+
+        response = self.client.generate(prompt)
+
+        return {
+            "vulnerability": vulnerability,
+            "explanation": response
         }
-        """
 
-        vulnerability = finding.get("type")
 
-        prompt_template = PROMPT_MAP.get(vulnerability)
+if __name__ == "__main__":
 
-        if not prompt_template:
-            return f"No prompt available for: {vulnerability}"
+    generator = ExplanationGenerator()
 
-        details = f"""
-File: {finding.get("file")}
-Line: {finding.get("line")}
+    result = generator.generate_explanation(
+        "SQL Injection"
+    )
 
-Code:
-{finding.get("code")}
-"""
-
-        prompt = prompt_template.format(details=details)
-
-        return self.client.generate(prompt)
+    print("\nAI Explanation:")
+    print(result)
