@@ -1,43 +1,146 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from datetime import datetime
 
 from database import Base
-class User(Base):
 
+
+class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
 
-    username = Column(String(100), unique=True, nullable=False)
+    username = Column(
+        String(100),
+        unique=True,
+        nullable=False
+    )
 
-    email = Column(String(200), unique=True, nullable=False)
+    email = Column(
+        String(200),
+        unique=True,
+        nullable=False
+    )
 
-    password_hash = Column(String(255), nullable=False)
+    password_hash = Column(
+        String(255),
+        nullable=False
+    )
 
-    created_at = Column(DateTime, server_default=func.now())
+    created_at = Column(
+        DateTime,
+        server_default=func.now()
+    )
+
+    # One User → Many Projects
+    projects = relationship(
+        "Project",
+        back_populates="owner",
+        cascade="all, delete-orphan"
+    )
+
+    # One User → Many Uploaded Files
+    uploaded_files = relationship(
+        "UploadedFile",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+
+
 class Project(Base):
-
     __tablename__ = "projects"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
 
-    name = Column(String(200), nullable=False)
+    project_name = Column(
+        String,
+        nullable=False
+    )
 
-    description = Column(String(500))
+    description = Column(
+        String,
+        nullable=True
+    )
 
-    owner_id = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow
+    )
 
-    created_at = Column(DateTime, server_default=func.now())
+    owner_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False
+    )
+
+    # Project → User
+    owner = relationship(
+        "User",
+        back_populates="projects"
+    )
+
+    # One Project → Many Uploaded Files
+    uploaded_files = relationship(
+        "UploadedFile",
+        back_populates="project",
+        cascade="all, delete-orphan"
+    )
+
+
 class UploadedFile(Base):
-
     __tablename__ = "uploaded_files"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True
+    )
 
-    filename = Column(String(255), nullable=False)
+    filename = Column(
+        String,
+        nullable=False
+    )
 
-    file_path = Column(String(500), nullable=False)
+    filepath = Column(
+        String,
+        nullable=False
+    )
 
-    project_id = Column(Integer, ForeignKey("projects.id"))
+    language = Column(
+        String,
+        nullable=False
+    )
 
-    uploaded_at = Column(DateTime, server_default=func.now())
+    upload_time = Column(
+        DateTime,
+        default=datetime.utcnow
+    )
+
+    project_id = Column(
+        Integer,
+        ForeignKey("projects.id"),
+        nullable=False
+    )
+
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=False
+    )
+
+    # UploadedFile → Project
+    project = relationship(
+        "Project",
+        back_populates="uploaded_files"
+    )
+
+    # UploadedFile → User
+    user = relationship(
+        "User",
+        back_populates="uploaded_files"
+    )

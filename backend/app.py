@@ -16,6 +16,8 @@ from utils import verify_password
 from auth import create_access_token
 from fastapi.security import OAuth2PasswordBearer
 from auth import get_current_user
+from routers import projects
+from routers import upload
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -23,6 +25,9 @@ app = FastAPI(
     version=PROJECT_VERSION,
     description=PROJECT_DESCRIPTION
 )
+app.include_router(projects.router)
+app.include_router(upload.router)
+print("UPLOAD ROUTES:", [(route.path, route.methods) for route in upload.router.routes])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 @app.get("/")
 def home():

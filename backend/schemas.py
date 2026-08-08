@@ -1,5 +1,6 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from typing import Optional
+from datetime import datetime
 class UserRegister(BaseModel):
 
     email: EmailStr
@@ -33,3 +34,27 @@ class Token(BaseModel):
 class TokenData(BaseModel):
 
     email: Optional[str] = None
+    
+class ProjectCreate(BaseModel):
+    project_name: str
+    description: str | None = None
+    
+class ProjectResponse(BaseModel):
+    id: int
+    project_name: str
+    description: str | None = None
+    created_at: datetime
+    owner_id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+class UploadResponse(BaseModel):
+    message: str
+    id: int
+    filename: str
+    filepath: str
+    language: str
+    project_id: int
+    
+class ProjectList(BaseModel):
+    projects: list[ProjectResponse]

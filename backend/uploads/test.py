@@ -1,0 +1,1 @@
+print("Hello from cybersecurity scanner")
