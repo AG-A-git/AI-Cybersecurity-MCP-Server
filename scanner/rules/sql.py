@@ -23,18 +23,18 @@ def scan_sql(file_path):
     try:
         with open(file_path, "r", encoding="utf-8") as file:
             lines = file.readlines()
-    except FileNotFoundError:
+    except (FileNotFoundError, OSError):
         return results
 
     for line_number, line in enumerate(lines, start=1):
         for pattern in SQL_PATTERNS:
             if pattern.search(line):
                 results.append({
-                    "file": file_path,
+                    "file": str(file_path),
                     "line": line_number,
                     "vulnerability": "SQL Injection",
                     "severity": "Critical",
-                    "confidence": 96,
+                    "confidence": 95,
                     "code": line.strip()
                 })
                 break
