@@ -18,6 +18,7 @@ from fastapi.security import OAuth2PasswordBearer
 from auth import get_current_user
 from routers import projects
 from routers import upload
+from routers import scan
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -27,6 +28,7 @@ app = FastAPI(
 )
 app.include_router(projects.router)
 app.include_router(upload.router)
+app.include_router(scan.router)
 print("UPLOAD ROUTES:", [(route.path, route.methods) for route in upload.router.routes])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 @app.get("/")

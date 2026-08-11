@@ -58,3 +58,35 @@ class UploadResponse(BaseModel):
     
 class ProjectList(BaseModel):
     projects: list[ProjectResponse]
+    
+class ScanCreate(BaseModel):
+    project_id: int
+    
+class VulnerabilityResponse(BaseModel):
+    id: int
+    file_name: str
+    line_number: int | None = None
+    vulnerability_type: str
+    severity: str
+    confidence: int | None = None
+    code: str | None = None
+    model_config = ConfigDict(from_attributes=True)
+    
+class ScanResponse(BaseModel):
+    id: int
+    project_id: int
+    status: str
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    created_at: datetime | None = None
+    model_config = ConfigDict(from_attributes=True)
+    
+class ScanResultResponse(BaseModel):
+    id: int
+    project_id: int
+    status: str
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    created_at: datetime | None = None
+    vulnerabilities: list[VulnerabilityResponse] = []
+    model_config = ConfigDict(from_attributes=True)
