@@ -1,174 +1,86 @@
 import React from "react";
-import "./../styles/Results.css";
+import Table from "../components/Table";
+
+const mockResults = [
+    {
+        id: 1,
+        severity: "Critical",
+        vulnerability: "SQL Injection",
+        description: "User input is directly used in a database query.",
+        status: "Open",
+    },
+    {
+        id: 2,
+        severity: "High",
+        vulnerability: "Cross-Site Scripting (XSS)",
+        description: "Untrusted input is rendered without proper sanitization.",
+        status: "Open",
+    },
+    {
+        id: 3,
+        severity: "Medium",
+        vulnerability: "Missing Security Headers",
+        description: "Recommended HTTP security headers are missing.",
+        status: "Open",
+    },
+    {
+        id: 4,
+        severity: "Low",
+        vulnerability: "Information Disclosure",
+        description: "Server information is exposed in HTTP responses.",
+        status: "Resolved",
+    },
+];
 
 function Results() {
-  const vulnerabilities = [
-    {
-      file: "login.py",
-      line: 42,
-      vulnerability: "SQL Injection",
-      severity: "Critical",
-      risk: 9.8,
-      explanation:
-        "User input is directly included in a database query without proper validation.",
-      recommendation:
-        "Use parameterized queries or prepared statements.",
-    },
-    {
-      file: "auth.js",
-      line: 18,
-      vulnerability: "Hardcoded Password",
-      severity: "High",
-      risk: 8.2,
-      explanation:
-        "A sensitive password is stored directly inside the source code.",
-      recommendation:
-        "Move secrets to environment variables or a secure secret manager.",
-    },
-    {
-      file: "upload.py",
-      line: 67,
-      vulnerability: "Unvalidated File Upload",
-      severity: "High",
-      risk: 7.8,
-      explanation:
-        "Uploaded files are accepted without sufficient type or content validation.",
-      recommendation:
-        "Validate file type, size, and content before processing uploads.",
-    },
-    {
-      file: "dashboard.jsx",
-      line: 31,
-      vulnerability: "Cross-Site Scripting",
-      severity: "Medium",
-      risk: 5.6,
-      explanation:
-        "Untrusted data may be rendered without appropriate sanitization.",
-      recommendation:
-        "Sanitize user-controlled data before rendering it.",
-    },
-    {
-      file: "config.py",
-      line: 12,
-      vulnerability: "Information Disclosure",
-      severity: "Low",
-      risk: 3.2,
-      explanation:
-        "Sensitive application information may be exposed through configuration output.",
-      recommendation:
-        "Remove sensitive information from logs and restrict configuration access.",
-    },
-  ];
+    const headers = [
+        "Severity",
+        "Vulnerability",
+        "Description",
+        "Status",
+    ];
 
-  const critical = vulnerabilities.filter(
-    (item) => item.severity === "Critical"
-  ).length;
+    const rows = mockResults.map((result) => [
+        result.severity,
+        result.vulnerability,
+        result.description,
+        result.status,
+    ]);
 
-  const high = vulnerabilities.filter(
-    (item) => item.severity === "High"
-  ).length;
+    return (
+        <div className="container-fluid mt-4">
 
-  const medium = vulnerabilities.filter(
-    (item) => item.severity === "Medium"
-  ).length;
+            {/* Page Header */}
+            <div className="mb-4">
+                <h2>Scan Results</h2>
 
-  const low = vulnerabilities.filter(
-    (item) => item.severity === "Low"
-  ).length;
+                <p className="text-muted">
+                    View vulnerabilities detected during the scan.
+                </p>
+            </div>
 
-  const getSeverityClass = (severity) => {
-    switch (severity) {
-      case "Critical":
-        return "severity critical";
-      case "High":
-        return "severity high";
-      case "Medium":
-        return "severity medium";
-      case "Low":
-        return "severity low";
-      default:
-        return "severity";
-    }
-  };
+            {/* Results Table */}
+            <div className="card">
 
-  return (
-    <div className="results-page">
-      <h1>Scan Results</h1>
+                <div className="card-header">
+                    <h5 className="mb-0">
+                        Vulnerabilities Found
+                    </h5>
+                </div>
 
-      <p className="subtitle">
-        Vulnerabilities detected during the security scan.
-      </p>
+                <div className="card-body">
 
-      <div className="summary-container">
-        <div className="summary-card">
-          <h3>Total Issues</h3>
-          <p>{vulnerabilities.length}</p>
+                    <Table
+                        headers={headers}
+                        rows={rows}
+                    />
+
+                </div>
+
+            </div>
+
         </div>
-
-        <div className="summary-card">
-          <h3>Critical</h3>
-          <p>{critical}</p>
-        </div>
-
-        <div className="summary-card">
-          <h3>High</h3>
-          <p>{high}</p>
-        </div>
-
-        <div className="summary-card">
-          <h3>Medium</h3>
-          <p>{medium}</p>
-        </div>
-
-        <div className="summary-card">
-          <h3>Low</h3>
-          <p>{low}</p>
-        </div>
-      </div>
-
-      <div className="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>File Name</th>
-              <th>Line Number</th>
-              <th>Vulnerability</th>
-              <th>Severity</th>
-              <th>Risk Score</th>
-              <th>AI Explanation</th>
-              <th>Recommendation</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {vulnerabilities.map((item, index) => (
-              <tr key={index}>
-                <td>{item.file}</td>
-
-                <td>{item.line}</td>
-
-                <td className="vulnerability-name">
-                  {item.vulnerability}
-                </td>
-
-                <td>
-                  <span className={getSeverityClass(item.severity)}>
-                    {item.severity}
-                  </span>
-                </td>
-
-                <td className="risk-score">{item.risk}</td>
-
-                <td>{item.explanation}</td>
-
-                <td>{item.recommendation}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+    );
 }
 
 export default Results;

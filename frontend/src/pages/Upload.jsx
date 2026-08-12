@@ -1,204 +1,241 @@
 import React, { useState } from "react";
+import api from "../services/api";
 
 function Upload() {
-  const [selectedFile, setSelectedFile] = useState(null);
+    const [file, setFile] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
+    const [result, setResult] = useState(null);
 
-  // Handle normal file selection
-  const handleFileChange = (event) => {
-    const file = event.target.files[0];
+    const handleFileChange = (event) => {
+        const selectedFile = event.target.files?.[0] || null;
 
-    if (file) {
-      setSelectedFile(file);
-    }
-  };
+        setFile(selectedFile);
+        setError("");
+        setResult(null);
+    };
 
-  // Handle ZIP file selection
-  const handleZipChange = (event) => {
-    const file = event.target.files[0];
+    const getErrorMessage = (error) => {
+        if (!error.response) {
+            return "Could not connect to the backend server.";
+        }
 
-    if (file) {
-      setSelectedFile(file);
-    }
-  };
+        const data = error.response.data;
 
-  // Handle drag and drop
-  const handleDrop = (event) => {
-    event.preventDefault();
+        if (Array.isArray(data?.detail)) {
+            return data.detail
+                .map((item) => {
+                    if (typeof item === "string") {
+                        return item;
+                    }
 
-    const file = event.dataTransfer.files[0];
+                    if (item?.msg) {
+                        const location = Array.isArray(item.loc)
+                            ? item.loc.join(" → ")
+                            : "";
 
-    if (file) {
-      setSelectedFile(file);
-    }
-  };
+                        return location
+                            ? `${location}: ${item.msg}`
+                            : item.msg;
+                    }
 
-  const handleDragOver = (event) => {
-    event.preventDefault();
-  };
+                    return JSON.stringify(item);
+                })
+                .join("\n");
+        }
 
-  // Upload button
-  const handleUpload = () => {
-    if (!selectedFile) {
-      alert("Please select a file first.");
-      return;
-    }
+        if (typeof data?.detail === "string") {
+            return data.detail;
+        }
 
-    alert(`File "${selectedFile.name}" is ready for upload.`);
-  };
+        return `Server error: ${error.response.status}`;
+    };
 
-  return (
-    <div
-      style={{
-        maxWidth: "900px",
-        margin: "40px auto",
-        padding: "20px",
-        fontFamily: "Arial, sans-serif",
-      }}
-    >
-      {/* Page Heading */}
-      <h1 style={{ marginBottom: "10px" }}>
-        Upload Security Project
-      </h1>
+    const handleUpload = async (event) => {
+        event.preventDefault();
 
-      <p style={{ color: "#555", marginBottom: "25px" }}>
-        Upload your source code for vulnerability scanning.
-      </p>
+        if (!file) {
+            setError("Please select a file first.");
+            return;
+        }
 
-      {/* Drag and Drop Area */}
-      <div
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        style={{
-          border: "2px dashed #777",
-          borderRadius: "10px",
-          padding: "40px 20px",
-          textAlign: "center",
-          backgroundColor: "#f8f9fa",
-          marginBottom: "25px",
-        }}
-      >
-        <div style={{ fontSize: "50px", marginBottom: "15px" }}>
-          📁
-        </div>
+        setLoading(true);
+        setError("");
+        setResult(null);
 
-        <h3 style={{ marginBottom: "10px" }}>
-          Drag & Drop Your File Here
-        </h3>
+        console.log("Starting security scan...");
+        console.log("File:", file.name);
 
-        <p style={{ color: "#666" }}>
-          or choose a file from your computer
-        </p>
+        try {
+            const formData = new FormData();
 
-        {/* Buttons */}
+            formData.append("file", file);
+
+            console.log("Sending file to /upload");
+
+            const response = await api.post(
+                "/upload",
+                formData
+            );
+
+            console.log("SCAN RESPONSE:", response.data);
+
+            setResult(response.data);
+        } catch (error) {
+            console.error("Scan error:", error);
+
+            setError(getErrorMessage(error));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
         <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            gap: "15px",
-            marginTop: "20px",
-            flexWrap: "wrap",
-          }}
+            style={{
+                padding: "40px",
+                maxWidth: "900px",
+                margin: "0 auto",
+            }}
         >
-          {/* Choose File */}
-          <label
-            style={{
-              display: "inline-block",
-              cursor: "pointer",
-            }}
-          >
-            <input
-              type="file"
-              onChange={handleFileChange}
-              style={{ display: "none" }}
-            />
+            <h1>Security Scan</h1>
 
-            <span
-              style={{
-                display: "inline-block",
-                padding: "10px 20px",
-                backgroundColor: "#0d6efd",
-                color: "white",
-                borderRadius: "6px",
-                cursor: "pointer",
-              }}
-            >
-              Choose File
-            </span>
-          </label>
+            <p>
+                Upload a source-code file to scan for
+                security vulnerabilities.
+            </p>
 
-          {/* Choose ZIP */}
-          <label
-            style={{
-              display: "inline-block",
-              cursor: "pointer",
-            }}
-          >
-            <input
-              type="file"
-              accept=".zip"
-              onChange={handleZipChange}
-              style={{ display: "none" }}
-            />
+            <form onSubmit={handleUpload}>
+                <div
+                    style={{
+                        marginTop: "30px",
+                        padding: "30px",
+                        border: "1px solid #ddd",
+                        borderRadius: "10px",
+                    }}
+                >
+                    <input
+                        type="file"
+                        onChange={handleFileChange}
+                    />
 
-            <span
-              style={{
-                display: "inline-block",
-                padding: "10px 20px",
-                backgroundColor: "#6c757d",
-                color: "white",
-                borderRadius: "6px",
-                cursor: "pointer",
-              }}
-            >
-              Choose ZIP
-            </span>
-          </label>
+                    {file && (
+                        <p>
+                            Selected file:{" "}
+                            <strong>{file.name}</strong>
+                        </p>
+                    )}
+
+                    <button
+                        type="submit"
+                        disabled={!file || loading}
+                        style={{
+                            marginTop: "20px",
+                            padding: "12px 25px",
+                        }}
+                    >
+                        {loading
+                            ? "Scanning..."
+                            : "Upload & Scan"}
+                    </button>
+                </div>
+            </form>
+
+            {error && (
+                <div
+                    style={{
+                        marginTop: "25px",
+                        padding: "15px",
+                        border: "1px solid red",
+                        borderRadius: "8px",
+                        color: "red",
+                        whiteSpace: "pre-wrap",
+                    }}
+                >
+                    {error}
+                </div>
+            )}
+
+            {result && (
+                <div
+                    style={{
+                        marginTop: "30px",
+                        padding: "25px",
+                        border: "1px solid #ddd",
+                        borderRadius: "10px",
+                    }}
+                >
+                    <h2>Scan Results</h2>
+
+                    <p>
+                        <strong>File:</strong>{" "}
+                        {result.filename}
+                    </p>
+
+                    <p>
+                        <strong>Total vulnerabilities:</strong>{" "}
+                        {result.total_vulnerabilities}
+                    </p>
+
+                    {result.summary && (
+                        <div>
+                            <p>
+                                Critical:{" "}
+                                {result.summary.critical}
+                            </p>
+
+                            <p>
+                                High:{" "}
+                                {result.summary.high}
+                            </p>
+
+                            <p>
+                                Medium:{" "}
+                                {result.summary.medium}
+                            </p>
+
+                            <p>
+                                Low:{" "}
+                                {result.summary.low}
+                            </p>
+                        </div>
+                    )}
+
+                    <h3>Vulnerabilities</h3>
+
+                    {result.vulnerabilities?.map(
+                        (item, index) => (
+                            <div
+                                key={index}
+                                style={{
+                                    marginTop: "15px",
+                                    padding: "15px",
+                                    border: "1px solid #ddd",
+                                    borderRadius: "8px",
+                                }}
+                            >
+                                <strong>
+                                    {item.severity}
+                                </strong>
+
+                                <div>
+                                    {item.vulnerability}
+                                </div>
+
+                                <div>
+                                    {item.description}
+                                </div>
+
+                                <div>
+                                    Status: {item.status}
+                                </div>
+                            </div>
+                        )
+                    )}
+                </div>
+            )}
         </div>
-      </div>
-
-      {/* Selected File */}
-      <div
-        style={{
-          padding: "20px",
-          border: "1px solid #ddd",
-          borderRadius: "8px",
-          backgroundColor: "white",
-          marginBottom: "20px",
-        }}
-      >
-        <h3 style={{ marginBottom: "10px" }}>
-          Selected File
-        </h3>
-
-        {selectedFile ? (
-          <p style={{ margin: 0 }}>
-            📄 <strong>{selectedFile.name}</strong>
-          </p>
-        ) : (
-          <p style={{ color: "#777", margin: 0 }}>
-            No file selected
-          </p>
-        )}
-      </div>
-
-      {/* Upload Button */}
-      <button
-        type="button"
-        onClick={handleUpload}
-        style={{
-          padding: "12px 30px",
-          backgroundColor: "#198754",
-          color: "white",
-          border: "none",
-          borderRadius: "6px",
-          fontSize: "16px",
-          cursor: "pointer",
-        }}
-      >
-        Upload
-      </button>
-    </div>
-  );
+    );
 }
 
 export default Upload;
