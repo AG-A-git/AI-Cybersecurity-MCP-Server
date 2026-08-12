@@ -6,11 +6,33 @@ SEVERITY_SCORE = {
 }
 
 
-def calculate_risk(severity):
+def calculate_risk(severity, confidence=100, vulnerability=None):
+    """
+    Calculate a deterministic risk score using
+    severity and scanner confidence.
+    """
 
     severity = severity.strip().capitalize()
 
-    return SEVERITY_SCORE.get(severity, 0)
+    # Keep confidence between 0 and 100
+    confidence = max(
+        0,
+        min(float(confidence), 100)
+    )
+
+    # Get base score from severity
+    severity_score = SEVERITY_SCORE.get(
+        severity,
+        0
+    )
+
+    # Combine severity and confidence
+    risk_score = (
+        severity_score
+        * (confidence / 100)
+    )
+
+    return round(risk_score, 2)
 
 
 def classify_risk(score):
@@ -32,10 +54,22 @@ def classify_risk(score):
 
 if __name__ == "__main__":
 
-    severity = "Critical"
+    test_cases = [
+        ("Critical", 95),
+        ("High", 90),
+        ("Medium", 60),
+        ("Low", 30)
+    ]
 
-    risk = calculate_risk(severity)
+    for severity, confidence in test_cases:
 
-    print("Severity:", severity)
-    print("Risk Score:", risk)
-    print("Risk Level:", classify_risk(risk))
+        risk = calculate_risk(
+            severity,
+            confidence
+        )
+
+        print(
+            f"{severity} + {confidence}% "
+            f"→ Risk Score: {risk} "
+            f"→ {classify_risk(risk)}"
+        )

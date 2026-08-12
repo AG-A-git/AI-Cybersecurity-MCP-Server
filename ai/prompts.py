@@ -256,3 +256,72 @@ RECOMMENDATION_MAP = {
     "Command Injection": COMMAND_INJECTION_RECOMMENDATION,
     "Hardcoded Credentials": HARDCODED_CREDENTIALS_RECOMMENDATION,
 }
+STRUCTURED_ANALYSIS_PROMPT = """
+You are a cybersecurity code analysis assistant.
+
+Analyze the following security finding detected by a vulnerability scanner.
+
+Vulnerability: {vulnerability}
+Severity: {severity}
+Scanner confidence: {confidence}%
+File: {file}
+Line: {line}
+
+Vulnerable code:
+{code}
+
+Return ONLY valid JSON.
+
+Do not use Markdown.
+Do not use ```json.
+Do not include any text before or after the JSON.
+
+Return exactly these fields:
+
+{{
+    "explanation": "Explain why the provided code is vulnerable.",
+    "impact": "Explain the potential security impact.",
+    "recommendation": "Explain how the vulnerability should be fixed.",
+    "secure_practice": "Give the most relevant secure coding practice."
+}}
+
+Rules:
+
+1. Base the analysis only on the provided vulnerability and code.
+2. Do not invent application details that were not provided.
+3. Keep the explanation technically accurate.
+4. Keep the impact specific to the vulnerability.
+5. Give practical remediation advice.
+6. Do not calculate or invent a risk score.
+7. Do not invent an OWASP category or CWE.
+8. Return valid JSON only.
+"""
+
+
+def build_structured_analysis_prompt(scanner_result):
+    return STRUCTURED_ANALYSIS_PROMPT.format(
+        vulnerability=scanner_result.get(
+            "vulnerability",
+            "Unknown"
+        ),
+        severity=scanner_result.get(
+            "severity",
+            "Unknown"
+        ),
+        confidence=scanner_result.get(
+            "confidence",
+            "Unknown"
+        ),
+        file=scanner_result.get(
+            "file",
+            "Unknown"
+        ),
+        line=scanner_result.get(
+            "line",
+            "Unknown"
+        ),
+        code=scanner_result.get(
+            "code",
+            "Not provided"
+        )
+    )

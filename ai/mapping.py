@@ -1,28 +1,23 @@
 VULNERABILITY_MAPPING = {
-
     "SQL Injection": {
-
         "owasp": "A03:2021 Injection",
-
         "cwe": "CWE-89"
     },
 
-
     "XSS": {
-
         "owasp": "A03:2021 Injection",
-
         "cwe": "CWE-79"
     },
 
-
     "Hardcoded Credentials": {
-
         "owasp": "A07:2021 Identification and Authentication Failures",
-
         "cwe": "CWE-798"
-    }
+    },
 
+    "Weak Cryptography": {
+        "owasp": "A02:2021 Cryptographic Failures",
+        "cwe": "CWE-327"
+    }
 }
 
 

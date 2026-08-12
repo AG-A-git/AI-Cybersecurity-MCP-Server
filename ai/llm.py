@@ -24,10 +24,12 @@ class OllamaClient:
     def generate(self, prompt):
 
         payload = {
-            "model": self.model,
-            "prompt": prompt,
-            "stream": False
-        }
+                 "model": self.model,
+                 "prompt": prompt,
+                 "stream": False,
+                 "format": "json"
+                 }
+        
 
         try:
 
@@ -40,16 +42,17 @@ class OllamaClient:
             response.raise_for_status()
 
             result = response.json()
-
-            return result.get("response", "").strip()
-
         except requests.exceptions.RequestException as e:
+            raise RuntimeError(
+                f"Ollama unavailable: {e}"
+                  ) from e
 
             return f"Connection Error: {e}"
 
         except Exception as e:
-
-            return f"Unexpected Error: {e}"
+            raise RuntimeError(
+        f"Ollama request failed: {e}"
+    ) from e
 
 
 # ------------------------------------------------------

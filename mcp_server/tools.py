@@ -2,34 +2,41 @@
 MCP tools for AI vulnerability analysis.
 """
 
-from ai.llm import analyze_vulnerability
-from ai.utils import format_ai_response
+from ai.analysis import (
+    analyze_vulnerability,
+    analyze_vulnerabilities
+)
 
 
 def run_ai_analysis(scanner_result):
     """
-    Run complete AI vulnerability analysis.
+    Analyze one scanner vulnerability.
 
     Args:
         scanner_result (dict):
-            Vulnerability information from the scanner.
+            One standardized scanner finding.
 
     Returns:
         dict:
-            Formatted AI vulnerability analysis.
+            Structured AI vulnerability analysis.
     """
 
-    # Run the AI analysis pipeline
-    analysis = analyze_vulnerability(scanner_result)
+    return analyze_vulnerability(scanner_result)
 
-    # Format the result into the standard response
-    formatted_response = format_ai_response(
-        severity=analysis["severity"],
-        risk_score=analysis["risk_score"],
-        owasp=analysis["owasp"],
-        cwe=analysis["cwe"],
-        explanation=analysis["explanation"],
-        recommendation=analysis["recommendation"]
-    )
 
-    return formatted_response
+def analyze_scan(findings):
+    """
+    Analyze multiple scanner vulnerabilities.
+
+    This is the main interface for backend/MCP integration.
+
+    Args:
+        findings (list):
+            List of standardized scanner findings.
+
+    Returns:
+        list:
+            Structured AI analysis results.
+    """
+
+    return analyze_vulnerabilities(findings)
