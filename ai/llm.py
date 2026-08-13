@@ -1,6 +1,6 @@
 import requests
-from .prompts import build_prompt
 
+from .prompts import build_prompt
 
 
 # ------------------------------------------------------
@@ -40,8 +40,8 @@ class OllamaClient:
             )
 
             response.raise_for_status()
-
             result = response.json()
+            return result.get("response", "")
         except requests.exceptions.RequestException as e:
             raise RuntimeError(
                 f"Ollama unavailable: {e}"

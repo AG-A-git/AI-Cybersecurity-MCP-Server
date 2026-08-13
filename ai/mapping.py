@@ -9,6 +9,11 @@ VULNERABILITY_MAPPING = {
         "cwe": "CWE-79"
     },
 
+    "Cross Site Scripting": {
+        "owasp": "A03:2021 Injection",
+        "cwe": "CWE-79"
+    },
+
     "Hardcoded Credentials": {
         "owasp": "A07:2021 Identification and Authentication Failures",
         "cwe": "CWE-798"

@@ -1,7 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from ai.llm import analyze_vulnerability
+from ai.analysis import analyze_vulnerability
 from ai.utils import format_ai_response
 
 
@@ -49,8 +49,13 @@ def analyze(request: VulnerabilityRequest):
         "code": request.code
     }
 
-    analysis = analyze_vulnerability(scanner_result)
-
+    try:
+        analysis = analyze_vulnerability(scanner_result)
+    except (RuntimeError, ValueError) as e:
+        raise HTTPException(
+        status_code=503,
+        detail="AI analysis unavailable"
+    ) from e
     formatted_response = format_ai_response(
         severity=analysis["severity"],
         risk_score=analysis["risk_score"],
