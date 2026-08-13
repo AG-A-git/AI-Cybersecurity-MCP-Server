@@ -53,9 +53,9 @@ def analyze(request: VulnerabilityRequest):
         analysis = analyze_vulnerability(scanner_result)
     except (RuntimeError, ValueError) as e:
         raise HTTPException(
-        status_code=503,
-        detail="AI analysis unavailable"
-    ) from e
+            status_code=503,
+            detail="AI analysis unavailable"
+        ) from e
     formatted_response = format_ai_response(
         severity=analysis["severity"],
         risk_score=analysis["risk_score"],

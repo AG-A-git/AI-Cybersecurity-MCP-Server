@@ -14,6 +14,9 @@ def calculate_risk(severity, confidence=100, vulnerability=None):
 
     severity = severity.strip().capitalize()
 
+    if confidence is None:
+        confidence = 100
+
     # Keep confidence between 0 and 100
     confidence = max(
         0,
@@ -33,7 +36,6 @@ def calculate_risk(severity, confidence=100, vulnerability=None):
     )
 
     return round(risk_score, 2)
-
 
 def classify_risk(score):
 
