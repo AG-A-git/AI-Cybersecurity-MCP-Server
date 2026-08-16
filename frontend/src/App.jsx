@@ -4,6 +4,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Projects from "./pages/Projects";
+import Upload from "./pages/Upload";
 import History from "./pages/History";
 import Reports from "./pages/Reports";
 import Profile from "./pages/Profile";
@@ -13,7 +14,10 @@ import ProtectedRoute from "./components/ProtectedRoute";
 function App() {
     return (
         <Routes>
-            {/* Public routes */}
+            {/* =========================
+                PUBLIC ROUTES
+            ========================== */}
+
             <Route
                 path="/login"
                 element={<Login />}
@@ -24,7 +28,12 @@ function App() {
                 element={<Register />}
             />
 
-            {/* Protected routes */}
+
+            {/* =========================
+                PROTECTED ROUTES
+            ========================== */}
+
+            {/* Dashboard */}
             <Route
                 path="/dashboard"
                 element={
@@ -34,6 +43,7 @@ function App() {
                 }
             />
 
+            {/* Projects */}
             <Route
                 path="/projects"
                 element={
@@ -43,6 +53,17 @@ function App() {
                 }
             />
 
+            {/* Upload & Security Scan */}
+            <Route
+                path="/upload"
+                element={
+                    <ProtectedRoute>
+                        <Upload />
+                    </ProtectedRoute>
+                }
+            />
+
+            {/* History */}
             <Route
                 path="/history"
                 element={
@@ -52,6 +73,7 @@ function App() {
                 }
             />
 
+            {/* Reports */}
             <Route
                 path="/reports"
                 element={
@@ -61,6 +83,7 @@ function App() {
                 }
             />
 
+            {/* Profile */}
             <Route
                 path="/profile"
                 element={
@@ -70,10 +93,19 @@ function App() {
                 }
             />
 
-            {/* Unknown route */}
+
+            {/* =========================
+                UNKNOWN ROUTES
+            ========================== */}
+
             <Route
                 path="*"
-                element={<Navigate to="/login" replace />}
+                element={
+                    <Navigate
+                        to="/login"
+                        replace
+                    />
+                }
             />
         </Routes>
     );

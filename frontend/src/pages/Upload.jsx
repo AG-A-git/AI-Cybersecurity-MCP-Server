@@ -20,35 +20,69 @@ function Upload() {
             return "Could not connect to the backend server.";
         }
 
+        const status = error.response.status;
         const data = error.response.data;
 
-        if (Array.isArray(data?.detail)) {
-            return data.detail
-                .map((item) => {
-                    if (typeof item === "string") {
-                        return item;
-                    }
-
-                    if (item?.msg) {
-                        const location = Array.isArray(item.loc)
-                            ? item.loc.join(" → ")
-                            : "";
-
-                        return location
-                            ? `${location}: ${item.msg}`
-                            : item.msg;
-                    }
-
-                    return JSON.stringify(item);
-                })
-                .join("\n");
+        // 401 - Authentication required
+        if (status === 401) {
+            return "Login required. Please log in again.";
         }
 
+        // 403 - Not authorized
+        if (status === 403) {
+            return "You are not authorized to perform this action.";
+        }
+
+        // 404 - Resource not found
+        if (status === 404) {
+            return "Resource not found.";
+        }
+
+        // 422 - Validation error
+        if (status === 422) {
+            if (Array.isArray(data?.detail)) {
+                return data.detail
+                    .map((item) => {
+                        if (typeof item === "string") {
+                            return item;
+                        }
+
+                        if (item?.msg) {
+                            const location = Array.isArray(item.loc)
+                                ? item.loc.join(" → ")
+                                : "";
+
+                            return location
+                                ? `${location}: ${item.msg}`
+                                : item.msg;
+                        }
+
+                        return JSON.stringify(item);
+                    })
+                    .join("\n");
+            }
+
+            if (typeof data?.detail === "string") {
+                return data.detail;
+            }
+
+            return "Invalid request. Please check the selected file.";
+        }
+
+        // 500 - Server error
+        if (status === 500) {
+            return (
+                data?.detail ||
+                "Server error. Please try again later."
+            );
+        }
+
+        // Other backend errors
         if (typeof data?.detail === "string") {
             return data.detail;
         }
 
-        return `Server error: ${error.response.status}`;
+        return `Server error: ${status}`;
     };
 
     const handleUpload = async (event) => {
@@ -90,6 +124,32 @@ function Upload() {
         }
     };
 
+    const getSeverityIndicator = (severity) => {
+        if (!severity) {
+            return "⚪ Unknown";
+        }
+
+        const normalizedSeverity =
+            severity.toLowerCase();
+
+        switch (normalizedSeverity) {
+            case "critical":
+                return "🔴 Critical";
+
+            case "high":
+                return "🟠 High";
+
+            case "medium":
+                return "🟡 Medium";
+
+            case "low":
+                return "🟢 Low";
+
+            default:
+                return `⚪ ${severity}`;
+        }
+    };
+
     return (
         <div
             style={{
@@ -105,6 +165,7 @@ function Upload() {
                 security vulnerabilities.
             </p>
 
+            {/* Upload Section */}
             <form onSubmit={handleUpload}>
                 <div
                     style={{
@@ -117,6 +178,7 @@ function Upload() {
                     <input
                         type="file"
                         onChange={handleFileChange}
+                        disabled={loading}
                     />
 
                     {file && (
@@ -132,6 +194,10 @@ function Upload() {
                         style={{
                             marginTop: "20px",
                             padding: "12px 25px",
+                            cursor:
+                                !file || loading
+                                    ? "not-allowed"
+                                    : "pointer",
                         }}
                     >
                         {loading
@@ -141,6 +207,7 @@ function Upload() {
                 </div>
             </form>
 
+            {/* Error Message */}
             {error && (
                 <div
                     style={{
@@ -149,13 +216,19 @@ function Upload() {
                         border: "1px solid red",
                         borderRadius: "8px",
                         color: "red",
+                        backgroundColor: "#fff5f5",
                         whiteSpace: "pre-wrap",
                     }}
                 >
-                    {error}
+                    <strong>Error:</strong>
+
+                    <div style={{ marginTop: "8px" }}>
+                        {error}
+                    </div>
                 </div>
             )}
 
+            {/* Scan Results */}
             {result && (
                 <div
                     style={{
@@ -167,70 +240,161 @@ function Upload() {
                 >
                     <h2>Scan Results</h2>
 
+                    {/* File Information */}
                     <p>
                         <strong>File:</strong>{" "}
                         {result.filename}
                     </p>
 
                     <p>
-                        <strong>Total vulnerabilities:</strong>{" "}
+                        <strong>
+                            Total vulnerabilities:
+                        </strong>{" "}
                         {result.total_vulnerabilities}
                     </p>
 
+                    {/* Severity Summary */}
                     {result.summary && (
-                        <div>
+                        <div
+                            style={{
+                                marginTop: "20px",
+                                padding: "20px",
+                                border: "1px solid #ddd",
+                                borderRadius: "8px",
+                            }}
+                        >
+                            <h3>Severity Summary</h3>
+
                             <p>
-                                Critical:{" "}
-                                {result.summary.critical}
+                                🔴 <strong>Critical:</strong>{" "}
+                                {result.summary.critical ?? 0}
                             </p>
 
                             <p>
-                                High:{" "}
-                                {result.summary.high}
+                                🟠 <strong>High:</strong>{" "}
+                                {result.summary.high ?? 0}
                             </p>
 
                             <p>
-                                Medium:{" "}
-                                {result.summary.medium}
+                                🟡 <strong>Medium:</strong>{" "}
+                                {result.summary.medium ?? 0}
                             </p>
 
                             <p>
-                                Low:{" "}
-                                {result.summary.low}
+                                🟢 <strong>Low:</strong>{" "}
+                                {result.summary.low ?? 0}
                             </p>
                         </div>
                     )}
 
-                    <h3>Vulnerabilities</h3>
+                    {/* Vulnerability List */}
+                    <h3
+                        style={{
+                            marginTop: "25px",
+                        }}
+                    >
+                        Vulnerabilities
+                    </h3>
 
-                    {result.vulnerabilities?.map(
-                        (item, index) => (
-                            <div
-                                key={index}
-                                style={{
-                                    marginTop: "15px",
-                                    padding: "15px",
-                                    border: "1px solid #ddd",
-                                    borderRadius: "8px",
-                                }}
-                            >
-                                <strong>
-                                    {item.severity}
-                                </strong>
+                    {result.vulnerabilities &&
+                    result.vulnerabilities.length > 0 ? (
+                        result.vulnerabilities.map(
+                            (item, index) => (
+                                <div
+                                    key={index}
+                                    style={{
+                                        marginTop: "15px",
+                                        padding: "18px",
+                                        border: "1px solid #ddd",
+                                        borderRadius: "8px",
+                                    }}
+                                >
+                                    {/* Severity */}
+                                    <div
+                                        style={{
+                                            fontSize: "18px",
+                                            fontWeight: "bold",
+                                            marginBottom: "10px",
+                                        }}
+                                    >
+                                        {getSeverityIndicator(
+                                            item.severity
+                                        )}
+                                    </div>
 
-                                <div>
-                                    {item.vulnerability}
+                                    {/* Vulnerability Name */}
+                                    <div
+                                        style={{
+                                            fontSize: "17px",
+                                            fontWeight: "bold",
+                                            marginBottom: "8px",
+                                        }}
+                                    >
+                                        {item.vulnerability ||
+                                            "Unknown vulnerability"}
+                                    </div>
+
+                                    {/* Description */}
+                                    {item.description && (
+                                        <div
+                                            style={{
+                                                marginBottom: "8px",
+                                            }}
+                                        >
+                                            {item.description}
+                                        </div>
+                                    )}
+
+                                    {/* File */}
+                                    {item.file && (
+                                        <div>
+                                            <strong>
+                                                File:
+                                            </strong>{" "}
+                                            {item.file}
+                                        </div>
+                                    )}
+
+                                    {/* Line */}
+                                    {item.line && (
+                                        <div>
+                                            <strong>
+                                                Line:
+                                            </strong>{" "}
+                                            {item.line}
+                                        </div>
+                                    )}
+
+                                    {/* Confidence */}
+                                    {item.confidence && (
+                                        <div>
+                                            <strong>
+                                                Confidence:
+                                            </strong>{" "}
+                                            {item.confidence}
+                                        </div>
+                                    )}
+
+                                    {/* Status */}
+                                    {item.status && (
+                                        <div
+                                            style={{
+                                                marginTop: "8px",
+                                            }}
+                                        >
+                                            <strong>
+                                                Status:
+                                            </strong>{" "}
+                                            {item.status}
+                                        </div>
+                                    )}
                                 </div>
-
-                                <div>
-                                    {item.description}
-                                </div>
-
-                                <div>
-                                    Status: {item.status}
-                                </div>
-                            </div>
+                            )
                         )
+                    ) : (
+                        <p>
+                            No vulnerabilities were detected.
+                        </p>
                     )}
                 </div>
             )}
