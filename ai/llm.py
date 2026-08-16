@@ -1,21 +1,20 @@
 import requests
 
-from .prompts import build_prompt
 from .models import VulnerabilityInput
 from .risk_score import calculate_risk, classify_risk
 
 
-# ------------------------------------------------------
-# Ollama configuration
-# ------------------------------------------------------
+# ======================================================
+# Ollama Configuration
+# ======================================================
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL_NAME = "llama3"
 
 
-# ------------------------------------------------------
+# ======================================================
 # Ollama Client
-# ------------------------------------------------------
+# ======================================================
 
 class OllamaClient:
 
@@ -25,8 +24,7 @@ class OllamaClient:
 
     def generate(self, prompt):
         """
-        Send a prompt to Ollama and return
-        the generated text response.
+        Send a prompt to Ollama and return the AI response.
         """
 
         payload = {
@@ -47,29 +45,50 @@ class OllamaClient:
 
             result = response.json()
 
-            return result.get("response", "")
+            ai_response = result.get(
+                "response",
+                ""
+            )
 
-        except requests.exceptions.RequestException as e:
+            if not ai_response:
+                raise RuntimeError(
+                    "Ollama returned an empty response."
+                )
+
+            return ai_response.strip()
+
+        except requests.exceptions.Timeout as e:
 
             raise RuntimeError(
-                f"Ollama unavailable: {e}"
+                "Ollama request timed out."
             ) from e
 
-        except Exception as e:
+        except requests.exceptions.ConnectionError as e:
+
+            raise RuntimeError(
+                "Unable to connect to Ollama."
+            ) from e
+
+        except requests.exceptions.RequestException as e:
 
             raise RuntimeError(
                 f"Ollama request failed: {e}"
             ) from e
 
+        except Exception as e:
 
-# ------------------------------------------------------
-# Generate AI response
-# ------------------------------------------------------
+            raise RuntimeError(
+                f"Ollama processing failed: {e}"
+            ) from e
+
+
+# ======================================================
+# Generate AI Response
+# ======================================================
 
 def generate_response(prompt):
     """
-    Wrapper function used by explanation.py,
-    recommendation.py, and the AI analysis pipeline.
+    Wrapper around OllamaClient.
     """
 
     client = OllamaClient()
@@ -77,9 +96,9 @@ def generate_response(prompt):
     return client.generate(prompt)
 
 
-# ------------------------------------------------------
-# Check Ollama connection
-# ------------------------------------------------------
+# ======================================================
+# Check Ollama Connection
+# ======================================================
 
 def connect_ollama():
     """
@@ -100,31 +119,142 @@ def connect_ollama():
         return False
 
 
-# ------------------------------------------------------
-# Test Ollama connection
-# ------------------------------------------------------
+# ======================================================
+# Test Ollama Connection
+# ======================================================
 
 def test_connection():
 
     if connect_ollama():
 
-        print("Ollama connected successfully.")
+        print(
+            "Ollama connected successfully."
+        )
 
-        prompt = "Explain SQL Injection in simple words."
+        prompt = (
+            "Explain SQL Injection in simple words."
+        )
 
-        response = generate_response(prompt)
+        response = generate_response(
+            prompt
+        )
 
         print("\nAI Response:")
         print(response)
 
     else:
 
-        print("Ollama connection failed.")
+        print(
+            "Ollama connection failed."
+        )
 
 
-# ------------------------------------------------------
-# Complete AI vulnerability analysis
-# ------------------------------------------------------
+# ======================================================
+# Generate Explanation
+# ======================================================
+
+def generate_explanation(
+    vulnerability_name,
+    severity,
+    confidence,
+    file,
+    line,
+    code
+):
+    """
+    Generate a concise security explanation.
+    """
+
+    prompt = f"""
+You are a cybersecurity vulnerability analyst.
+
+Analyze ONLY the vulnerability described below.
+
+Vulnerability: {vulnerability_name}
+Severity: {severity}
+Scanner Confidence: {confidence}
+File: {file}
+Line: {line}
+
+Affected Code:
+{code}
+
+Explain:
+
+1. What is wrong?
+2. Why is it dangerous?
+3. What could an attacker potentially do?
+
+Important:
+- Stay specific to the vulnerability type.
+- Do not confuse SQL Injection with Command Injection.
+- Do not invent facts that are not supported by the finding.
+- Do not provide a remediation recommendation.
+- Do not use headings.
+- Do not use bullet points.
+- Return only the explanation.
+- Keep it concise.
+"""
+
+    return generate_response(prompt)
+
+
+# ======================================================
+# Generate Recommendation
+# ======================================================
+
+def generate_recommendation(
+    vulnerability_name,
+    severity,
+    code
+):
+    """
+    Generate a concise remediation recommendation.
+    """
+
+    prompt = f"""
+You are a secure software development expert.
+
+Provide a practical remediation recommendation for this vulnerability.
+
+Vulnerability: {vulnerability_name}
+Severity: {severity}
+
+Affected Code:
+{code}
+
+Give an actionable recommendation explaining how a developer
+should fix this vulnerability.
+
+Examples:
+
+SQL Injection:
+Use parameterized queries or prepared statements.
+
+XSS:
+Use context-aware output encoding and safely handle untrusted input.
+
+Hardcoded Credentials:
+Move secrets to environment variables or a secure secrets manager.
+
+Input Validation:
+Validate and constrain untrusted input before processing.
+
+Important:
+- Return ONLY the recommendation.
+- Do not explain the vulnerability.
+- Do not use headings.
+- Do not use bullet points.
+- Do not invent variable names.
+- Keep it concise.
+"""
+
+    return generate_response(prompt)
+
+
+# ======================================================
+# Complete AI Vulnerability Analysis
+# ======================================================
 
 def analyze_vulnerability(
     vulnerability: VulnerabilityInput
@@ -132,23 +262,28 @@ def analyze_vulnerability(
     """
     Analyze one standardized scanner vulnerability.
 
-    Input:
-        VulnerabilityInput
+    Scanner failure and AI failure are independent.
 
-    Output:
-        Structured AI analysis dictionary.
+    If the AI fails, the scanner information and
+    deterministic risk information are still returned.
     """
 
     # --------------------------------------------------
     # Step 1: Read scanner information
     # --------------------------------------------------
 
-    vulnerability_name = vulnerability.vulnerability
+    vulnerability_name = (
+        vulnerability.vulnerability
+    )
+
     severity = vulnerability.severity
 
     file = vulnerability.file
+
     line = vulnerability.line
+
     confidence = vulnerability.confidence
+
     code = vulnerability.code
 
     # --------------------------------------------------
@@ -165,43 +300,68 @@ def analyze_vulnerability(
     )
 
     # --------------------------------------------------
-    # Step 3: Build AI prompt
+    # Step 3: Default AI status
     # --------------------------------------------------
 
-    prompt = f"""
-Analyze this cybersecurity vulnerability.
+    ai_status = "success"
 
-Vulnerability: {vulnerability_name}
-Severity: {severity}
-Scanner Confidence: {confidence}
-File: {file}
-Line: {line}
+    explanation = ""
 
-Affected Code:
-{code}
-
-Provide a concise security explanation.
-
-The explanation must answer:
-1. What is wrong?
-2. Why is it dangerous?
-3. What could an attacker do?
-
-Return ONLY the explanation.
-Do not include headings.
-Do not include bullet points.
-Do not include recommendations.
-Keep it to 2-4 sentences.
-"""
+    recommendation = ""
 
     # --------------------------------------------------
-    # Step 4: Ask Ollama
+    # Step 4: Generate AI explanation
     # --------------------------------------------------
 
-    response = generate_response(prompt)
+    try:
+
+        explanation = generate_explanation(
+            vulnerability_name,
+            severity,
+            confidence,
+            file,
+            line,
+            code
+        )
+
+    except Exception as e:
+
+        ai_status = "failed"
+
+        explanation = (
+            "AI analysis unavailable."
+        )
+
+        print(
+            f"AI explanation failed: {e}"
+        )
 
     # --------------------------------------------------
-    # Step 5: Return structured result
+    # Step 5: Generate AI recommendation
+    # --------------------------------------------------
+
+    try:
+
+        recommendation = generate_recommendation(
+            vulnerability_name,
+            severity,
+            code
+        )
+
+    except Exception as e:
+
+        ai_status = "failed"
+
+        recommendation = (
+            "AI remediation recommendation unavailable."
+        )
+
+        print(
+            f"AI recommendation failed: {e}"
+        )
+
+    # --------------------------------------------------
+    # Step 6: Return standardized result
     # --------------------------------------------------
 
     return {
@@ -210,16 +370,17 @@ Keep it to 2-4 sentences.
         "vulnerability": vulnerability_name,
         "severity": severity,
         "confidence": confidence,
-        "code": code,
         "risk_score": risk_score,
         "risk_level": risk_level,
-        "explanation": response
+        "ai_status": ai_status,
+        "explanation": explanation,
+        "recommendation": recommendation
     }
 
 
-# ------------------------------------------------------
-# Direct test
-# ------------------------------------------------------
+# ======================================================
+# Direct Test
+# ======================================================
 
 if __name__ == "__main__":
 
@@ -232,19 +393,37 @@ if __name__ == "__main__":
         "code": "cursor.execute(query)"
     }
 
-    # Convert scanner dictionary into
-    # the validated AI input model.
+    # --------------------------------------------------
+    # Convert scanner dictionary into validated model
+    # --------------------------------------------------
+
     vulnerability = VulnerabilityInput(
         **scanner_result
     )
+
+    # --------------------------------------------------
+    # Analyze vulnerability
+    # --------------------------------------------------
 
     result = analyze_vulnerability(
         vulnerability
     )
 
-    print("\n==============================")
-    print("AI VULNERABILITY ANALYSIS")
-    print("==============================")
+    # --------------------------------------------------
+    # Print result
+    # --------------------------------------------------
+
+    print(
+        "\n=============================="
+    )
+
+    print(
+        "AI VULNERABILITY ANALYSIS"
+    )
+
+    print(
+        "=============================="
+    )
 
     print("\nFile:")
     print(result["file"])
@@ -267,5 +446,11 @@ if __name__ == "__main__":
     print("\nRisk Level:")
     print(result["risk_level"])
 
+    print("\nAI Status:")
+    print(result["ai_status"])
+
     print("\nExplanation:")
-    print(result["ai_response"])
+    print(result["explanation"])
+
+    print("\nRecommendation:")
+    print(result["recommendation"])
