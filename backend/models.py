@@ -245,6 +245,36 @@ class Vulnerability(Base):
         String,
         nullable=True
     )
+    
+    risk_score = Column(
+        Integer,
+        nullable=True
+    )
+
+    owasp_category = Column(
+        String,
+        nullable=True
+    )
+
+    cwe_id = Column(
+        String,
+        nullable=True
+    )
+
+    explanation = Column(
+        String,
+        nullable=True
+    )
+
+    impact = Column(
+        String,
+        nullable=True
+    )
+
+    recommendation = Column(
+        String,
+        nullable=True
+    )
 
     # Vulnerability → Scan
     scan = relationship(

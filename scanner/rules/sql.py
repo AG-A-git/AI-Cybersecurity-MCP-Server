@@ -11,8 +11,8 @@ SQL_PATTERNS = [
         re.IGNORECASE
     ),
     re.compile(
-        r'\b(execute|cursor\.execute)\s*\([^)]*\+[^)]*\)',
-        re.IGNORECASE
+    r'\b(execute|cursor\.execute)\s*\([^)]*\)',
+    re.IGNORECASE
     ),
 ]
 

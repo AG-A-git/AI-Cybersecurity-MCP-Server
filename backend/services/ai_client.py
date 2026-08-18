@@ -1,7 +1,10 @@
+import os
 import requests
 
-AI_SERVICE_URL = "http://127.0.0.1:8000/analyze"
-
+AI_SERVICE_URL = os.getenv(
+    "AI_SERVICE_URL",
+    "http://192.168.0.107:8000/analyze"
+)
 
 def analyze_vulnerability(finding):
     try:

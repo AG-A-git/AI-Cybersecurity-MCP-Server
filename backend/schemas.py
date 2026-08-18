@@ -70,6 +70,14 @@ class VulnerabilityResponse(BaseModel):
     severity: str
     confidence: int | None = None
     code: str | None = None
+
+    risk_score: int | None = None
+    owasp_category: str | None = None
+    cwe_id: str | None = None
+    explanation: str | None = None
+    impact: str | None = None
+    recommendation: str | None = None
+
     model_config = ConfigDict(from_attributes=True)
     
 class ScanResponse(BaseModel):
