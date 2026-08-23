@@ -1,0 +1,38 @@
+[
+  {
+    "file": "pipeline_test_files\\credentials_test.py",
+    "line": 1,
+    "vulnerability": "Hardcoded Credentials",
+    "severity": "High",
+    "confidence": 90,
+    "risk_score": 72.0,
+    "risk_level": "High",
+    "ai_status": "success",
+    "explanation": "The hardcoded credentials vulnerability is an issue where sensitive information, such as passwords or API keys, are embedded directly into code without any form of encryption or secure storage. In this case, the password \"admin123\" is hardcoded on line 1 of the file pipeline_test_files\\credentials_test.py.\n\nWhat's wrong is that this password is easily accessible to anyone who has access to the code, allowing them to gain unauthorized access to systems or services protected by this password.\n\nThis is dangerous because an attacker can simply copy and use the hardcoded credentials without having to go through any additional authentication or authorization processes. This allows for a wide range of potential attacks, including unauthorized access to sensitive data or systems, as well as the ability to make changes that could compromise the security of the system.\n\nAn attacker could potentially use this hardcoded password to gain access to systems or services protected by it, allowing them to steal sensitive information, disrupt operations, or even create a backdoor for future attacks.",
+    "recommendation": "Move hardcoded credentials to environment variables or a secure secrets manager."
+  },
+  {
+    "file": "pipeline_test_files\\sql_test.py",
+    "line": 2,
+    "vulnerability": "SQL Injection",
+    "severity": "Critical",
+    "confidence": 95,
+    "risk_score": 90.25,
+    "risk_level": "Critical",
+    "ai_status": "success",
+    "explanation": "The issue is that the query string is being concatenated with user-input data (username) without proper sanitization, allowing an attacker to inject malicious SQL code.\n\nThis vulnerability is dangerous because an attacker can manipulate the username input to inject arbitrary SQL commands, potentially leading to unauthorized access or modification of sensitive data. For example, an attacker could inject a command like \"OR '1'='1\" to bypass authentication and gain access to protected data.",
+    "recommendation": "Replace the vulnerable query with a parameterized query using prepared statements, such as JDBC or ODBC. For example: \"SELECT * FROM users WHERE username=?\"; then set the value of the query parameter using the provided username value. This will prevent malicious input from being executed as SQL code."
+  },
+  {
+    "file": "pipeline_test_files\\xss_test.js",
+    "line": 2,
+    "vulnerability": "Cross Site Scripting",
+    "severity": "High",
+    "confidence": 80,
+    "risk_score": 64.0,
+    "risk_level": "Medium",
+    "ai_status": "success",
+    "explanation": "The affected code sets the `innerHTML` property of an element to the value of the `userInput` variable. This is problematic because it allows an attacker to inject malicious JavaScript code into the page.\n\nWhat's wrong is that the `userInput` variable may contain user-entered data, which could be manipulated by an attacker to inject arbitrary JavaScript code. This injection could allow an attacker to steal sensitive information, manipulate the page, or perform other malicious actions.\n\nThis vulnerability is dangerous because it allows an attacker to execute arbitrary JavaScript code in the context of the affected web application. An attacker could potentially do things like stealing cookies or session IDs, accessing local storage, or even taking control of the user's browser and system.",
+    "recommendation": "Use context-aware output encoding to encode any special characters in the userInput, ensuring that any malicious script is properly escaped. For example, you could use a library like DOMPurify or a custom function to encode and sanitize the input before setting it as the element's innerHTML."
+  }
+]

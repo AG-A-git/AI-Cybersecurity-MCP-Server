@@ -1,77 +1,82 @@
-SEVERITY_SCORE = {
-    "Critical": 95,
-    "High": 80,
-    "Medium": 55,
+# ======================================================
+# Initial Risk Scoring Model
+# ======================================================
+
+SEVERITY_WEIGHTS = {
+    "Critical": 90,
+    "High": 75,
+    "Medium": 50,
     "Low": 25
 }
 
 
-def calculate_risk(severity, confidence=100, vulnerability=None):
+# ======================================================
+# Calculate Risk Score
+# ======================================================
+
+def calculate_risk(severity, confidence):
     """
-    Calculate a deterministic risk score using
-    severity and scanner confidence.
+    Calculate an initial deterministic risk score.
+
+    Severity provides the base score.
+    Confidence adjusts the score based on scanner confidence.
+
+    This is an initial project model and will be refined later.
     """
 
-    severity = severity.strip().capitalize()
+    # Normalize severity
+    normalized_severity = severity.strip().capitalize()
 
-    if confidence is None:
-        confidence = 100
-
-    # Keep confidence between 0 and 100
-    confidence = max(
-        0,
-        min(float(confidence), 100)
-    )
-
-    # Get base score from severity
-    severity_score = SEVERITY_SCORE.get(
-        severity,
+    # Get severity weight
+    base_score = SEVERITY_WEIGHTS.get(
+        normalized_severity,
         0
     )
 
-    # Combine severity and confidence
-    risk_score = (
-        severity_score
-        * (confidence / 100)
+    # Normalize confidence
+    confidence = float(confidence)
+
+    # Make sure confidence stays within 0–100
+    confidence = max(
+        0,
+        min(confidence, 100)
     )
 
-    return round(risk_score, 2)
+    # Adjust severity score using confidence
+    risk_score = base_score * (confidence / 100)
 
-def classify_risk(score):
+    # Keep score within 0–100
+    risk_score = max(
+        0,
+        min(risk_score, 100)
+    )
 
-    if score >= 90:
+    return round(
+        risk_score,
+        2
+    )
+
+
+# ======================================================
+# Classify Risk
+# ======================================================
+
+def classify_risk(risk_score):
+    """
+    Convert numeric risk score into a risk level.
+    """
+
+    if risk_score >= 90:
         return "Critical"
 
-    elif score >= 70:
+    elif risk_score >= 75:
         return "High"
 
-    elif score >= 40:
+    elif risk_score >= 50:
         return "Medium"
 
-    elif score >= 10:
+    elif risk_score >= 25:
         return "Low"
 
-    return "Unknown"
-
-
-if __name__ == "__main__":
-
-    test_cases = [
-        ("Critical", 95),
-        ("High", 90),
-        ("Medium", 60),
-        ("Low", 30)
-    ]
-
-    for severity, confidence in test_cases:
-
-        risk = calculate_risk(
-            severity,
-            confidence
-        )
-
-        print(
-            f"{severity} + {confidence}% "
-            f"→ Risk Score: {risk} "
-            f"→ {classify_risk(risk)}"
-        )
+    else:
+        return "Informational"
