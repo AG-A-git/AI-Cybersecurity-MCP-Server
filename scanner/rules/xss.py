@@ -1,5 +1,7 @@
 import re
 
+from scanner.finding import create_finding
+
 
 USER_INPUT_NAMES = re.compile(
     r'\b(userInput|user_input|input|request|req|data|query|param|parameter|search|message)\b',
@@ -49,14 +51,18 @@ def scan_xss(file_path):
 
                 if USER_INPUT_NAMES.search(assigned_variable):
 
-                    results.append({
-                        "file": str(file_path),
-                        "line": line_number,
-                        "vulnerability": "Cross Site Scripting",
-                        "severity": "High",
-                        "confidence": 80,
-                        "code": line.strip()
-                    })
+                    results.append(
+                        create_finding(
+                            file_name=file_path,
+                            line_number=line_number,
+                            vulnerability_type="Cross-Site Scripting (XSS)",
+                            severity="High",
+                            confidence=80,
+                            code=line.strip(),
+                            owasp="A03: Injection",
+                            cwe="CWE-79"
+                        )
+                    )
 
                 break
 

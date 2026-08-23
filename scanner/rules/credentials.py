@@ -1,59 +1,58 @@
 import re
 
+from scanner.finding import create_finding
 
-CREDENTIAL_PATTERNS = [
-    re.compile(
-        r'\bpassword\s*=\s*["\'][^"\']+["\']',
-        re.IGNORECASE
-    ),
-    re.compile(
-        r'\bpasswd\s*=\s*["\'][^"\']+["\']',
-        re.IGNORECASE
-    ),
-    re.compile(
-        r'\bpwd\s*=\s*["\'][^"\']+["\']',
-        re.IGNORECASE
-    ),
-    re.compile(
-        r'\bapi[_-]?key\s*=\s*["\'][^"\']+["\']',
-        re.IGNORECASE
-    ),
-    re.compile(
-        r'\bapikey\s*=\s*["\'][^"\']+["\']',
-        re.IGNORECASE
-    ),
-    re.compile(
-        r'\baccess[_-]?token\s*=\s*["\'][^"\']+["\']',
-        re.IGNORECASE
-    ),
-    re.compile(
-        r'\btoken\s*=\s*["\'][^"\']+["\']',
-        re.IGNORECASE
-    ),
-    re.compile(
-        r'\bsecret[_-]?key\s*=\s*["\'][^"\']+["\']',
-        re.IGNORECASE
-    ),
-    re.compile(
-        r'\bsecret\s*=\s*["\'][^"\']+["\']',
-        re.IGNORECASE
-    ),
-    re.compile(
-        r'\bclient[_-]?secret\s*=\s*["\'][^"\']+["\']',
-        re.IGNORECASE
-    ),
-]
+
+# Credential-like variable names.
+SECRET_NAMES = (
+    r"password|passwd|pwd|secret|secret_key|api_key|apikey|"
+    r"token|access_token|private_key|client_secret|"
+    r"aws_secret_access_key"
+)
+
+
+# Detect credential-like variables assigned hardcoded strings.
+HARDCODED_SECRET_PATTERN = re.compile(
+    rf"\b({SECRET_NAMES})\b\s*=\s*[\"']([^\"']+)[\"']",
+    re.IGNORECASE
+)
+
+
+# Common placeholder values that should not normally be reported.
+SAFE_VALUES = {
+    "password",
+    "passwd",
+    "secret",
+    "token",
+    "key",
+    "value",
+    "example",
+    "test",
+    "testing",
+    "changeme",
+    "your_password",
+    "your_secret",
+    "your_api_key",
+}
 
 
 def scan_credentials(file_path):
     """
     Detect potential hardcoded credentials and secrets.
+
+    Only credential-like variable names assigned to
+    suspicious hardcoded string values are reported.
     """
 
     results = []
 
     try:
-        with open(file_path, "r", encoding="utf-8") as file:
+        with open(
+            file_path,
+            "r",
+            encoding="utf-8",
+            errors="ignore"
+        ) as file:
             lines = file.readlines()
 
     except (FileNotFoundError, OSError):
@@ -61,19 +60,32 @@ def scan_credentials(file_path):
 
     for line_number, line in enumerate(lines, start=1):
 
-        for pattern in CREDENTIAL_PATTERNS:
+        match = HARDCODED_SECRET_PATTERN.search(line)
 
-            if pattern.search(line):
+        if not match:
+            continue
 
-                results.append({
-                    "file": str(file_path),
-                    "line": line_number,
-                    "vulnerability": "Hardcoded Credentials",
-                    "severity": "High",
-                    "confidence": 90,
-                    "code": line.strip()
-                })
+        secret_value = match.group(2).strip()
 
-                break
+        # Ignore empty values.
+        if not secret_value:
+            continue
+
+        # Ignore obvious placeholder values.
+        if secret_value.lower() in SAFE_VALUES:
+            continue
+
+        results.append(
+            create_finding(
+                file_name=file_path,
+                line_number=line_number,
+                vulnerability_type="Hardcoded Credentials / Secrets",
+                severity="High",
+                confidence=90,
+                code=line.strip(),
+                owasp="A07: Identification and Authentication Failures",
+                cwe="CWE-798"
+            )
+        )
 
     return results

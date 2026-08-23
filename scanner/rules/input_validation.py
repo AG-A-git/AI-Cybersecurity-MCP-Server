@@ -1,5 +1,7 @@
 import re
 
+from scanner.finding import create_finding
+
 
 def scan_input_validation(file_path):
     findings = []
@@ -29,13 +31,17 @@ def scan_input_validation(file_path):
         )
 
         if sensitive_operation:
-            findings.append({
-                "file": str(file_path),
-                "line": line_number,
-                "vulnerability": "Improper Input Validation",
-                "severity": "Medium",
-                "confidence": 75,
-                "code": stripped
-            })
+            findings.append(
+                create_finding(
+                    file_name=file_path,
+                    line_number=line_number,
+                    vulnerability_type="Improper Input Validation",
+                    severity="Medium",
+                    confidence=75,
+                    code=stripped,
+                    owasp="A03: Injection",
+                    cwe="CWE-20"
+                )
+            )
 
     return findings

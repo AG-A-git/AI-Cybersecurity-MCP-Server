@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# Generated scanner reports
+scan_report.json
+outputs/

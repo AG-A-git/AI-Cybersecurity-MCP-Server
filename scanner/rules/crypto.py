@@ -1,5 +1,7 @@
 import re
 
+from scanner.finding import create_finding
+
 
 CRYPTO_PATTERNS = [
     (
@@ -17,13 +19,22 @@ CRYPTO_PATTERNS = [
         "High",
         90
     ),
+    (
+        re.compile(r'\bARC4\s*\(', re.IGNORECASE),
+        "High",
+        90
+    ),
+    (
+        re.compile(r'\bRC4\s*\(', re.IGNORECASE),
+        "High",
+        90
+    ),
 ]
 
 
 def scan_crypto(file_path):
     """
-    Detect weak cryptographic algorithms
-    in source code.
+    Detect weak or deprecated cryptographic algorithms.
     """
 
     results = []
@@ -41,14 +52,18 @@ def scan_crypto(file_path):
 
             if pattern.search(line):
 
-                results.append({
-                    "file": str(file_path),
-                    "line": line_number,
-                    "vulnerability": "Weak Cryptography",
-                    "severity": severity,
-                    "confidence": confidence,
-                    "code": line.strip()
-                })
+                results.append(
+                    create_finding(
+                        file_name=file_path,
+                        line_number=line_number,
+                        vulnerability_type="Weak Cryptography",
+                        severity=severity,
+                        confidence=confidence,
+                        code=line.strip(),
+                        owasp="A02: Cryptographic Failures",
+                        cwe="CWE-327"
+                    )
+                )
 
                 break
 

@@ -5,6 +5,8 @@ from scanner.rules.xss import scan_xss
 from scanner.rules.credentials import scan_credentials
 from scanner.rules.crypto import scan_crypto
 from scanner.rules.input_validation import scan_input_validation
+from scanner.rules.command import scan_command
+from scanner.rules.ldap import scan_ldap
 
 
 logger = logging.getLogger(__name__)
@@ -20,7 +22,9 @@ def load_rules():
         scan_xss,
         scan_credentials,
         scan_crypto,
-        scan_input_validation
+        scan_input_validation,
+        scan_command,
+        scan_ldap
     ]
 
 
@@ -59,8 +63,8 @@ def remove_duplicates(results):
     """
     Remove duplicate vulnerability findings.
 
-    Findings are considered duplicates when they have
-    the same file, line, and vulnerability.
+    Supports both the old scanner output format and
+    the new standardized output format.
     """
 
     unique_results = []
@@ -69,9 +73,13 @@ def remove_duplicates(results):
     for result in results:
 
         key = (
-            result.get("file"),
-            result.get("line"),
-            result.get("vulnerability")
+            result.get("file_name", result.get("file")),
+            result.get("line_number", result.get("line")),
+            result.get(
+                "vulnerability_type",
+                result.get("vulnerability")
+            ),
+            result.get("code")
         )
 
         if key not in seen:

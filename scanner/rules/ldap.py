@@ -3,10 +3,10 @@ import re
 from scanner.finding import create_finding
 
 
-COMMAND_PATTERNS = [
+LDAP_PATTERNS = [
     (
         re.compile(
-            r'\bos\.system\s*\(\s*[^)]*[A-Za-z_][A-Za-z0-9_]*',
+            r'["\']\s*\(\s*uid\s*=\s*["\']?\s*\+\s*[A-Za-z_][A-Za-z0-9_]*',
             re.IGNORECASE
         ),
         "High",
@@ -14,19 +14,19 @@ COMMAND_PATTERNS = [
     ),
     (
         re.compile(
-            r'\bsubprocess\.(call|run|Popen)\s*\([^)]*shell\s*=\s*True',
+            r'["\']\s*\(\s*(cn|dn|mail|ou)\s*=\s*["\']?\s*\+\s*[A-Za-z_][A-Za-z0-9_]*',
             re.IGNORECASE
         ),
-        "Critical",
-        95
+        "High",
+        90
     ),
 ]
 
 
-def scan_command(file_path):
+def scan_ldap(file_path):
     """
-    Detect potentially dangerous command execution involving
-    variable-controlled input.
+    Detect potential LDAP injection caused by directly
+    concatenating variable-controlled input into LDAP filters.
     """
 
     results = []
@@ -40,7 +40,7 @@ def scan_command(file_path):
 
     for line_number, line in enumerate(lines, start=1):
 
-        for pattern, severity, confidence in COMMAND_PATTERNS:
+        for pattern, severity, confidence in LDAP_PATTERNS:
 
             if pattern.search(line):
 
@@ -48,12 +48,12 @@ def scan_command(file_path):
                     create_finding(
                         file_name=file_path,
                         line_number=line_number,
-                        vulnerability_type="Command Injection",
+                        vulnerability_type="LDAP Injection",
                         severity=severity,
                         confidence=confidence,
                         code=line.strip(),
                         owasp="A03: Injection",
-                        cwe="CWE-78"
+                        cwe="CWE-90"
                     )
                 )
 
