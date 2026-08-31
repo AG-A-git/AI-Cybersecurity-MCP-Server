@@ -1,11 +1,17 @@
+# ======================================================
+# AI / LLM Security Analysis
+# ======================================================
+
 import json
 import requests
 
 from pydantic import ValidationError
 
-from .models import VulnerabilityInput, AIAnalysisResponse
+from .input import VulnerabilityInput
+from .models import AIAnalysisResponse
 from .risk_score import calculate_risk, classify_risk
 from .vulnerability_mapping import get_vulnerability_mapping
+from .normalization import normalize_vulnerability_type
 
 
 # ======================================================
@@ -13,7 +19,6 @@ from .vulnerability_mapping import get_vulnerability_mapping
 # ======================================================
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
-
 MODEL_NAME = "llama3"
 
 
@@ -22,14 +27,21 @@ MODEL_NAME = "llama3"
 # ======================================================
 
 class OllamaClient:
+    """
+    Client for communicating with Ollama.
+    """
 
-    def __init__(self):
-        self.url = OLLAMA_URL
-        self.model = MODEL_NAME
+    def __init__(
+        self,
+        url=OLLAMA_URL,
+        model=MODEL_NAME
+    ):
+        self.url = url
+        self.model = model
 
     def generate(self, prompt):
         """
-        Send a prompt to Ollama and return the AI response.
+        Send a prompt to Ollama and return the response.
         """
 
         payload = {
@@ -39,7 +51,6 @@ class OllamaClient:
         }
 
         try:
-
             response = requests.post(
                 self.url,
                 json=payload,
@@ -56,36 +67,26 @@ class OllamaClient:
             )
 
             if not ai_response:
-
                 raise RuntimeError(
                     "Ollama returned an empty response."
                 )
 
             return ai_response.strip()
 
-        except requests.exceptions.Timeout as e:
-
+        except requests.exceptions.Timeout as exc:
             raise RuntimeError(
                 "Ollama request timed out."
-            ) from e
+            ) from exc
 
-        except requests.exceptions.ConnectionError as e:
-
+        except requests.exceptions.ConnectionError as exc:
             raise RuntimeError(
                 "Unable to connect to Ollama."
-            ) from e
+            ) from exc
 
-        except requests.exceptions.RequestException as e:
-
+        except requests.exceptions.RequestException as exc:
             raise RuntimeError(
-                f"Ollama request failed: {e}"
-            ) from e
-
-        except Exception as e:
-
-            raise RuntimeError(
-                f"Ollama processing failed: {e}"
-            ) from e
+                f"Ollama request failed: {exc}"
+            ) from exc
 
 
 # ======================================================
@@ -94,7 +95,7 @@ class OllamaClient:
 
 def generate_response(prompt):
     """
-    Send prompt to Ollama.
+    Generate an AI response using Ollama.
     """
 
     client = OllamaClient()
@@ -112,7 +113,6 @@ def connect_ollama():
     """
 
     try:
-
         response = requests.get(
             "http://localhost:11434",
             timeout=5
@@ -121,12 +121,11 @@ def connect_ollama():
         return response.status_code == 200
 
     except requests.exceptions.RequestException:
-
         return False
 
 
 # ======================================================
-# Generate Structured Security Analysis
+# Generate AI Explanation
 # ======================================================
 
 def generate_explanation(
@@ -138,95 +137,194 @@ def generate_explanation(
     code
 ):
     """
-    Ask Llama 3 to analyze a scanner finding.
+    Generate structured vulnerability analysis.
 
-    Llama must return JSON containing:
+    The AI provides:
 
-        severity
-        risk_score
-        owasp
-        cwe
-        explanation
-        recommendation
+        - severity
+        - explanation
+        - recommendation
+
+    The application provides:
+
+        - vulnerability
+        - OWASP
+        - CWE
+        - risk score
+        - risk level
     """
 
     prompt = f"""
-You are a cybersecurity vulnerability analysis assistant.
+You are a cybersecurity vulnerability analysis engine.
 
-Analyze ONLY the security finding provided below.
+Analyze ONLY the scanner finding below.
 
-Do not invent information that is not supported by the
-scanner finding or supplied code.
-
+==================================================
 SCANNER FINDING
----------------
+==================================================
 
-File: {file}
+Vulnerability Type:
+{vulnerability_name}
 
-Line: {line}
+Scanner Severity:
+{severity}
 
-Vulnerability: {vulnerability_name}
+Scanner Confidence:
+{confidence}
 
-Scanner Severity: {severity}
+File:
+{file}
 
-Scanner Confidence: {confidence}
+Line:
+{line}
 
 Code:
 {code}
 
+==================================================
+RULES
+==================================================
 
-TASK
-----
+Analyze only the supplied information.
 
-Analyze the provided finding and return:
+Do not invent information.
 
-1. Security severity
-2. Risk score from 0 to 100
-3. OWASP Top 10 mapping
-4. CWE mapping
-5. Security explanation
-6. Practical remediation recommendation
+Do not change the vulnerability type.
 
+Do not invent:
 
-OUTPUT FORMAT
--------------
+- file names
+- line numbers
+- source code
+- programming languages
+- frameworks
+- libraries
+- databases
+- application architecture
+- functions
+- variables
 
-Return ONLY valid JSON.
+==================================================
+DETERMINISTIC DATA
+==================================================
+
+The application determines:
+
+- vulnerability type
+- OWASP
+- CWE
+- risk score
+- risk level
+
+DO NOT calculate these values.
+
+DO NOT return these values.
+
+DO NOT invent OWASP categories.
+
+DO NOT invent CWE identifiers.
+
+DO NOT calculate risk scores.
+
+==================================================
+AI RESPONSIBILITIES
+==================================================
+
+Return only:
+
+1. severity
+2. explanation
+3. recommendation
+
+==================================================
+SEVERITY
+==================================================
+
+Severity must be exactly one of:
+
+Critical
+High
+Medium
+Low
+
+Use the scanner severity as the primary assessment.
+
+==================================================
+EXPLANATION
+==================================================
+
+Explain why the supplied finding represents
+a security vulnerability.
+
+Base the explanation only on:
+
+- vulnerability type
+- code
+- scanner information
+
+Do not fabricate missing details.
+
+==================================================
+RECOMMENDATION
+==================================================
+
+Provide a practical remediation recommendation.
+
+Do not assume a programming language, framework,
+database, or library unless explicitly provided.
+
+==================================================
+STRICT JSON OUTPUT
+==================================================
+
+Return ONLY one JSON object.
 
 Do NOT return Markdown.
 
-Do NOT use ```json.
+Do NOT use code fences.
 
-Do NOT put any text before the JSON.
+Do NOT write an introduction.
 
-Do NOT put any text after the JSON.
+Do NOT write:
 
-Use exactly these fields:
+Here is the output:
+
+Do NOT write anything before the JSON.
+
+Do NOT write anything after the JSON.
+
+The JSON must contain EXACTLY these fields:
+
+severity
+explanation
+recommendation
+
+Use double quotes around JSON keys.
+
+Use double quotes around JSON string values.
+
+Do not use trailing commas.
+
+==================================================
+REQUIRED FORMAT
+==================================================
 
 {{
     "severity": "High",
-    "risk_score": 85,
-    "owasp": "A03:2021 Injection",
-    "cwe": "CWE-89",
-    "explanation": "Explain why the provided code is vulnerable.",
+    "explanation": "Explain why the supplied code is vulnerable.",
     "recommendation": "Explain how the vulnerability should be fixed."
 }}
 
+==================================================
+FINAL INSTRUCTION
+==================================================
 
-IMPORTANT RULES
----------------
+Return ONLY the JSON object.
 
-- risk_score MUST be an integer between 0 and 100.
-- severity must describe the security impact.
-- OWASP must correspond to the vulnerability.
-- CWE must correspond to the vulnerability.
-- Do not invent an OWASP category.
-- Do not invent a CWE.
-- Do not change the vulnerability type.
-- Base your analysis only on the supplied finding and code.
-- Keep the explanation technically accurate.
-- Keep the recommendation practical.
-- Return valid JSON only.
+No OWASP.
+No CWE.
+No risk_score.
+No risk_level.
 """
 
     return generate_response(prompt)
@@ -246,10 +344,7 @@ def generate_recommendation(
     """
 
     prompt = f"""
-You are a secure software development expert.
-
-Provide a practical remediation recommendation for the
-following vulnerability.
+You are a cybersecurity remediation expert.
 
 Vulnerability:
 {vulnerability_name}
@@ -257,24 +352,70 @@ Vulnerability:
 Severity:
 {severity}
 
-Affected Code:
+Code:
 {code}
 
-Requirements:
+Provide a practical remediation recommendation.
 
-- Explain how a developer should fix the vulnerability.
-- Keep the recommendation technically accurate.
-- Do not invent application details.
-- Return ONLY the recommendation.
-- Do not use Markdown headings.
-- Keep it concise.
+Do not invent application details.
+
+Return only the recommendation.
 """
 
     return generate_response(prompt)
 
 
 # ======================================================
-# Complete Vulnerability Analysis
+# Extract JSON Object
+# ======================================================
+
+def extract_json_object(text):
+    """
+    Extract JSON from an AI response.
+
+    Handles responses such as:
+
+    Here is the output:
+
+    {{
+        "severity": "High",
+        "explanation": "...",
+        "recommendation": "..."
+    }}
+    """
+
+    if not isinstance(text, str):
+        raise ValueError(
+            "AI response must be a string."
+        )
+
+    text = text.strip()
+
+    # Try parsing the complete response first.
+    try:
+        return json.loads(text)
+
+    except json.JSONDecodeError:
+        pass
+
+    # Find the JSON object inside extra text.
+    start = text.find("{")
+    end = text.rfind("}")
+
+    if start == -1 or end == -1 or end <= start:
+        raise json.JSONDecodeError(
+            "No JSON object found in AI response.",
+            text,
+            0
+        )
+
+    json_text = text[start:end + 1]
+
+    return json.loads(json_text)
+
+
+# ======================================================
+# Analyze Vulnerability
 # ======================================================
 
 def analyze_vulnerability(
@@ -283,31 +424,28 @@ def analyze_vulnerability(
     """
     Complete security analysis pipeline.
 
-    Flow:
-
-        Scanner Finding
-              ↓
-        Input Validation
-              ↓
-        Risk Calculation
-              ↓
-        Central OWASP/CWE Mapping
-              ↓
-        Llama 3
-              ↓
-        JSON Parsing
-              ↓
-        AI Response Validation
-              ↓
-        Final Result
+    Scanner Finding
+          ↓
+    Normalization
+          ↓
+    OWASP/CWE Mapping
+          ↓
+    Risk Calculation
+          ↓
+    Llama Analysis
+          ↓
+    AI Validation
+          ↓
+    Final Security Result
     """
 
-    # --------------------------------------------------
-    # STEP 1
-    # Read validated scanner information
-    # --------------------------------------------------
+    # ==================================================
+    # Scanner information
+    # ==================================================
 
-    vulnerability_name = vulnerability.vulnerability
+    original_vulnerability_name = (
+        vulnerability.vulnerability
+    )
 
     scanner_severity = vulnerability.severity
 
@@ -320,25 +458,48 @@ def analyze_vulnerability(
     code = vulnerability.code
 
 
-    # --------------------------------------------------
-    # STEP 2
-    # Calculate deterministic risk
-    # --------------------------------------------------
+    # ==================================================
+    # Normalize vulnerability
+    # ==================================================
 
-    risk_score = calculate_risk(
-        scanner_severity,
-        confidence
-    )
+    try:
 
-    risk_level = classify_risk(
-        risk_score
-    )
+        vulnerability_name = (
+            normalize_vulnerability_type(
+                original_vulnerability_name
+            )
+        )
+
+    except ValueError as exc:
+
+        return {
+            "file": file,
+            "line": line,
+            "code": code,
+            "vulnerability": (
+                original_vulnerability_name
+            ),
+            "severity": scanner_severity,
+            "confidence": confidence,
+            "risk_score": 0,
+            "risk_level": "Unknown",
+            "owasp": None,
+            "cwe": None,
+            "ai_status": (
+                "invalid_vulnerability_type"
+            ),
+            "ai_analysis": None,
+            "recommendation": (
+                "Analysis unavailable because "
+                "the vulnerability type is unsupported."
+            ),
+            "error": str(exc)
+        }
 
 
-    # --------------------------------------------------
-    # STEP 3
-    # Get centralized OWASP/CWE mapping
-    # --------------------------------------------------
+    # ==================================================
+    # OWASP / CWE mapping
+    # ==================================================
 
     mapping = get_vulnerability_mapping(
         vulnerability_name
@@ -347,32 +508,69 @@ def analyze_vulnerability(
     if mapping:
 
         mapped_owasp = mapping["owasp"]
-
         mapped_cwe = mapping["cwe"]
 
     else:
 
         mapped_owasp = None
-
         mapped_cwe = None
 
 
-    # --------------------------------------------------
-    # STEP 4
+    # ==================================================
+    # Deterministic risk calculation
+    # ==================================================
+
+    try:
+
+        risk_score = calculate_risk(
+            scanner_severity,
+            confidence,
+            vulnerability_name
+        )
+
+        risk_level = classify_risk(
+            risk_score
+        )
+
+    except ValueError as exc:
+
+        return {
+            "file": file,
+            "line": line,
+            "code": code,
+            "vulnerability": vulnerability_name,
+            "severity": scanner_severity,
+            "confidence": confidence,
+            "risk_score": 0,
+            "risk_level": "Unknown",
+            "owasp": mapped_owasp,
+            "cwe": mapped_cwe,
+            "ai_status": "invalid_risk_input",
+            "ai_analysis": None,
+            "recommendation": (
+                "Analysis unavailable because "
+                "the risk input is invalid."
+            ),
+            "error": str(exc)
+        }
+
+
+    # ==================================================
     # Initialize AI result
-    # --------------------------------------------------
+    # ==================================================
 
     ai_status = "success"
 
     ai_analysis = None
 
-    recommendation = ""
+    recommendation = (
+        "AI recommendation unavailable."
+    )
 
 
-    # --------------------------------------------------
-    # STEP 5
-    # Ask Llama 3 for analysis
-    # --------------------------------------------------
+    # ==================================================
+    # Llama analysis
+    # ==================================================
 
     try:
 
@@ -386,308 +584,155 @@ def analyze_vulnerability(
         )
 
         print("\nRaw AI Analysis:")
-
         print(raw_ai_analysis)
 
 
         # ----------------------------------------------
-        # Parse JSON
+        # Extract JSON
         # ----------------------------------------------
 
-        parsed_ai_analysis = json.loads(
+        parsed_ai_analysis = extract_json_object(
             raw_ai_analysis
         )
 
 
         # ----------------------------------------------
-        # Validate LLM response
+        # Validate AI response
         # ----------------------------------------------
 
-        validated_ai_analysis = AIAnalysisResponse(
-            **parsed_ai_analysis
-        )
-
-
-        # ----------------------------------------------
-        # Apply centralized OWASP/CWE mapping
-        # ----------------------------------------------
-
-        if mapped_owasp and mapped_cwe:
-
-            validated_ai_analysis.owasp = (
-                mapped_owasp
+        validated_ai_analysis = (
+            AIAnalysisResponse(
+                **parsed_ai_analysis
             )
-
-            validated_ai_analysis.cwe = (
-                mapped_cwe
-            )
+        )
 
 
         # ----------------------------------------------
-        # Store validated AI response
+        # Store AI result
         # ----------------------------------------------
 
-        ai_analysis = validated_ai_analysis
-
-
-    # --------------------------------------------------
-    # JSON validation failure
-    # --------------------------------------------------
-
-    except json.JSONDecodeError as e:
-
-        ai_status = "failed"
-
-        print(
-            f"AI response is not valid JSON: {e}"
+        ai_analysis = (
+            validated_ai_analysis.model_dump()
         )
-
-        ai_analysis = None
-
-
-    # --------------------------------------------------
-    # Pydantic validation failure
-    # --------------------------------------------------
-
-    except ValidationError as e:
-
-        ai_status = "failed"
-
-        print(
-            f"AI response validation failed: {e}"
-        )
-
-        ai_analysis = None
-
-
-    # --------------------------------------------------
-    # Ollama failure
-    # --------------------------------------------------
-
-    except RuntimeError as e:
-
-        ai_status = "failed"
-
-        print(
-            f"AI service failed: {e}"
-        )
-
-        ai_analysis = None
-
-
-    # --------------------------------------------------
-    # Unexpected error
-    # --------------------------------------------------
-
-    except Exception as e:
-
-        ai_status = "failed"
-
-        print(
-            f"Unexpected AI analysis error: {e}"
-        )
-
-        ai_analysis = None
-
-
-    # --------------------------------------------------
-    # STEP 6
-    # Generate remediation recommendation
-    # --------------------------------------------------
-
-    try:
-
-        recommendation = generate_recommendation(
-            vulnerability_name,
-            scanner_severity,
-            code
-        )
-
-    except Exception as e:
-
-        ai_status = "failed"
 
         recommendation = (
-            "AI remediation recommendation unavailable."
+            validated_ai_analysis.recommendation
         )
+
+
+    # ==================================================
+    # Invalid JSON
+    # ==================================================
+
+    except json.JSONDecodeError as exc:
+
+        ai_status = "failed"
 
         print(
-            f"AI recommendation failed: {e}"
+            f"AI response is not valid JSON: {exc}"
+        )
+
+        ai_analysis = None
+
+        recommendation = (
+            "AI analysis response was invalid."
         )
 
 
-    # --------------------------------------------------
-    # STEP 7
-    # Convert validated AI response to dictionary
-    # --------------------------------------------------
+    # ==================================================
+    # AI schema validation failure
+    # ==================================================
 
-    if ai_analysis is not None:
+    except ValidationError as exc:
 
-        ai_analysis_data = (
-            ai_analysis.model_dump()
+        ai_status = "failed"
+
+        print(
+            f"AI response validation failed: {exc}"
         )
 
-    else:
+        ai_analysis = None
 
-        ai_analysis_data = None
+        recommendation = (
+            "AI analysis response failed validation."
+        )
 
 
-    # --------------------------------------------------
-    # STEP 8
-    # Return final standardized result
-    # --------------------------------------------------
+    # ==================================================
+    # Ollama failure
+    # ==================================================
+
+    except RuntimeError as exc:
+
+        ai_status = "failed"
+
+        print(
+            f"AI service failed: {exc}"
+        )
+
+        ai_analysis = None
+
+        recommendation = (
+            "AI analysis service unavailable."
+        )
+
+
+    # ==================================================
+    # Unexpected failure
+    # ==================================================
+
+    except Exception as exc:
+
+        ai_status = "failed"
+
+        print(
+            f"Unexpected AI analysis error: {exc}"
+        )
+
+        ai_analysis = None
+
+        recommendation = (
+            "AI analysis failed."
+        )
+
+
+    # ==================================================
+    # Final Security Response
+    # ==================================================
 
     return {
-
-        # Scanner information
         "file": file,
-
         "line": line,
 
+        # Preserve vulnerable source code.
+        "code": code,
+
+        # Canonical vulnerability name.
         "vulnerability": vulnerability_name,
 
+        # Scanner information.
         "severity": scanner_severity,
-
         "confidence": confidence,
 
-
-        # Deterministic risk
+        # Deterministic risk.
         "risk_score": risk_score,
-
         "risk_level": risk_level,
 
+        # Centralized OWASP/CWE mapping.
+        "owasp": mapped_owasp,
+        "cwe": mapped_cwe,
 
-        # AI status
+        # AI status.
         "ai_status": ai_status,
 
+        # AI-generated analysis.
+        "ai_analysis": ai_analysis,
 
-        # Validated AI analysis
-        "ai_analysis": ai_analysis_data,
-
-
-        # Recommendation
+        # Final recommendation.
         "recommendation": recommendation
     }
 
 
 # ======================================================
-# Direct Test
+# End of File
 # ======================================================
-
-if __name__ == "__main__":
-
-    scanner_result = {
-
-        "file": "login.py",
-
-        "line": 22,
-
-        "vulnerability": "SQL Injection",
-
-        "severity": "Critical",
-
-        "confidence": 95,
-
-        "code": "cursor.execute(query)"
-    }
-
-
-    # --------------------------------------------------
-    # Validate scanner result
-    # --------------------------------------------------
-
-    try:
-
-        vulnerability = VulnerabilityInput(
-            **scanner_result
-        )
-
-    except ValidationError as e:
-
-        print(
-            "Scanner input validation failed:"
-        )
-
-        print(e)
-
-        raise SystemExit(1)
-
-
-    # --------------------------------------------------
-    # Analyze vulnerability
-    # --------------------------------------------------
-
-    result = analyze_vulnerability(
-        vulnerability
-    )
-
-
-    # --------------------------------------------------
-    # Print final result
-    # --------------------------------------------------
-
-    print(
-        "\n========================================"
-    )
-
-    print(
-        "AI VULNERABILITY ANALYSIS"
-    )
-
-    print(
-        "========================================"
-    )
-
-    print("\nFile:")
-
-    print(result["file"])
-
-
-    print("\nLine:")
-
-    print(result["line"])
-
-
-    print("\nVulnerability:")
-
-    print(result["vulnerability"])
-
-
-    print("\nScanner Severity:")
-
-    print(result["severity"])
-
-
-    print("\nConfidence:")
-
-    print(result["confidence"])
-
-
-    print("\nDeterministic Risk Score:")
-
-    print(result["risk_score"])
-
-
-    print("\nRisk Level:")
-
-    print(result["risk_level"])
-
-
-    print("\nAI Status:")
-
-    print(result["ai_status"])
-
-
-    print("\nValidated AI Analysis:")
-
-    print(
-        json.dumps(
-            result["ai_analysis"],
-            indent=4
-        )
-    )
-
-
-    print("\nRecommendation:")
-
-    print(result["recommendation"])
