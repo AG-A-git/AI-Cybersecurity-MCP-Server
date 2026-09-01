@@ -12,6 +12,10 @@ from scanner.rules.ldap import scan_ldap
 logger = logging.getLogger(__name__)
 
 
+# ============================================================
+# Rule Loading
+# ============================================================
+
 def load_rules():
     """
     Load all vulnerability detection rules.
@@ -27,6 +31,10 @@ def load_rules():
         scan_ldap
     ]
 
+
+# ============================================================
+# Run Rules
+# ============================================================
 
 def run_all_rules(file_path):
     """
@@ -59,31 +67,50 @@ def run_all_rules(file_path):
     return results
 
 
-def remove_duplicates(results):
+# ============================================================
+# Deduplication
+# ============================================================
+
+def deduplicate_findings(findings):
     """
     Remove duplicate vulnerability findings.
 
-    Supports both the old scanner output format and
-    the new standardized output format.
+    Two findings are considered duplicates when they have
+    the same:
+
+        file_name
+        line_number
+        vulnerability_type
+
+    If duplicate findings have different confidence values,
+    keep the finding with the highest confidence.
     """
 
-    unique_results = []
-    seen = set()
+    unique = {}
 
-    for result in results:
+    for finding in findings:
 
         key = (
-            result.get("file_name", result.get("file")),
-            result.get("line_number", result.get("line")),
-            result.get(
-                "vulnerability_type",
-                result.get("vulnerability")
-            ),
-            result.get("code")
+            finding["file_name"],
+            finding["line_number"],
+            finding["vulnerability_type"]
         )
 
-        if key not in seen:
-            seen.add(key)
-            unique_results.append(result)
+        if key not in unique:
+            unique[key] = finding
 
-    return unique_results
+        elif finding["confidence"] > unique[key]["confidence"]:
+            unique[key] = finding
+
+    return list(unique.values())
+
+
+def remove_duplicates(results):
+    """
+    Backward-compatible wrapper.
+
+    Existing code that calls remove_duplicates()
+    will now use the Task 8 deduplication logic.
+    """
+
+    return deduplicate_findings(results)

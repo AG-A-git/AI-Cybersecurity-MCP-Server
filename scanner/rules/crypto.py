@@ -5,29 +5,36 @@ from scanner.finding import create_finding
 
 CRYPTO_PATTERNS = [
     (
-        re.compile(r'\bhashlib\.md5\s*\(', re.IGNORECASE),
+        re.compile(
+            r'\bhashlib\.md5\s*\(',
+            re.IGNORECASE
+        ),
         "High",
         95
     ),
     (
-        re.compile(r'\bhashlib\.sha1\s*\(', re.IGNORECASE),
+        re.compile(
+            r'\bhashlib\.sha1\s*\(',
+            re.IGNORECASE
+        ),
         "High",
         95
     ),
     (
-        re.compile(r'\bDES\s*\(', re.IGNORECASE),
+        re.compile(
+            r'\bDES(?:\.new)?\s*\(',
+            re.IGNORECASE
+        ),
         "High",
-        90
+        95
     ),
     (
-        re.compile(r'\bARC4\s*\(', re.IGNORECASE),
+        re.compile(
+            r'\b(?:ARC4|RC4)(?:\.new)?\s*\(',
+            re.IGNORECASE
+        ),
         "High",
-        90
-    ),
-    (
-        re.compile(r'\bRC4\s*\(', re.IGNORECASE),
-        "High",
-        90
+        95
     ),
 ]
 
@@ -40,7 +47,12 @@ def scan_crypto(file_path):
     results = []
 
     try:
-        with open(file_path, "r", encoding="utf-8") as file:
+        with open(
+            file_path,
+            "r",
+            encoding="utf-8",
+            errors="ignore"
+        ) as file:
             lines = file.readlines()
 
     except (FileNotFoundError, OSError):
