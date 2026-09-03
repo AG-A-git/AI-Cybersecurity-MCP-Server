@@ -294,7 +294,15 @@ Rules:
 5. Give practical remediation advice.
 6. Do not calculate or invent a risk score.
 7. Do not invent an OWASP category or CWE.
-8. Return valid JSON only.
+8. IMPORTANT JSON RULES:
+
+- Return a single JSON object.
+- All string values MUST use valid JSON double-quoted strings.
+- Escape any double quotes that appear inside string values.
+- Do not include newline characters inside JSON string values.
+- Do not use Markdown.
+- Do not use code fences.
+- Do not add comments.
 """
 
 

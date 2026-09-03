@@ -20,7 +20,10 @@ def parse_ai_response(response):
 
     response = response.strip()
 
-    # Remove Markdown code fences if the model adds them.
+    # --------------------------------------------------
+    # Remove Markdown code fences
+    # --------------------------------------------------
+
     if response.startswith("```json"):
         response = response[len("```json"):].strip()
 
@@ -29,6 +32,17 @@ def parse_ai_response(response):
 
     if response.endswith("```"):
         response = response[:-3].strip()
+
+    # --------------------------------------------------
+    # Handle incomplete JSON object
+    # --------------------------------------------------
+
+    if response.startswith("{") and not response.endswith("}"):
+        response = response + "}"
+
+    # --------------------------------------------------
+    # Parse JSON
+    # --------------------------------------------------
 
     try:
         data = json.loads(response)
@@ -41,10 +55,18 @@ def parse_ai_response(response):
             f"AI returned invalid JSON: {error}"
         ) from error
 
+    # --------------------------------------------------
+    # Ensure JSON object
+    # --------------------------------------------------
+
     if not isinstance(data, dict):
         raise ValueError(
             "AI response must be a JSON object."
         )
+
+    # --------------------------------------------------
+    # Validate required fields
+    # --------------------------------------------------
 
     try:
         return AIAnalysis(**data)
