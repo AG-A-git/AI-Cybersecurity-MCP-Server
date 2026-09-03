@@ -1,47 +1,26 @@
-import os
-import requests
+import sys
+from pathlib import Path
 
-AI_SERVICE_URL = os.getenv(
-    "AI_SERVICE_URL",
-    "http://192.168.0.107:8000/analyze"
-)
+# Add project root to Python path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
-def analyze_vulnerability(finding):
-    try:
-        response = requests.post(
-            AI_SERVICE_URL,
-            json={
-                "file": finding.get("file"),
-                "line": finding.get("line"),
-                "vulnerability": finding.get("vulnerability"),
-                "severity": finding.get("severity"),
-                "confidence": finding.get("confidence"),
-                "code": finding.get("code"),
-            },
-            timeout=60
-        )
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-        response.raise_for_status()
-        return response.json()
-
-    except requests.exceptions.Timeout:
-        raise RuntimeError("AI analysis service timed out")
-
-    except requests.exceptions.ConnectionError:
-        raise RuntimeError("AI analysis service is unavailable")
-
-    except requests.exceptions.HTTPError as e:
-        raise RuntimeError(
-            f"AI analysis service returned an error: {e}"
-        )
-
-    except requests.exceptions.RequestException as e:
-        raise RuntimeError(
-            f"AI analysis request failed: {e}"
-        )
+from ai.analysis import analyze_vulnerability
 
 
 def analyze_vulnerabilities(findings):
+    """
+    Analyze all scanner findings using the AI analysis layer.
+
+    Args:
+        findings: List of standardized scanner findings.
+
+    Returns:
+        List of findings enriched with AI analysis.
+    """
+
     results = []
 
     for finding in findings:
