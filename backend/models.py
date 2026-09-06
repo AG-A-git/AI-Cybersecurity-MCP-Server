@@ -128,6 +128,11 @@ class Scan(Base):
         DateTime,
         nullable=True
     )
+    
+    error_message = Column(
+        String,
+        nullable=True
+    )
 
     created_at = Column(
         DateTime,

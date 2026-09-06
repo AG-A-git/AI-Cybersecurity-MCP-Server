@@ -216,3 +216,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local project database
+backend/scanner.db
+
+# Uploaded test/source files
+backend/uploads/
+
+# Local scanner test fixture
+backend/test.py

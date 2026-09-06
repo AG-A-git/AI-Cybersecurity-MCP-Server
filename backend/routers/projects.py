@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Project
+from models import Project, User
+from auth import get_current_user
 
 
 router = APIRouter(
@@ -10,17 +12,62 @@ router = APIRouter(
     tags=["Projects"]
 )
 
+security = HTTPBearer()
+
+
+def get_authenticated_user(
+    credentials: HTTPAuthorizationCredentials,
+    db: Session
+):
+    """
+    Validate JWT and return the current database user.
+    """
+
+    token = credentials.credentials
+
+    email = get_current_user(token)
+
+    if email is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token"
+        )
+
+    current_user = db.query(User).filter(
+        User.email == email
+    ).first()
+
+    if current_user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    return current_user
+
 
 @router.post("/")
 def create_project(
     project_name: str,
     description: str = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ):
+    # ---------------------------------------------------------
+    # 1. Verify authentication
+    # ---------------------------------------------------------
+    current_user = get_authenticated_user(
+        credentials,
+        db
+    )
+
+    # ---------------------------------------------------------
+    # 2. Create project for current user
+    # ---------------------------------------------------------
     project = Project(
         project_name=project_name,
         description=description,
-        owner_id=1
+        owner_id=current_user.id
     )
 
     db.add(project)
@@ -32,9 +79,23 @@ def create_project(
 
 @router.get("/")
 def get_projects(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ):
-    projects = db.query(Project).all()
+    # ---------------------------------------------------------
+    # 1. Verify authentication
+    # ---------------------------------------------------------
+    current_user = get_authenticated_user(
+        credentials,
+        db
+    )
+
+    # ---------------------------------------------------------
+    # 2. Get only current user's projects
+    # ---------------------------------------------------------
+    projects = db.query(Project).filter(
+        Project.owner_id == current_user.id
+    ).all()
 
     return projects
 
@@ -42,8 +103,20 @@ def get_projects(
 @router.get("/{project_id}")
 def get_project(
     project_id: int,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ):
+    # ---------------------------------------------------------
+    # 1. Verify authentication
+    # ---------------------------------------------------------
+    current_user = get_authenticated_user(
+        credentials,
+        db
+    )
+
+    # ---------------------------------------------------------
+    # 2. Find project
+    # ---------------------------------------------------------
     project = db.query(Project).filter(
         Project.id == project_id
     ).first()
@@ -52,6 +125,15 @@ def get_project(
         raise HTTPException(
             status_code=404,
             detail="Project not found"
+        )
+
+    # ---------------------------------------------------------
+    # 3. Verify ownership
+    # ---------------------------------------------------------
+    if project.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to view this project"
         )
 
     return project
@@ -60,8 +142,20 @@ def get_project(
 @router.delete("/{project_id}")
 def delete_project(
     project_id: int,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ):
+    # ---------------------------------------------------------
+    # 1. Verify authentication
+    # ---------------------------------------------------------
+    current_user = get_authenticated_user(
+        credentials,
+        db
+    )
+
+    # ---------------------------------------------------------
+    # 2. Find project
+    # ---------------------------------------------------------
     project = db.query(Project).filter(
         Project.id == project_id
     ).first()
@@ -72,6 +166,18 @@ def delete_project(
             detail="Project not found"
         )
 
+    # ---------------------------------------------------------
+    # 3. Verify ownership
+    # ---------------------------------------------------------
+    if project.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to delete this project"
+        )
+
+    # ---------------------------------------------------------
+    # 4. Delete project
+    # ---------------------------------------------------------
     db.delete(project)
     db.commit()
 

@@ -34,29 +34,6 @@ def run_all_rules(file_path):
 
     return results
 
-def remove_duplicates(results):
-    """
-    Remove duplicate vulnerability findings.
-
-    Findings are considered duplicates when they have
-    the same file, line, and vulnerability.
-    """
-
-    unique_results = []
-    seen = set()
-
-    for result in results:
-        key = (
-            result.get("file"),
-            result.get("line"),
-            result.get("vulnerability")
-        )
-
-        if key not in seen:
-            seen.add(key)
-            unique_results.append(result)
-
-    return remove_duplicates(results)
 
 def remove_duplicates(results):
     """

@@ -3,7 +3,10 @@ from sqlalchemy.orm import Session
 from pathlib import Path
 
 from database import get_db
-from models import UploadedFile, Project
+from models import UploadedFile, Project, User
+
+from auth import get_current_user
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from services.upload_service import (
     save_file,
@@ -17,9 +20,12 @@ router = APIRouter(
     tags=["Upload"]
 )
 
+security = HTTPBearer()
+
 
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
 EXTRACT_DIR = Path("uploads/extracted")
 EXTRACT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -37,8 +43,29 @@ ALLOWED_EXTENSIONS = {
 async def upload_file(
     project_id: int,
     file: UploadFile = File(...),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ):
+
+    # Get current user from JWT
+    token = credentials.credentials
+    email = get_current_user(token)
+
+    if email is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token"
+        )
+
+    current_user = db.query(User).filter(
+        User.email == email
+    ).first()
+
+    if current_user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
 
     # Check project
     project = db.query(Project).filter(
@@ -49,6 +76,13 @@ async def upload_file(
         raise HTTPException(
             status_code=404,
             detail="Project not found"
+        )
+
+    # Check project ownership
+    if project.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to upload to this project"
         )
 
     # Validate extension
@@ -77,7 +111,7 @@ async def upload_file(
         filepath=str(file_path),
         language=language,
         project_id=project_id,
-        user_id=1
+        user_id=current_user.id
     )
 
     db.add(uploaded_file)

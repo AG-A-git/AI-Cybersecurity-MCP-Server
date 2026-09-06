@@ -22,7 +22,7 @@ from utils import hash_password
 from schemas import UserLogin, Token
 from utils import verify_password
 from auth import create_access_token
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from auth import get_current_user
 from routers import projects
 from routers import upload
@@ -45,7 +45,7 @@ app.include_router(projects.router)
 app.include_router(upload.router)
 app.include_router(scan.router)
 print("UPLOAD ROUTES:", [(route.path, route.methods) for route in upload.router.routes])
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+security = HTTPBearer()
 @app.get("/")
 def home():
     return {
@@ -126,9 +126,11 @@ def login(
     }
 @app.get("/profile", response_model=UserResponse)
 def profile(
-    token: str = Depends(oauth2_scheme),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ):
+    token = credentials.credentials
+
     email = get_current_user(token)
 
     if email is None:
