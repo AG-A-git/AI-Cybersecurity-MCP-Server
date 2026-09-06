@@ -7,12 +7,16 @@ function Upload() {
     const [error, setError] = useState("");
     const [result, setResult] = useState(null);
 
+    // Scan status
+    const [scanStatus, setScanStatus] = useState("idle");
+
     const handleFileChange = (event) => {
         const selectedFile = event.target.files?.[0] || null;
 
         setFile(selectedFile);
         setError("");
         setResult(null);
+        setScanStatus("idle");
     };
 
     const getErrorMessage = (error) => {
@@ -23,22 +27,18 @@ function Upload() {
         const status = error.response.status;
         const data = error.response.data;
 
-        // 401 - Authentication required
         if (status === 401) {
             return "Login required. Please log in again.";
         }
 
-        // 403 - Not authorized
         if (status === 403) {
             return "You are not authorized to perform this action.";
         }
 
-        // 404 - Resource not found
         if (status === 404) {
             return "Resource not found.";
         }
 
-        // 422 - Validation error
         if (status === 422) {
             if (Array.isArray(data?.detail)) {
                 return data.detail
@@ -69,7 +69,6 @@ function Upload() {
             return "Invalid request. Please check the selected file.";
         }
 
-        // 500 - Server error
         if (status === 500) {
             return (
                 data?.detail ||
@@ -77,7 +76,6 @@ function Upload() {
             );
         }
 
-        // Other backend errors
         if (typeof data?.detail === "string") {
             return data.detail;
         }
@@ -90,12 +88,16 @@ function Upload() {
 
         if (!file) {
             setError("Please select a file first.");
+            setScanStatus("failed");
             return;
         }
 
         setLoading(true);
         setError("");
         setResult(null);
+
+        // Start scanning
+        setScanStatus("scanning");
 
         console.log("Starting security scan...");
         console.log("File:", file.name);
@@ -114,11 +116,20 @@ function Upload() {
 
             console.log("SCAN RESPONSE:", response.data);
 
+            // Save actual backend result
             setResult(response.data);
+
+            // Scan completed successfully
+            setScanStatus("completed");
+
         } catch (error) {
             console.error("Scan error:", error);
 
+            // Scan failed
+            setScanStatus("failed");
+
             setError(getErrorMessage(error));
+
         } finally {
             setLoading(false);
         }
@@ -147,6 +158,47 @@ function Upload() {
 
             default:
                 return `⚪ ${severity}`;
+        }
+    };
+
+    const getLanguage = (filename) => {
+        if (!filename) {
+            return "Unknown";
+        }
+
+        const extension =
+            filename.split(".").pop()?.toLowerCase();
+
+        switch (extension) {
+            case "py":
+                return "Python";
+
+            case "js":
+                return "JavaScript";
+
+            case "jsx":
+                return "React / JavaScript";
+
+            case "java":
+                return "Java";
+
+            case "cpp":
+                return "C++";
+
+            case "c":
+                return "C";
+
+            case "php":
+                return "PHP";
+
+            case "ts":
+                return "TypeScript";
+
+            case "tsx":
+                return "React / TypeScript";
+
+            default:
+                return "Unknown";
         }
     };
 
@@ -207,6 +259,43 @@ function Upload() {
                 </div>
             </form>
 
+            {/* Scan Status */}
+            <div
+                style={{
+                    marginTop: "25px",
+                    padding: "20px",
+                    border: "1px solid #ddd",
+                    borderRadius: "8px",
+                }}
+            >
+                <h3>Scan Status</h3>
+
+                {scanStatus === "idle" && (
+                    <p>⚪ Ready to scan</p>
+                )}
+
+                {scanStatus === "scanning" && (
+                    <p>
+                        🔄 <strong>Scanning...</strong>
+                        <br />
+                        Please wait while the backend
+                        analyzes your file.
+                    </p>
+                )}
+
+                {scanStatus === "completed" && (
+                    <p>
+                        ✅ <strong>Scan Completed</strong>
+                    </p>
+                )}
+
+                {scanStatus === "failed" && (
+                    <p>
+                        ❌ <strong>Scan Failed</strong>
+                    </p>
+                )}
+            </div>
+
             {/* Error Message */}
             {error && (
                 <div
@@ -241,12 +330,48 @@ function Upload() {
                     <h2>Scan Results</h2>
 
                     {/* File Information */}
-                    <p>
-                        <strong>File:</strong>{" "}
-                        {result.filename}
-                    </p>
+                    <div
+                        style={{
+                            marginTop: "20px",
+                            padding: "20px",
+                            border: "1px solid #ddd",
+                            borderRadius: "8px",
+                        }}
+                    >
+                        <h3>File Information</h3>
 
-                    <p>
+                        <p>
+                            <strong>File Name:</strong>{" "}
+                            {result.filename}
+                        </p>
+
+                        <p>
+                            <strong>Language:</strong>{" "}
+                            {getLanguage(result.filename)}
+                        </p>
+
+                        <p>
+                            <strong>File Size:</strong>{" "}
+                            {result.file_size} bytes
+                        </p>
+
+                        <p>
+                            <strong>Uploaded By:</strong>{" "}
+                            {result.uploaded_by}
+                        </p>
+
+                        <p>
+                            <strong>Status:</strong>{" "}
+                            {scanStatus === "completed"
+                                ? "Scan Completed"
+                                : scanStatus === "failed"
+                                ? "Scan Failed"
+                                : "Scanning..."}
+                        </p>
+                    </div>
+
+                    {/* Total Vulnerabilities */}
+                    <p style={{ marginTop: "20px" }}>
                         <strong>
                             Total vulnerabilities:
                         </strong>{" "}
@@ -266,22 +391,26 @@ function Upload() {
                             <h3>Severity Summary</h3>
 
                             <p>
-                                🔴 <strong>Critical:</strong>{" "}
+                                🔴{" "}
+                                <strong>Critical:</strong>{" "}
                                 {result.summary.critical ?? 0}
                             </p>
 
                             <p>
-                                🟠 <strong>High:</strong>{" "}
+                                🟠{" "}
+                                <strong>High:</strong>{" "}
                                 {result.summary.high ?? 0}
                             </p>
 
                             <p>
-                                🟡 <strong>Medium:</strong>{" "}
+                                🟡{" "}
+                                <strong>Medium:</strong>{" "}
                                 {result.summary.medium ?? 0}
                             </p>
 
                             <p>
-                                🟢 <strong>Low:</strong>{" "}
+                                🟢{" "}
+                                <strong>Low:</strong>{" "}
                                 {result.summary.low ?? 0}
                             </p>
                         </div>

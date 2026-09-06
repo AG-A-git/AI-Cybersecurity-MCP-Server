@@ -9,11 +9,11 @@ api.interceptors.request.use(
         const token = localStorage.getItem("access_token");
 
         if (token) {
+            config.headers = config.headers || {};
             config.headers.Authorization = `Bearer ${token}`;
         }
 
-        // Let the browser/Axios set the correct
-        // Content-Type when sending FormData.
+        // Let Axios/browser set multipart/form-data headers.
         if (config.data instanceof FormData) {
             delete config.headers["Content-Type"];
         }

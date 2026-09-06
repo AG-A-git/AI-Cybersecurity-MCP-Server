@@ -1,19 +1,44 @@
 import { useState } from "react";
+import api from "../services/api";
 
 function Projects() {
     const [projectName, setProjectName] = useState("");
     const [description, setDescription] = useState("");
 
-    const handleCreate = (e) => {
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
+    const [success, setSuccess] = useState("");
+
+    const handleCreate = async (e) => {
         e.preventDefault();
 
-        console.log("Project Name:", projectName);
-        console.log("Description:", description);
+        setLoading(true);
+        setError("");
+        setSuccess("");
 
-        alert("Project form submitted!");
+        try {
+            const response = await api.post("/projects/", {
+                project_name: projectName,
+                description: description
+            });
 
-        setProjectName("");
-        setDescription("");
+            console.log("Project created:", response.data);
+
+            setSuccess("Project created successfully!");
+
+            setProjectName("");
+            setDescription("");
+
+        } catch (error) {
+            console.error("Project creation failed:", error);
+
+            setError(
+                error.response?.data?.detail ||
+                "Failed to create project. Please check the backend."
+            );
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -23,6 +48,7 @@ function Projects() {
             <h2>Create Project</h2>
 
             <form onSubmit={handleCreate}>
+
                 <div>
                     <label htmlFor="projectName">
                         Project Name
@@ -65,10 +91,19 @@ function Projects() {
 
                 <br />
 
-                <button type="submit">
-                    Create
+                <button type="submit" disabled={loading}>
+                    {loading ? "Creating..." : "Create"}
                 </button>
+
             </form>
+
+            {success && (
+                <p>{success}</p>
+            )}
+
+            {error && (
+                <p>{error}</p>
+            )}
         </div>
     );
 }
