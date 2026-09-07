@@ -1,4 +1,6 @@
+
 from scanner.rules.input_validation import scan_input_validation
+from scanner.scan import scan_file
 
 
 def test_sql_injection_from_user_input():
@@ -107,3 +109,16 @@ def test_safe_text_content_not_detected_as_xss():
     ]
 
     assert not xss_findings
+
+
+def test_static_command_not_detected_as_command_injection():
+    findings = scan_file("test_files/safe/command_safe.py")
+
+    command_findings = [
+        finding
+        for finding in findings
+        if finding["vulnerability_type"] == "Command Injection"
+    ]
+
+    assert not command_findings
+
