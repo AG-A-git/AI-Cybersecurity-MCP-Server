@@ -7,6 +7,10 @@ from scanner.rules.crypto import scan_crypto
 from scanner.rules.input_validation import scan_input_validation
 from scanner.rules.command import scan_command
 from scanner.rules.ldap import scan_ldap
+from scanner.rules.insecure_deserialization import scan_insecure_deserialization
+from scanner.rules.security_misconfiguration import scan_security_misconfiguration
+from scanner.rules.authentication_access_control import scan_authentication_access_control
+from scanner.rules.ssrf import detect_ssrf
 
 
 logger = logging.getLogger(__name__)
@@ -18,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 def load_rules():
     """
-    Load all vulnerability detection rules.
+    Load all implemented vulnerability detection rules.
     """
 
     return [
@@ -28,7 +32,11 @@ def load_rules():
         scan_crypto,
         scan_input_validation,
         scan_command,
-        scan_ldap
+        scan_ldap,
+        scan_insecure_deserialization,
+        scan_security_misconfiguration,
+        scan_authentication_access_control,
+        detect_ssrf,
     ]
 
 
@@ -56,7 +64,7 @@ def run_all_rules(file_path):
             if rule_results:
                 results.extend(rule_results)
 
-        except Exception as error:
+        except (SyntaxError, ValueError, OSError) as error:
             logger.exception(
                 "Rule %s failed while scanning %s: %s",
                 rule.__name__,
@@ -108,9 +116,6 @@ def deduplicate_findings(findings):
 def remove_duplicates(results):
     """
     Backward-compatible wrapper.
-
-    Existing code that calls remove_duplicates()
-    will now use the Task 8 deduplication logic.
     """
 
     return deduplicate_findings(results)
