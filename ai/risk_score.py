@@ -6,21 +6,13 @@ SEVERITY_WEIGHTS = {
     "Critical": 90,
     "High": 75,
     "Medium": 50,
-    "Low": 25
+    "Low": 25,
 }
 
 
 # ======================================================
 # Vulnerability Impact Factors
 # ======================================================
-#
-# These are initial project factors.
-# They are intentionally simple and can be refined later.
-#
-# 1.00 = normal impact
-# >1.00 = higher impact
-# <1.00 = lower impact
-#
 
 VULNERABILITY_IMPACT_FACTORS = {
 
@@ -46,7 +38,7 @@ VULNERABILITY_IMPACT_FACTORS = {
 
     "Sensitive Data Exposure": 1.10,
 
-    "SSRF": 1.15
+    "SSRF": 1.15,
 }
 
 
@@ -121,12 +113,10 @@ def get_vulnerability_impact(
     Return the initial impact factor for a
     canonical vulnerability type.
 
-    Unknown vulnerability types use 1.00,
-    which means no additional impact adjustment.
+    Unknown vulnerability types use 1.00.
     """
 
     if not vulnerability_type:
-
         return 1.00
 
     return VULNERABILITY_IMPACT_FACTORS.get(
@@ -141,38 +131,36 @@ def get_vulnerability_impact(
 
 def calculate_risk(
     severity,
-    confidence,
+    confidence=100,
     vulnerability_type=None
 ):
     """
-    Calculate the deterministic risk score.
-
-    Initial Risk Model — Subject to refinement.
+    Calculate deterministic risk score.
 
     Formula:
 
         Base Severity Score
-                ×
+                *
         Confidence Factor
-                ×
+                *
         Vulnerability Impact Factor
-                ↓
+                =
         Risk Score
 
     Example:
 
         High = 75
         Confidence = 90%
-        SQL Injection Impact = 1.15
+        SQL Injection = 1.15
 
-        75 × 0.90 × 1.15
+        75 * 0.90 * 1.15
         = 77.625
 
         Final Score = 77.63
     """
 
     # --------------------------------------------------
-    # Normalize and validate severity
+    # Normalize severity
     # --------------------------------------------------
 
     normalized_severity = normalize_severity(

@@ -71,7 +71,6 @@ def analyze_findings(findings):
 
         average_risk_score = 0
 
-
     # --------------------------------------------------
     # Return batch result
     # --------------------------------------------------
@@ -103,13 +102,16 @@ def analyze_finding_dicts(findings):
     """
     Analyze findings supplied as dictionaries.
 
+    Each dictionary is first converted into a
+    VulnerabilityInput object for validation.
+
     Example:
 
         [
             {
                 "file": "app.py",
                 "line": 25,
-                "vulnerability": "SQLi",
+                "vulnerability": "SQL Injection",
                 "severity": "High",
                 "confidence": 90,
                 "code": "query = user_input"

@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>AI Cybersecurity Scanner</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 30px;
+            background: #f4f6f8;
+        }
+
+        h1 {
+            margin-bottom: 5px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        input {
+            padding: 10px;
+            width: 350px;
+        }
+
+        button {
+            padding: 10px 20px;
+            cursor: pointer;
+        }
+
+        .cards {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            min-width: 150px;
+        }
+
+        .card h3 {
+            margin-top: 0;
+        }
+
+        .number {
+            font-size: 30px;
+            font-weight: bold;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+        }
+
+        th {
+            background: #eee;
+        }
+
+        tr:hover {
+            background: #f1f1f1;
+            cursor: pointer;
+        }
+
+        .details {
+            background: white;
+            margin-top: 25px;
+            padding: 25px;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .details h2 {
+            margin-top: 0;
+        }
+
+        .detail-row {
+            margin: 10px 0;
+        }
+
+        .label {
+            font-weight: bold;
+        }
+
+        .analysis {
+            background: #f4f6f8;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 6px;
+        }
+
+        #status {
+            margin-top: 15px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>AI Cybersecurity Scanner</h1>
+
+    <div class="subtitle">
+        Vulnerability Detection • Risk Analysis • OWASP • CWE • AI Analysis
+    </div>
+
+    <div class="controls">
+
+        <label>
+            Project Path:
+        </label>
+
+        <input
+            id="projectPath"
+            type="text"
+            value="."
+        >
+
+        <button onclick="scanProject()">
+            Scan Project
+        </button>
+
+        <div id="status"></div>
+
+    </div>
+
+
+    <div class="cards">
+
+        <div class="card">
+            <h3>Total Findings</h3>
+            <div class="number" id="totalFindings">0</div>
+        </div>
+
+        <div class="card">
+            <h3>Critical</h3>
+            <div class="number" id="criticalCount">0</div>
+        </div>
+
+        <div class="card">
+            <h3>High</h3>
+            <div class="number" id="highCount">0</div>
+        </div>
+
+        <div class="card">
+            <h3>Medium</h3>
+            <div class="number" id="mediumCount">0</div>
+        </div>
+
+    </div>
+
+
+    <h2>Vulnerability Findings</h2>
+
+    <table>
+
+        <thead>
+            <tr>
+                <th>File</th>
+                <th>Line</th>
+                <th>Vulnerability</th>
+                <th>Severity</th>
+                <th>Risk Score</th>
+                <th>OWASP</th>
+                <th>CWE</th>
+            </tr>
+        </thead>
+
+        <tbody id="findingsTable"></tbody>
+
+    </table>
+
+
+    <div class="details" id="details">
+
+        <h2>Vulnerability Details</h2>
+
+        <div class="detail-row">
+            <span class="label">File:</span>
+            <span id="detailFile"></span>
+        </div>
+
+        <div class="detail-row">
+            <span class="label">Line:</span>
+            <span id="detailLine"></span>
+        </div>
+
+        <div class="detail-row">
+            <span class="label">Vulnerability:</span>
+            <span id="detailVulnerability"></span>
+        </div>
+
+        <div class="detail-row">
+            <span class="label">Severity:</span>
+            <span id="detailSeverity"></span>
+        </div>
+
+        <div class="detail-row">
+            <span class="label">Confidence:</span>
+            <span id="detailConfidence"></span>
+        </div>
+
+        <div class="detail-row">
+            <span class="label">Risk Score:</span>
+            <span id="detailRiskScore"></span>
+        </div>
+
+        <div class="detail-row">
+            <span class="label">Risk Level:</span>
+            <span id="detailRiskLevel"></span>
+        </div>
+
+        <div class="detail-row">
+            <span class="label">OWASP:</span>
+            <span id="detailOwasp"></span>
+        </div>
+
+        <div class="detail-row">
+            <span class="label">CWE:</span>
+            <span id="detailCwe"></span>
+        </div>
+
+
+        <div class="analysis">
+
+            <h3>AI Explanation</h3>
+
+            <p id="detailExplanation">
+                No analysis available.
+            </p>
+
+            <h3>Recommendation</h3>
+
+            <p id="detailRecommendation">
+                No recommendation available.
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <script>
+
+        const API = "http://127.0.0.1:8000";
+
+
+        async function scanProject() {
+
+            const projectPath =
+                document.getElementById("projectPath").value;
+
+            const status =
+                document.getElementById("status");
+
+            status.innerText = "Scanning...";
+
+
+            try {
+
+                const response = await fetch(
+                    `${API}/scan`,
+                    {
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+
+                        body: JSON.stringify({
+                            project_path: projectPath
+                        })
+                    }
+                );
+
+
+                if (!response.ok) {
+                    throw new Error(
+                        `HTTP ${response.status}`
+                    );
+                }
+
+
+                const data =
+                    await response.json();
+
+
+                status.innerText =
+                    `Scan completed: ${data.scan_id}`;
+
+
+                displayFindings(
+                    data.findings || []
+                );
+
+
+            } catch (error) {
+
+                status.innerText =
+                    "Scan failed: " + error.message;
+
+            }
+
+        }
+
+
+        function displayFindings(findings) {
+
+            document.getElementById(
+                "totalFindings"
+            ).innerText = findings.length;
+
+
+            let critical = 0;
+            let high = 0;
+            let medium = 0;
+
+
+            const table =
+                document.getElementById(
+                    "findingsTable"
+                );
+
+
+            table.innerHTML = "";
+
+
+            findings.forEach(
+                (finding, index) => {
+
+                    const severity =
+                        finding.severity || "Unknown";
+
+
+                    if (severity === "Critical") {
+                        critical++;
+                    }
+
+                    if (severity === "High") {
+                        high++;
+                    }
+
+                    if (severity === "Medium") {
+                        medium++;
+                    }
+
+
+                    const row =
+                        document.createElement("tr");
+
+
+                    row.innerHTML = `
+
+                        <td>${finding.file || ""}</td>
+
+                        <td>${finding.line || ""}</td>
+
+                        <td>${finding.vulnerability || ""}</td>
+
+                        <td>${severity}</td>
+
+                        <td>${finding.risk_score || ""}</td>
+
+                        <td>${finding.owasp || ""}</td>
+
+                        <td>${finding.cwe || ""}</td>
+
+                    `;
+
+
+                    row.onclick = function() {
+                        showDetails(finding);
+                    };
+
+
+                    table.appendChild(row);
+
+                }
+            );
+
+
+            document.getElementById(
+                "criticalCount"
+            ).innerText = critical;
+
+
+            document.getElementById(
+                "highCount"
+            ).innerText = high;
+
+
+            document.getElementById(
+                "mediumCount"
+            ).innerText = medium;
+
+        }
+
+
+        function showDetails(finding) {
+
+            document.getElementById(
+                "details"
+            ).style.display = "block";
+
+
+            document.getElementById(
+                "detailFile"
+            ).innerText =
+                finding.file || "";
+
+
+            document.getElementById(
+                "detailLine"
+            ).innerText =
+                finding.line || "";
+
+
+            document.getElementById(
+                "detailVulnerability"
+            ).innerText =
+                finding.vulnerability || "";
+
+
+            document.getElementById(
+                "detailSeverity"
+            ).innerText =
+                finding.severity || "";
+
+
+            document.getElementById(
+                "detailConfidence"
+            ).innerText =
+                finding.confidence || "";
+
+
+            document.getElementById(
+                "detailRiskScore"
+            ).innerText =
+                finding.risk_score || "";
+
+
+            document.getElementById(
+                "detailRiskLevel"
+            ).innerText =
+                finding.risk_level || "";
+
+
+            document.getElementById(
+                "detailOwasp"
+            ).innerText =
+                finding.owasp || "";
+
+
+            document.getElementById(
+                "detailCwe"
+            ).innerText =
+                finding.cwe || "";
+
+
+            const analysis =
+                finding.ai_analysis || {};
+
+
+            document.getElementById(
+                "detailExplanation"
+            ).innerText =
+                analysis.explanation ||
+                "No AI explanation available.";
+
+
+            document.getElementById(
+                "detailRecommendation"
+            ).innerText =
+                analysis.recommendation ||
+                finding.recommendation ||
+                "No recommendation available.";
+
+        }
+
+    </script>
+
+</body>
+
+</html>

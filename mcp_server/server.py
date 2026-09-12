@@ -1,310 +1,554 @@
 """
 AI Cybersecurity MCP Server
 
-Provides:
-- FastAPI REST API
-- MCP server
-- Vulnerability analysis
-- OWASP/CWE mapping
-- Deterministic risk scoring
-- LLM explanation and remediation
+FastAPI server for:
+    - Project scanning
+    - Vulnerability analysis
+    - Risk scoring
+    - Scan result retrieval
+    - Report generation
 """
 
+from __future__ import annotations
+
+import uuid
+from typing import Any
+
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from mcp.server.fastmcp import FastMCP
+from scanner import scan_project
 
-from ai.input import VulnerabilityInput
 from ai.llm import analyze_vulnerability
+from ai.risk_score import calculate_risk, classify_risk
+from ai.vulnerability_mapping import get_vulnerability_mapping
 
-from .resources import register_resources
 
-
-# ======================================================
-# FastAPI Application
-# ======================================================
+# ============================================================
+# APPLICATION
+# ============================================================
 
 app = FastAPI(
     title="AI Cybersecurity MCP Server",
-    description="AI vulnerability analysis API",
-    version="1.0.0"
+    version="1.0.0",
+    description="AI-powered cybersecurity vulnerability analysis server",
 )
 
 
-# ======================================================
-# MCP Application
-# ======================================================
+# ============================================================
+# STORAGE
+# ============================================================
 
-mcp = FastMCP(
-    "AI Cybersecurity MCP Server"
-)
-
-
-# ======================================================
-# Register MCP Resources
-# ======================================================
-
-register_resources(mcp)
+# Stores scan results while the server is running.
+SCANS: dict[str, dict[str, Any]] = {}
 
 
-# ======================================================
-# Request Model
-# ======================================================
+# ============================================================
+# REQUEST MODELS
+# ============================================================
 
-class VulnerabilityRequest(BaseModel):
+class AnalyzeRequest(BaseModel):
     file: str
     line: int
-
     vulnerability: str
-
     severity: str
+    confidence: float
+    code: str
 
-    confidence: float = Field(
-        ge=0,
-        le=100
+
+class ScanRequest(BaseModel):
+    project_path: str = "."
+
+
+class RiskScoreRequest(BaseModel):
+    file: str
+    line: int
+    vulnerability: str
+    severity: str
+    confidence: float
+    code: str
+
+
+class ReportRequest(BaseModel):
+    scan_id: str
+    format: str = "json"
+
+
+# ============================================================
+# HELPER FUNCTIONS
+# ============================================================
+
+def calculate_finding_risk(
+    severity: str,
+    confidence: float,
+) -> tuple[float, str]:
+    """
+    Calculate risk score and risk level.
+
+    Supports the risk_score module already present
+    in the project.
+    """
+
+    try:
+        score = calculate_risk(
+            severity=severity,
+            confidence=confidence,
+        )
+    except TypeError:
+        score = calculate_risk(
+            severity,
+            confidence,
+        )
+
+    try:
+        level = classify_risk(score)
+    except Exception:
+        level = severity
+
+    return round(float(score), 2), level
+
+
+def get_mapping(
+    vulnerability: str,
+) -> tuple[str | None, str | None]:
+    """
+    Get OWASP and CWE mapping.
+    """
+
+    try:
+        mapping = get_vulnerability_mapping(
+            vulnerability
+        )
+
+        if isinstance(mapping, dict):
+            return (
+                mapping.get("owasp"),
+                mapping.get("cwe"),
+            )
+
+    except Exception:
+        pass
+
+    return None, None
+
+
+def enrich_finding(
+    finding: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Add risk and vulnerability mapping information
+    to a scanner finding.
+    """
+
+    result = dict(finding)
+
+    severity = str(
+        result.get("severity", "Medium")
     )
 
-    code: str
+    try:
+        confidence = float(
+            result.get("confidence", 0)
+        )
+    except (TypeError, ValueError):
+        confidence = 0.0
+
+    vulnerability = str(
+        result.get("vulnerability", "")
+    )
+
+    risk_score, risk_level = calculate_finding_risk(
+        severity,
+        confidence,
+    )
+
+    owasp, cwe = get_mapping(
+        vulnerability
+    )
+
+    result["risk_score"] = risk_score
+    result["risk_level"] = risk_level
+
+    if owasp is not None:
+        result["owasp"] = owasp
+
+    if cwe is not None:
+        result["cwe"] = cwe
+
+    return result
 
 
-# ======================================================
-# AI Analysis Response
-# ======================================================
-
-class AIAnalysisResponse(BaseModel):
-    severity: str
-    explanation: str
-    recommendation: str
-
-
-# ======================================================
-# Final Vulnerability Response
-# ======================================================
-
-class VulnerabilityResponse(BaseModel):
-
-    file: str
-
-    line: int
-
-    code: str
-
-    vulnerability: str
-
-    severity: str
-
-    confidence: float
-
-    risk_score: float
-
-    risk_level: str
-
-    owasp: str | None = None
-
-    cwe: str | None = None
-
-    ai_status: str
-
-    ai_analysis: AIAnalysisResponse | None = None
-
-    recommendation: str
-
-
-# ======================================================
-# Root Endpoint
-# ======================================================
-
-@app.get("/")
-def root():
-
-    return {
-        "message":
-        "AI Cybersecurity MCP Server is running"
-    }
-
-
-# ======================================================
-# Health Endpoint
-# ======================================================
+# ============================================================
+# HEALTH ENDPOINT
+# ============================================================
 
 @app.get("/health")
-def health():
+def health() -> dict[str, str]:
+    """
+    Health check.
+    """
 
     return {
         "status": "ok"
     }
 
 
-# ======================================================
-# Analyze Vulnerability
-# ======================================================
+# ============================================================
+# ROOT ENDPOINT
+# ============================================================
 
-@app.post(
-    "/analyze",
-    response_model=VulnerabilityResponse
-)
+@app.get("/")
+def root() -> dict[str, str]:
+    """
+    Root endpoint.
+    """
+
+    return {
+        "status": "success",
+        "message": "AI Cybersecurity MCP Server is running",
+    }
+
+
+# ============================================================
+# ANALYZE VULNERABILITY
+# ============================================================
+
+@app.post("/analyze")
 def analyze(
-    request: VulnerabilityRequest
-):
+    request: AnalyzeRequest,
+) -> dict[str, Any]:
+    """
+    Analyze one vulnerability using the AI layer.
+    """
 
-    # --------------------------------------------------
-    # Convert API request to project input model
-    # --------------------------------------------------
+    finding = request.model_dump()
 
+    # Calculate risk
+    risk_score, risk_level = calculate_finding_risk(
+        request.severity,
+        request.confidence,
+    )
+
+    finding["risk_score"] = risk_score
+    finding["risk_level"] = risk_level
+
+    # OWASP / CWE mapping
+    owasp, cwe = get_mapping(
+        request.vulnerability
+    )
+
+    if owasp is not None:
+        finding["owasp"] = owasp
+
+    if cwe is not None:
+        finding["cwe"] = cwe
+
+    # AI analysis
     try:
-
-        finding = VulnerabilityInput(
-            file=request.file,
-            line=request.line,
-            vulnerability=request.vulnerability,
-            severity=request.severity,
-            confidence=request.confidence,
-            code=request.code
-        )
-
-    except Exception as exc:
-
-        raise HTTPException(
-            status_code=400,
-            detail=str(exc)
-        ) from exc
-
-
-    # --------------------------------------------------
-    # Run complete vulnerability analysis
-    # --------------------------------------------------
-
-    try:
-
-        analysis = analyze_vulnerability(
+        ai_result = analyze_vulnerability(
             finding
         )
 
-    except RuntimeError as exc:
+    except TypeError:
+        try:
+            ai_result = analyze_vulnerability(
+                request.file,
+                request.line,
+                request.code,
+                request.vulnerability,
+                request.severity,
+                request.confidence,
+            )
 
-        raise HTTPException(
-            status_code=503,
-            detail="AI analysis unavailable"
-        ) from exc
-
-    except ValueError as exc:
-
-        raise HTTPException(
-            status_code=400,
-            detail=str(exc)
-        ) from exc
+        except Exception as exc:
+            ai_result = {
+                "severity": request.severity,
+                "explanation": (
+                    "AI analysis failed."
+                ),
+                "recommendation": (
+                    "Review the vulnerability manually."
+                ),
+                "error": str(exc),
+            }
 
     except Exception as exc:
+        ai_result = {
+            "severity": request.severity,
+            "explanation": (
+                "AI analysis failed."
+            ),
+            "recommendation": (
+                "Review the vulnerability manually."
+            ),
+            "error": str(exc),
+        }
 
+    finding["ai_status"] = (
+        "success"
+        if isinstance(ai_result, dict)
+        and "error" not in ai_result
+        else "failed"
+    )
+
+    finding["ai_analysis"] = ai_result
+
+    if isinstance(ai_result, dict):
+        recommendation = ai_result.get(
+            "recommendation"
+        )
+
+        if recommendation:
+            finding["recommendation"] = (
+                recommendation
+            )
+
+    return finding
+
+
+# ============================================================
+# SCAN PROJECT
+# ============================================================
+
+@app.post("/scan")
+def scan(
+    request: ScanRequest,
+) -> dict[str, Any]:
+    """
+    Scan a project using the real scanner package.
+    """
+
+    scan_id = (
+        "scan-"
+        + uuid.uuid4().hex[:8]
+    )
+
+    project_path = request.project_path
+
+    try:
+        findings = scan_project(
+            project_path
+        )
+
+    except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail="Security analysis failed"
-        ) from exc
+            detail={
+                "status": "error",
+                "message": "Project scan failed",
+                "error": str(exc),
+            },
+        )
 
+    # Make sure findings is a list
+    if findings is None:
+        findings = []
 
-    # --------------------------------------------------
-    # Return analysis
-    # --------------------------------------------------
+    if not isinstance(findings, list):
+        try:
+            findings = list(findings)
+        except Exception:
+            findings = []
 
-    return analysis
-
-
-# ======================================================
-# MCP Tool
-# ======================================================
-
-@mcp.tool()
-def analyze_vulnerability_tool(
-    file: str,
-    line: int,
-    vulnerability: str,
-    severity: str,
-    confidence: float,
-    code: str
-) -> dict:
-    """
-    Analyze a single security vulnerability.
-
-    Returns:
-    - vulnerability type
-    - severity
-    - confidence
-    - risk score
-    - risk level
-    - OWASP category
-    - CWE identifier
-    - AI explanation
-    - remediation recommendation
-    """
-
-    finding = VulnerabilityInput(
-        file=file,
-        line=line,
-        vulnerability=vulnerability,
-        severity=severity,
-        confidence=confidence,
-        code=code
-    )
-
-    return analyze_vulnerability(
-        finding
-    )
-
-
-# ======================================================
-# MCP Tool - Multiple Findings
-# ======================================================
-
-@mcp.tool()
-def analyze_vulnerabilities_tool(
-    findings: list[dict]
-) -> list[dict]:
-    """
-    Analyze multiple security vulnerabilities.
-
-    Each finding must contain:
-
-    file
-    line
-    vulnerability
-    severity
-    confidence
-    code
-    """
-
-    results = []
+    # Enrich scanner findings
+    enriched_findings = []
 
     for finding in findings:
 
-        vulnerability_input = (
-            VulnerabilityInput(
-                file=finding["file"],
-                line=finding["line"],
-                vulnerability=finding[
-                    "vulnerability"
-                ],
-                severity=finding["severity"],
-                confidence=finding[
-                    "confidence"
-                ],
-                code=finding["code"]
+        if isinstance(finding, dict):
+
+            try:
+                enriched = enrich_finding(
+                    finding
+                )
+            except Exception:
+                enriched = dict(finding)
+
+            enriched_findings.append(
+                enriched
             )
+
+    # Store scan
+    scan_result = {
+        "status": "success",
+        "scan_id": scan_id,
+        "project_path": project_path,
+        "findings": enriched_findings,
+    }
+
+    SCANS[scan_id] = scan_result
+
+    return scan_result
+
+
+# ============================================================
+# GET SCAN RESULTS
+# ============================================================
+
+@app.get("/scan/{scan_id}")
+def get_scan_results(
+    scan_id: str,
+) -> dict[str, Any]:
+    """
+    Retrieve previously generated scan results.
+    """
+
+    if scan_id not in SCANS:
+        raise HTTPException(
+            status_code=404,
+            detail="Scan ID not found",
         )
 
-        result = analyze_vulnerability(
-            vulnerability_input
+    return SCANS[scan_id]
+
+
+# ============================================================
+# RISK SCORE
+# ============================================================
+
+@app.post("/risk-score")
+def risk_score(
+    request: RiskScoreRequest,
+) -> dict[str, Any]:
+    """
+    Calculate risk score for a vulnerability.
+    """
+
+    score, level = calculate_finding_risk(
+        request.severity,
+        request.confidence,
+    )
+
+    return {
+        "status": "success",
+        "file": request.file,
+        "line": request.line,
+        "vulnerability": request.vulnerability,
+        "risk_score": score,
+        "risk_level": level,
+    }
+
+
+# ============================================================
+# GENERATE REPORT
+# ============================================================
+
+@app.post("/report")
+def generate_report(
+    request: ReportRequest,
+) -> dict[str, Any]:
+    """
+    Generate a JSON or Markdown report.
+    """
+
+    if request.scan_id not in SCANS:
+        raise HTTPException(
+            status_code=404,
+            detail="Scan ID not found",
         )
 
-        results.append(result)
+    scan_data = SCANS[
+        request.scan_id
+    ]
 
-    return results
+    findings = scan_data.get(
+        "findings",
+        [],
+    )
 
+    output_format = (
+        request.format.lower()
+    )
 
-# ======================================================
-# MCP Server Entry Point
-# ======================================================
+    # --------------------------------------------------------
+    # JSON REPORT
+    # --------------------------------------------------------
 
-if __name__ == "__main__":
+    if output_format == "json":
 
-    mcp.run()
+        report = {
+            "scan_id": request.scan_id,
+            "total_findings": len(findings),
+            "findings": findings,
+        }
+
+        return {
+            "status": "success",
+            "report": report,
+            "format": "json",
+        }
+
+    # --------------------------------------------------------
+    # MARKDOWN REPORT
+    # --------------------------------------------------------
+
+    if output_format == "markdown":
+
+        lines = [
+            "# AI Cybersecurity Scan Report",
+            "",
+            f"**Scan ID:** {request.scan_id}",
+            "",
+            f"**Total Findings:** {len(findings)}",
+            "",
+        ]
+
+        for index, finding in enumerate(
+            findings,
+            start=1,
+        ):
+
+            lines.extend(
+                [
+                    f"## Finding {index}",
+                    "",
+                    f"- **File:** "
+                    f"{finding.get('file', 'N/A')}",
+                    f"- **Line:** "
+                    f"{finding.get('line', 'N/A')}",
+                    f"- **Vulnerability:** "
+                    f"{finding.get('vulnerability', 'N/A')}",
+                    f"- **Severity:** "
+                    f"{finding.get('severity', 'N/A')}",
+                    f"- **Confidence:** "
+                    f"{finding.get('confidence', 'N/A')}",
+                    f"- **Risk Score:** "
+                    f"{finding.get('risk_score', 'N/A')}",
+                    f"- **Risk Level:** "
+                    f"{finding.get('risk_level', 'N/A')}",
+                    f"- **OWASP:** "
+                    f"{finding.get('owasp', 'N/A')}",
+                    f"- **CWE:** "
+                    f"{finding.get('cwe', 'N/A')}",
+                    "",
+                    "**Code:**",
+                    "",
+                    "```",
+                    str(
+                        finding.get(
+                            "code",
+                            "",
+                        )
+                    ),
+                    "```",
+                    "",
+                ]
+            )
+
+        return {
+            "status": "success",
+            "report": "\n".join(lines),
+            "format": "markdown",
+        }
+
+    # --------------------------------------------------------
+    # INVALID FORMAT
+    # --------------------------------------------------------
+
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            "Unsupported report format. "
+            "Use 'json' or 'markdown'."
+        ),
+    )

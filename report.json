@@ -1,0 +1,1170 @@
+﻿{
+    "status":  "success",
+    "report":  {
+                   "scan_id":  "scan-83849961",
+                   "project_path":  ".",
+                   "total_findings":  61,
+                   "findings":  [
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\scanner_test.py",
+                                        "line":  5,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "cursor.execute(query)",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\scanner_test.py",
+                                        "line":  4,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "query = \"SELECT * FROM users WHERE name = \u0027\" + user_input + \"\u0027\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\scanner_test.py",
+                                        "line":  7,
+                                        "vulnerability":  "Hardcoded Credentials/Secrets",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "password = \"secret123\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A07:2021 Identification and Authentication Failures",
+                                        "cwe":  "CWE-798",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_ai_analysis.py",
+                                        "line":  11,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_ai_failure.py",
+                                        "line":  18,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_ai_output.py",
+                                        "line":  11,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_ai_pipeline.py",
+                                        "line":  10,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_analysis.py",
+                                        "line":  10,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_batch.py",
+                                        "line":  11,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_batch.py",
+                                        "line":  19,
+                                        "vulnerability":  "XSS",
+                                        "severity":  "Medium",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"element.innerHTML=data\"",
+                                        "risk_score":  37.5,
+                                        "risk_level":  "Low",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-79",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "Medium",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_e2e.py",
+                                        "line":  38,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_e2e.py",
+                                        "line":  59,
+                                        "vulnerability":  "XSS",
+                                        "severity":  "Medium",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"element.innerHTML = user_input\"",
+                                        "risk_score":  37.5,
+                                        "risk_level":  "Low",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-79",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "Medium",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_e2e.py",
+                                        "line":  80,
+                                        "vulnerability":  "Hardcoded Credentials/Secrets",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"password = \u0027admin123\u0027\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A07:2021 Identification and Authentication Failures",
+                                        "cwe":  "CWE-798",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_e2e_ai.py",
+                                        "line":  11,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_e2e_ai.py",
+                                        "line":  19,
+                                        "vulnerability":  "XSS",
+                                        "severity":  "Medium",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"element.innerHTML=data\"",
+                                        "risk_score":  37.5,
+                                        "risk_level":  "Low",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-79",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "Medium",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_e2e_ai.py",
+                                        "line":  27,
+                                        "vulnerability":  "Hardcoded Credentials/Secrets",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"PASSWORD = \u0027admin123\u0027\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A07:2021 Identification and Authentication Failures",
+                                        "cwe":  "CWE-798",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_e2e_ai.py",
+                                        "line":  35,
+                                        "vulnerability":  "Weak Cryptography",
+                                        "severity":  "Medium",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"hashlib.md5(password.encode())\"",
+                                        "risk_score":  37.5,
+                                        "risk_level":  "Low",
+                                        "owasp":  "A02:2021 Cryptographic Failures",
+                                        "cwe":  "CWE-327",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "Medium",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_e2e_ai.py",
+                                        "line":  35,
+                                        "vulnerability":  "Weak Cryptography",
+                                        "severity":  "Medium",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"hashlib.md5(password.encode())\"",
+                                        "risk_score":  37.5,
+                                        "risk_level":  "Low",
+                                        "owasp":  "A02:2021 Cryptographic Failures",
+                                        "cwe":  "CWE-327",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "Medium",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_explanation.py",
+                                        "line":  7,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"query = \\\"SELECT * FROM users WHERE username=\u0027\\\" + username + \\\"\u0027\\\"\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_input.py",
+                                        "line":  10,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_input_model.py",
+                                        "line":  10,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_input_validation.py",
+                                        "line":  15,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  95.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  71.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_input_validation.py",
+                                        "line":  36,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  95.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  71.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_input_validation.py",
+                                        "line":  55,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  95.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  71.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_input_validation.py",
+                                        "line":  73,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  95.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  71.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_input_validation.py",
+                                        "line":  87,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  95.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  71.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_mcp_tools.py",
+                                        "line":  61,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "code=\"cursor.execute(query)\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_multiple_vulnerabilities.py",
+                                        "line":  17,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_multiple_vulnerabilities.py",
+                                        "line":  26,
+                                        "vulnerability":  "XSS",
+                                        "severity":  "Medium",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"element.innerHTML = userInput\"",
+                                        "risk_score":  37.5,
+                                        "risk_level":  "Low",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-79",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "Medium",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_multiple_vulnerabilities.py",
+                                        "line":  35,
+                                        "vulnerability":  "Hardcoded Credentials/Secrets",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"password = \u0027admin123\u0027\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A07:2021 Identification and Authentication Failures",
+                                        "cwe":  "CWE-798",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_pipeline.py",
+                                        "line":  10,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_prompt.py",
+                                        "line":  10,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "query = \"SELECT * FROM users WHERE username=\u0027\" + username + \"\u0027\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_real_scanner_ai.py",
+                                        "line":  21,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  80.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  60.0,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_real_scanner_ai.py",
+                                        "line":  105,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  80.0,
+                                        "code":  "assert result[\"code\"] == \"cursor.execute(query)\"",
+                                        "risk_score":  60.0,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_recommendation.py",
+                                        "line":  7,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"query = \\\"SELECT * FROM users WHERE username=\u0027\\\" + username + \\\"\u0027\\\"\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_structured_ai.py",
+                                        "line":  11,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_structured_prompt.py",
+                                        "line":  10,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_tool.py",
+                                        "line":  10,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_tool_integration.py",
+                                        "line":  11,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_tool_integration.py",
+                                        "line":  19,
+                                        "vulnerability":  "XSS",
+                                        "severity":  "Medium",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"element.innerHTML=data\"",
+                                        "risk_score":  37.5,
+                                        "risk_level":  "Low",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-79",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "Medium",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_vulnerable.py",
+                                        "line":  10,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "cursor.execute(query)",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_vulnerable.py",
+                                        "line":  8,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "query = \"SELECT * FROM users WHERE username = \u0027\" + username + \"\u0027\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\ai\\llm.py",
+                                        "line":  116,
+                                        "vulnerability":  "SSRF",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "response = requests.get(",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A10:2021 Server-Side Request Forgery",
+                                        "cwe":  "CWE-918",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\ai\\llm.py",
+                                        "line":  54,
+                                        "vulnerability":  "SSRF",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "response = requests.post(",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A10:2021 Server-Side Request Forgery",
+                                        "cwe":  "CWE-918",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\ai\\recommendation.py",
+                                        "line":  47,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"query = \u0027SELECT * FROM users WHERE id=\u0027 + user_id\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\ai\\test_batch.py",
+                                        "line":  28,
+                                        "vulnerability":  "Hardcoded Credentials/Secrets",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"password = \u0027secret\u0027\",",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A07:2021 Identification and Authentication Failures",
+                                        "cwe":  "CWE-798",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\ai\\test_prompts.py",
+                                        "line":  10,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"cursor.execute(query)\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\pipeline_test_files\\credentials_test.py",
+                                        "line":  1,
+                                        "vulnerability":  "Hardcoded Credentials/Secrets",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "ï»¿password = \"admin123\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A07:2021 Identification and Authentication Failures",
+                                        "cwe":  "CWE-798",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\pipeline_test_files\\sql_test.py",
+                                        "line":  2,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "query = \"SELECT * FROM users WHERE username=\u0027\" + username + \"\u0027\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\pipeline_test_files\\xss_test.js",
+                                        "line":  2,
+                                        "vulnerability":  "XSS",
+                                        "severity":  "Medium",
+                                        "confidence":  75.0,
+                                        "code":  "element.innerHTML = userInput;",
+                                        "risk_score":  37.5,
+                                        "risk_level":  "Low",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-79",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "Medium",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_project\\login.py",
+                                        "line":  5,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "cursor.execute(\"SELECT * FROM users WHERE name = \" + user_input)",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_project\\login.py",
+                                        "line":  5,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "cursor.execute(\"SELECT * FROM users WHERE name = \" + user_input)",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_project\\login.py",
+                                        "line":  7,
+                                        "vulnerability":  "Hardcoded Credentials/Secrets",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "password = \"secret123\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A07:2021 Identification and Authentication Failures",
+                                        "cwe":  "CWE-798",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_explanation.py",
+                                        "line":  7,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"query = \\\"SELECT * FROM users WHERE username=\u0027\\\" + username + \\\"\u0027\\\"\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_prompt.py",
+                                        "line":  10,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "query = \"SELECT * FROM users WHERE username=\u0027\" + username + \"\u0027\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\test_recommendation.py",
+                                        "line":  7,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"query = \\\"SELECT * FROM users WHERE username=\u0027\\\" + username + \\\"\u0027\\\"\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\ai\\llm.py",
+                                        "line":  58,
+                                        "vulnerability":  "SSRF",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "response = requests.get(",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A10:2021 Server-Side Request Forgery",
+                                        "cwe":  "CWE-918",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\ai\\llm.py",
+                                        "line":  22,
+                                        "vulnerability":  "SSRF",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "response = requests.post(",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A10:2021 Server-Side Request Forgery",
+                                        "cwe":  "CWE-918",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\ai\\recommendation.py",
+                                        "line":  47,
+                                        "vulnerability":  "SQL Injection",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "\"code\": \"query = \u0027SELECT * FROM users WHERE id=\u0027 + user_id\"",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A03:2021 Injection",
+                                        "cwe":  "CWE-89",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\backend\\ai\\llm.py",
+                                        "line":  20,
+                                        "vulnerability":  "SSRF",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "response = requests.post(self.url, json=payload)",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A10:2021 Server-Side Request Forgery",
+                                        "cwe":  "CWE-918",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    },
+                                    {
+                                        "file":  "C:\\Users\\hemavathi\\OneDrive\\Desktop\\AI-Cybersecurity-MCP-Server\\backend\\ai\\llm.py",
+                                        "line":  20,
+                                        "vulnerability":  "SSRF",
+                                        "severity":  "High",
+                                        "confidence":  75.0,
+                                        "code":  "response = requests.post(self.url, json=payload)",
+                                        "risk_score":  56.25,
+                                        "risk_level":  "Medium",
+                                        "owasp":  "A10:2021 Server-Side Request Forgery",
+                                        "cwe":  "CWE-918",
+                                        "ai_status":  "failed",
+                                        "ai_analysis":  {
+                                                            "severity":  "High",
+                                                            "explanation":  "AI analysis failed.",
+                                                            "recommendation":  "Review the vulnerability manually.",
+                                                            "error":  "\u0027dict\u0027 object has no attribute \u0027vulnerability\u0027"
+                                                        }
+                                    }
+                                ]
+               },
+    "format":  "json"
+}
