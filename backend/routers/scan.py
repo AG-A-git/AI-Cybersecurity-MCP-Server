@@ -1,6 +1,7 @@
+from response_utils import success_response
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
@@ -216,8 +217,7 @@ def create_scan(
         # -----------------------------------------------------
         scan.status = "failed"
         scan.completed_at = datetime.utcnow()
-        scan.error_message = str(e)
-
+        scan.error_message = "Scanner execution failed"
         db.commit()
 
         raise HTTPException(
@@ -228,16 +228,21 @@ def create_scan(
     # ---------------------------------------------------------
     # 13. Return scan result
     # ---------------------------------------------------------
-    return {
+    return success_response(
+    "Scan completed successfully",
+    {
         "scan_id": scan.id,
         "project_id": scan.project_id,
         "status": scan.status,
         "results": results
     }
+)
 
 
 @router.get("/")
 def get_scans(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ):
@@ -256,9 +261,10 @@ def get_scans(
         db.query(Scan)
         .join(Project, Scan.project_id == Project.id)
         .filter(Project.owner_id == current_user.id)
+        .offset(skip)
+        .limit(limit)
         .all()
     )
-
     result = []
 
     for scan in scans:
@@ -280,7 +286,10 @@ def get_scans(
             "risk_score": risk_score
         })
 
-    return result
+    return success_response(
+        "Scan history retrieved successfully",
+        result
+        )
 
 
 @router.get("/{scan_id}")
@@ -337,7 +346,9 @@ def get_scan(
     # ---------------------------------------------------------
     # 5. Return scan details
     # ---------------------------------------------------------
-    return {
+    return success_response(
+    "Scan details retrieved successfully",
+    {
         "id": scan.id,
         "project_id": scan.project_id,
         "project_name": project.project_name,
@@ -369,3 +380,4 @@ def get_scan(
             for vulnerability in scan.vulnerabilities
         ]
     }
+)

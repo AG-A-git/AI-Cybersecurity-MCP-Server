@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import Project, User
 from auth import get_current_user
+from response_utils import success_response
 
 
 router = APIRouter(
@@ -70,11 +71,27 @@ def create_project(
         owner_id=current_user.id
     )
 
-    db.add(project)
-    db.commit()
-    db.refresh(project)
+    try:
+        db.add(project)
+        db.commit()
+        db.refresh(project)
+    except Exception:
+        db.rollback()
 
-    return project
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create project"
+            )
+
+    return success_response(
+    "Project created successfully",
+    {
+        "id": project.id,
+        "project_name": project.project_name,
+        "description": project.description,
+        "owner_id": project.owner_id
+    }
+)
 
 
 @router.get("/")
@@ -97,7 +114,18 @@ def get_projects(
         Project.owner_id == current_user.id
     ).all()
 
-    return projects
+    return success_response(
+    "Projects retrieved successfully",
+    [
+        {
+            "id": project.id,
+            "project_name": project.project_name,
+            "description": project.description,
+            "owner_id": project.owner_id
+        }
+        for project in projects
+    ]
+)
 
 
 @router.get("/{project_id}")
@@ -136,7 +164,15 @@ def get_project(
             detail="You do not have permission to view this project"
         )
 
-    return project
+    return success_response(
+    "Project retrieved successfully",
+    {
+        "id": project.id,
+        "project_name": project.project_name,
+        "description": project.description,
+        "owner_id": project.owner_id
+    }
+)
 
 
 @router.delete("/{project_id}")
@@ -178,9 +214,19 @@ def delete_project(
     # ---------------------------------------------------------
     # 4. Delete project
     # ---------------------------------------------------------
-    db.delete(project)
-    db.commit()
+    try:
+        db.delete(project)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to delete project"
+            )
 
-    return {
-        "message": "Project deleted successfully"
+    return success_response(
+    "Project deleted successfully",
+    {
+        "project_id": project_id
     }
+)

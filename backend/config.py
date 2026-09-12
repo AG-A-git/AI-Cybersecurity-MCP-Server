@@ -42,6 +42,10 @@ LOG_FOLDER = "logs"
 # Scanner Settings
 # ==========================
 
+# ==========================
+# Scanner Settings
+# ==========================
+
 MAX_UPLOAD_SIZE = 100 * 1024 * 1024
 
 SUPPORTED_EXTENSIONS = [
