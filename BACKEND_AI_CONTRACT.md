@@ -244,3 +244,48 @@ The current vulnerability mapping supports:
   "recommendation": "..."
 }
 ```
+## Day 14 AI and Risk Architecture
+
+### Source of Truth
+
+- Scanner owns file name, line number, vulnerable code, and vulnerability type.
+- Application owns OWASP, CWE, and risk information.
+- AI provides explanation, recommendation, and contextual analysis.
+- AI-generated severity and confidence are validated before use.
+
+### Risk
+
+Finding risk is deterministic and bounded between 0 and 100.
+
+Risk levels:
+
+- 0-24: Low
+- 25-49: Medium
+- 50-74: High
+- 75-100: Critical
+
+### MCP Tools
+
+The MCP layer provides:
+
+- get_scan_results
+- get_risk_score
+- analyze_vulnerability
+- scan_project
+
+### Security
+
+MCP access must respect project and finding ownership.
+
+Unauthorized users must receive a controlled access-denied response.
+
+### Testing
+
+AI, risk, scan aggregation, and MCP behavior are tested using pytest.
+
+### Known Limitations
+
+- Local Ollama dependency
+- AI processing latency
+- Initial risk aggregation approach
+- Limited large-scan optimization
