@@ -40,9 +40,7 @@ def analyze_vulnerability(vulnerability):
     client = OllamaClient()
 
     raw_response = client.generate(prompt)
-
-    ai_result = parse_ai_response(raw_response)
-
+    
     # 5. Validate AI response
     ai_result = parse_ai_response(raw_response)
 

@@ -1,9 +1,18 @@
-from .prompts import get_prompt
+import pytest
+
 from .llm import generate_response
 
 
-prompt = get_prompt("SQL Injection")
+def test_generate_response():
+    prompt = "Explain SQL injection in one sentence."
 
-response = generate_response(prompt)
+    try:
+        response = generate_response(prompt)
 
-print(response)
+        assert response is not None
+        assert isinstance(response, str)
+        assert len(response.strip()) > 0
+
+    except RuntimeError as exc:
+        # Skip instead of failing when Ollama is unavailable
+        pytest.skip(str(exc))

@@ -17,16 +17,11 @@ class VulnerabilityInput(BaseModel):
     code: str
 
 
-# ======================================================
-# AI Analysis Response
-# ======================================================
-
 class AIAnalysisResponse(BaseModel):
     severity: str
     explanation: str
+    impact: str
     recommendation: str
-
-
 # ======================================================
 # Final Security Analysis Response
 # ======================================================
