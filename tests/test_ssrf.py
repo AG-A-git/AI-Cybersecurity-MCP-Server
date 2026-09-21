@@ -1,3 +1,4 @@
+
 from scanner.rules.ssrf import detect_ssrf
 
 
@@ -17,8 +18,7 @@ response = requests.get(url)
     assert findings[0]["file_name"] == "app.py"
     assert findings[0]["line_number"] == 6
     assert findings[0]["severity"] == "High"
-    assert findings[0]["confidence"] == 85
-
+    assert findings[0]["confidence"] == 90
 
 def test_request_form_to_get_detected():
     code = '''
@@ -142,3 +142,16 @@ requests.post("https://example.com/api")
     findings = detect_ssrf(code, "app.py")
 
     assert len(findings) == 0
+
+
+def test_unrelated_variable_ignored():
+    code = '''
+import requests
+
+name = "hello"
+requests.get(name)
+'''
+
+    findings = detect_ssrf(code, "app.py")
+
+    assert findings == []

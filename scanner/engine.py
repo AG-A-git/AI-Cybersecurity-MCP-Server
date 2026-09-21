@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from scanner.utils import run_all_rules, remove_duplicates
+from scanner.scan import scan_zip
 
 
 # Source-code extensions supported by the scanner
@@ -68,14 +69,19 @@ def find_source_files(path):
 
 def scan_project(project_path):
     """
-    Scan a file or project directory.
+    Scan a source file, project directory, or ZIP project.
 
     Args:
-        project_path: Path to a source file or project directory.
+        project_path: Path to a source file, project directory,
+                      or ZIP project.
 
     Returns:
         list: JSON-compatible vulnerability findings.
     """
+
+    # Support ZIP projects for the MCP backend
+    if str(project_path).lower().endswith(".zip"):
+        return scan_zip(project_path)
 
     source_files = find_source_files(project_path)
 

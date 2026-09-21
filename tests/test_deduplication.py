@@ -6,6 +6,7 @@ def make_finding(
     file_name="test.py",
     line_number=25,
     confidence=90,
+    code="query = user_input",
 ):
     return {
         "vulnerability_type": vulnerability_type,
@@ -13,7 +14,7 @@ def make_finding(
         "line_number": line_number,
         "severity": "High",
         "confidence": confidence,
-        "code": "query = user_input",
+        "code": code,
     }
 
 
@@ -77,3 +78,18 @@ def test_highest_confidence_is_kept():
 
     assert len(result) == 1
     assert result[0]["confidence"] == 90
+
+
+def test_different_code_on_same_line_is_preserved():
+    finding_one = make_finding(
+        code="query = user_input"
+    )
+    finding_two = make_finding(
+        code="query = other_input"
+    )
+
+    result = deduplicate_findings(
+        [finding_one, finding_two]
+    )
+
+    assert len(result) == 2

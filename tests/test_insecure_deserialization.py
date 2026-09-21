@@ -95,3 +95,34 @@ obj = json.loads(data)
     findings = scan_insecure_deserialization(file_path)
 
     assert findings == []
+def test_yaml_safe_load_is_safe(tmp_path):
+    source = """
+import yaml
+from flask import request
+
+data = request.data
+obj = yaml.safe_load(data)
+"""
+
+    file_path = write_test_file(tmp_path, source)
+
+    findings = scan_insecure_deserialization(file_path)
+
+    assert findings == []
+def test_direct_request_data_to_pickle_detected(tmp_path):
+    source = """
+import pickle
+from flask import request
+
+obj = pickle.loads(request.data)
+"""
+
+    file_path = write_test_file(tmp_path, source)
+
+    findings = scan_insecure_deserialization(file_path)
+
+    assert len(findings) == 1
+    assert findings[0]["vulnerability_type"] == "Insecure Deserialization"
+    assert findings[0]["severity"] == "High"
+    assert findings[0]["confidence"] == 90
+    assert findings[0]["line_number"] == 5

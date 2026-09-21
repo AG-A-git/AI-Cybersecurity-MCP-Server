@@ -1,3 +1,4 @@
+
 from scanner.rules.ldap import scan_ldap
 
 
@@ -62,6 +63,37 @@ def test_ldap_connection_is_safe(tmp_path):
 import ldap
 
 connection = ldap.initialize("ldap://localhost")
+"""
+
+    file_path = write_test_file(tmp_path, source)
+
+    findings = scan_ldap(file_path)
+
+    assert findings == []
+
+
+def test_ldap_percent_formatting_detected(tmp_path):
+    source = """
+from flask import request
+
+username = request.args.get("username")
+query = "(uid=%s)" % username
+ldap.search(query)
+"""
+
+    file_path = write_test_file(tmp_path, source)
+
+    findings = scan_ldap(file_path)
+
+    assert len(findings) == 1
+    assert findings[0]["vulnerability_type"] == "LDAP Injection"
+    assert findings[0]["severity"] == "High"
+    assert findings[0]["confidence"] == 85
+
+
+def test_ldap_search_without_tainted_query_is_safe(tmp_path):
+    source = """
+ldap.search(query)
 """
 
     file_path = write_test_file(tmp_path, source)

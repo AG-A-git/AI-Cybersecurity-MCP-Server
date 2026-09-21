@@ -118,3 +118,17 @@ settings = load_settings()
     findings = scan_security_misconfiguration(file_path)
 
     assert findings == []
+def test_app_run_with_other_arguments_debug_false_is_safe(tmp_path):
+    source = """
+from flask import Flask
+
+app = Flask(__name__)
+
+app.run(host="127.0.0.1", port=5000, debug=False)
+"""
+
+    file_path = write_test_file(tmp_path, source)
+
+    findings = scan_security_misconfiguration(file_path)
+
+    assert findings == []

@@ -11,7 +11,7 @@ from scanner.rules.insecure_deserialization import scan_insecure_deserialization
 from scanner.rules.security_misconfiguration import scan_security_misconfiguration
 from scanner.rules.authentication_access_control import scan_authentication_access_control
 from scanner.rules.ssrf import detect_ssrf
-
+from scanner.rules.sensitive import scan_sensitive_data_exposure
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,6 @@ def load_rules():
     """
     Load all implemented vulnerability detection rules.
     """
-
     return [
         scan_sql,
         scan_xss,
@@ -37,6 +36,7 @@ def load_rules():
         scan_security_misconfiguration,
         scan_authentication_access_control,
         detect_ssrf,
+        scan_sensitive_data_exposure,
     ]
 
 
@@ -47,17 +47,12 @@ def load_rules():
 def run_all_rules(file_path):
     """
     Run all vulnerability rules against a file.
-
-    If one rule fails, log the error and continue
-    with the remaining rules.
+    If one rule fails, log the error and continue with the remaining rules.
     """
-
     results = []
-
     rules = load_rules()
 
     for rule in rules:
-
         try:
             rule_results = rule(file_path)
 
@@ -83,25 +78,23 @@ def deduplicate_findings(findings):
     """
     Remove duplicate vulnerability findings.
 
-    Two findings are considered duplicates when they have
-    the same:
-
+    Two findings are considered duplicates when they have the same:
+        vulnerability_type
         file_name
         line_number
-        vulnerability_type
+        code
 
     If duplicate findings have different confidence values,
     keep the finding with the highest confidence.
     """
-
     unique = {}
 
     for finding in findings:
-
         key = (
+            finding["vulnerability_type"],
             finding["file_name"],
             finding["line_number"],
-            finding["vulnerability_type"]
+            finding["code"],
         )
 
         if key not in unique:
@@ -117,5 +110,4 @@ def remove_duplicates(results):
     """
     Backward-compatible wrapper.
     """
-
     return deduplicate_findings(results)

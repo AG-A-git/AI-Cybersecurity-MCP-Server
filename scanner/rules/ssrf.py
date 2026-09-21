@@ -1,3 +1,4 @@
+
 import ast
 from pathlib import Path
 
@@ -154,7 +155,7 @@ def detect_ssrf(source_code, file_name="unknown"):
                         file_name=file_name,
                         line_number=node.lineno,
                         severity="High",
-                        confidence=85,
+                        confidence=90,
                         code=code_line,
                         owasp="A10: Server-Side Request Forgery",
                         cwe="CWE-918"
@@ -194,7 +195,7 @@ def detect_ssrf(source_code, file_name="unknown"):
                         file_name=file_name,
                         line_number=node.lineno,
                         severity="High",
-                        confidence=85,
+                        confidence=90,
                         code=code_line,
                         owasp="A10: Server-Side Request Forgery",
                         cwe="CWE-918"

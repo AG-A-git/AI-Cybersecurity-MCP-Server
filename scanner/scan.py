@@ -1,6 +1,8 @@
 import json
 import os
 import sys
+import tempfile
+import zipfile
 
 
 sys.path.insert(
@@ -75,20 +77,11 @@ def scan_file(file_path):
     except (FileNotFoundError, OSError, UnicodeError):
         return []
 
-    # --------------------------------------------------------
-    # Run every registered vulnerability rule.
-    # --------------------------------------------------------
-
     findings = run_all_rules(file_path)
-
-    # --------------------------------------------------------
-    # Validate every finding centrally.
-    # --------------------------------------------------------
 
     validated_findings = []
 
     for finding in findings:
-
         try:
             validate_finding(finding)
             validated_findings.append(finding)
@@ -96,17 +89,9 @@ def scan_file(file_path):
         except ValueError:
             continue
 
-    # --------------------------------------------------------
-    # Remove duplicate findings.
-    # --------------------------------------------------------
-
     validated_findings = deduplicate_findings(
         validated_findings
     )
-
-    # --------------------------------------------------------
-    # Sort for deterministic API output.
-    # --------------------------------------------------------
 
     return sort_findings(validated_findings)
 
@@ -124,8 +109,6 @@ def scan_directory(directory_path):
 
     for root, dirs, files in os.walk(directory_path):
 
-        # Do not scan virtual environments,
-        # Git folders, or Python cache directories.
         dirs[:] = [
             directory
             for directory in dirs
@@ -145,19 +128,56 @@ def scan_directory(directory_path):
 
                 all_results.extend(results)
 
-    # --------------------------------------------------------
-    # Deduplicate results across files.
-    # --------------------------------------------------------
-
     all_results = deduplicate_findings(
         all_results
     )
 
-    # --------------------------------------------------------
-    # Sort final results.
-    # --------------------------------------------------------
-
     return sort_findings(all_results)
+
+
+# ============================================================
+# ZIP Scanner
+# ============================================================
+
+def scan_zip(zip_path):
+    """
+    Extract a ZIP project to a temporary directory,
+    scan all supported source files, and return findings.
+
+    Temporary extraction paths are removed from
+    file_name before returning the findings.
+    """
+
+    if not zipfile.is_zipfile(zip_path):
+        return []
+
+    with tempfile.TemporaryDirectory() as temp_directory:
+
+        try:
+            with zipfile.ZipFile(zip_path, "r") as archive:
+                archive.extractall(temp_directory)
+
+        except (
+            zipfile.BadZipFile,
+            OSError,
+            RuntimeError
+        ):
+            return []
+
+        results = scan_directory(temp_directory)
+
+        for finding in results:
+
+            file_name = finding["file_name"]
+
+            if file_name.startswith(temp_directory):
+
+                finding["file_name"] = os.path.relpath(
+                    file_name,
+                    temp_directory
+                )
+
+        return sort_findings(results)
 
 
 # ============================================================
@@ -168,12 +188,17 @@ def scan_project(path):
     """
     Main scanner entry point.
 
-    Accepts either:
+    Accepts:
         - A single source-code file
         - A directory containing source-code files
+        - A ZIP project containing source-code files
     """
 
     if os.path.isfile(path):
+
+        if path.lower().endswith(".zip"):
+            return scan_zip(path)
+
         return scan_file(path)
 
     if os.path.isdir(path):
@@ -209,7 +234,7 @@ if __name__ == "__main__":
 
         print(
             "Usage: python scanner\\scan.py "
-            "<file_or_directory>"
+            "<file_or_directory_or_zip>"
         )
 
         sys.exit(1)
