@@ -1,10 +1,12 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Projects from "./pages/Projects";
 import Upload from "./pages/Upload";
+import ScanResults from "./pages/ScanResults";
+import VulnerabilityDetails from "./pages/VulnerabilityDetails";
 import History from "./pages/History";
 import Reports from "./pages/Reports";
 import Profile from "./pages/Profile";
@@ -14,9 +16,10 @@ import ProtectedRoute from "./components/ProtectedRoute";
 function App() {
     return (
         <Routes>
+
             {/* =========================
                 PUBLIC ROUTES
-            ========================== */}
+            ========================= */}
 
             <Route
                 path="/login"
@@ -31,9 +34,8 @@ function App() {
 
             {/* =========================
                 PROTECTED ROUTES
-            ========================== */}
+            ========================= */}
 
-            {/* Dashboard */}
             <Route
                 path="/dashboard"
                 element={
@@ -43,7 +45,6 @@ function App() {
                 }
             />
 
-            {/* Projects */}
             <Route
                 path="/projects"
                 element={
@@ -53,7 +54,6 @@ function App() {
                 }
             />
 
-            {/* Upload & Security Scan */}
             <Route
                 path="/upload"
                 element={
@@ -63,7 +63,25 @@ function App() {
                 }
             />
 
-            {/* History */}
+            <Route
+                path="/scan-results"
+                element={
+                    <ProtectedRoute>
+                        <ScanResults />
+                    </ProtectedRoute>
+                }
+            />
+
+            {/* Vulnerability Details */}
+            <Route
+                path="/vulnerability-details"
+                element={
+                    <ProtectedRoute>
+                        <VulnerabilityDetails />
+                    </ProtectedRoute>
+                }
+            />
+
             <Route
                 path="/history"
                 element={
@@ -73,7 +91,6 @@ function App() {
                 }
             />
 
-            {/* Reports */}
             <Route
                 path="/reports"
                 element={
@@ -83,7 +100,6 @@ function App() {
                 }
             />
 
-            {/* Profile */}
             <Route
                 path="/profile"
                 element={
@@ -95,18 +111,14 @@ function App() {
 
 
             {/* =========================
-                UNKNOWN ROUTES
-            ========================== */}
+                DEFAULT ROUTE
+            ========================= */}
 
             <Route
                 path="*"
-                element={
-                    <Navigate
-                        to="/login"
-                        replace
-                    />
-                }
+                element={<Login />}
             />
+
         </Routes>
     );
 }

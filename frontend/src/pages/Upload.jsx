@@ -1,532 +1,450 @@
-import React, { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 
 function Upload() {
+    const navigate = useNavigate();
+
+    const [projects, setProjects] = useState([]);
+    const [projectId, setProjectId] = useState("");
     const [file, setFile] = useState(null);
-    const [loading, setLoading] = useState(false);
+
+    const [loadingProjects, setLoadingProjects] = useState(true);
+    const [loadingUpload, setLoadingUpload] = useState(false);
+
     const [error, setError] = useState("");
-    const [result, setResult] = useState(null);
+    const [success, setSuccess] = useState("");
 
-    // Scan status
-    const [scanStatus, setScanStatus] = useState("idle");
+    // =====================================================
+    // GET PROJECTS
+    // =====================================================
 
-    const handleFileChange = (event) => {
-        const selectedFile = event.target.files?.[0] || null;
+    const fetchProjects = async () => {
+        try {
+            setLoadingProjects(true);
+            setError("");
 
-        setFile(selectedFile);
-        setError("");
-        setResult(null);
-        setScanStatus("idle");
+            const response = await api.get("/projects/");
+
+            console.log("Projects:", response.data);
+
+            setProjects(response.data);
+
+            // -------------------------------------------------
+            // GET SELECTED PROJECT FROM LOCAL STORAGE
+            // -------------------------------------------------
+
+            const selectedProjectId =
+                localStorage.getItem("selected_project_id");
+
+            if (selectedProjectId) {
+                const selectedProjectExists =
+                    response.data.some(
+                        (project) =>
+                            String(project.id) ===
+                            String(selectedProjectId)
+                    );
+
+                if (selectedProjectExists) {
+                    setProjectId(selectedProjectId);
+                }
+            }
+        } catch (error) {
+            console.error(
+                "Failed to load projects:",
+                error
+            );
+
+            setError(
+                error.userMessage ||
+                error.response?.data?.detail ||
+                "Failed to load projects."
+            );
+        } finally {
+            setLoadingProjects(false);
+        }
     };
 
-    const getErrorMessage = (error) => {
-        if (!error.response) {
-            return "Could not connect to the backend server.";
-        }
+    // =====================================================
+    // LOAD PROJECTS WHEN PAGE OPENS
+    // =====================================================
 
-        const status = error.response.status;
-        const data = error.response.data;
+    useEffect(() => {
+        fetchProjects();
+    }, []);
 
-        if (status === 401) {
-            return "Login required. Please log in again.";
-        }
+    // =====================================================
+    // PROJECT CHANGE
+    // =====================================================
 
-        if (status === 403) {
-            return "You are not authorized to perform this action.";
-        }
+    const handleProjectChange = (e) => {
+        const selectedId = e.target.value;
 
-        if (status === 404) {
-            return "Resource not found.";
-        }
+        setProjectId(selectedId);
 
-        if (status === 422) {
-            if (Array.isArray(data?.detail)) {
-                return data.detail
-                    .map((item) => {
-                        if (typeof item === "string") {
-                            return item;
-                        }
-
-                        if (item?.msg) {
-                            const location = Array.isArray(item.loc)
-                                ? item.loc.join(" → ")
-                                : "";
-
-                            return location
-                                ? `${location}: ${item.msg}`
-                                : item.msg;
-                        }
-
-                        return JSON.stringify(item);
-                    })
-                    .join("\n");
-            }
-
-            if (typeof data?.detail === "string") {
-                return data.detail;
-            }
-
-            return "Invalid request. Please check the selected file.";
-        }
-
-        if (status === 500) {
-            return (
-                data?.detail ||
-                "Server error. Please try again later."
+        // Keep selected project available to other pages
+        if (selectedId) {
+            localStorage.setItem(
+                "selected_project_id",
+                selectedId
+            );
+        } else {
+            localStorage.removeItem(
+                "selected_project_id"
             );
         }
 
-        if (typeof data?.detail === "string") {
-            return data.detail;
-        }
-
-        return `Server error: ${status}`;
+        setError("");
+        setSuccess("");
     };
 
-    const handleUpload = async (event) => {
-        event.preventDefault();
+    // =====================================================
+    // FILE CHANGE
+    // =====================================================
 
-        if (!file) {
-            setError("Please select a file first.");
-            setScanStatus("failed");
+    const handleFileChange = (e) => {
+        const selectedFile = e.target.files[0];
+
+        setFile(selectedFile || null);
+
+        setError("");
+        setSuccess("");
+    };
+
+    // =====================================================
+    // UPLOAD + SCAN
+    // =====================================================
+
+    const handleUpload = async (e) => {
+        e.preventDefault();
+
+        setError("");
+        setSuccess("");
+
+        // -------------------------------------------------
+        // PROJECT CHECK
+        // -------------------------------------------------
+
+        if (!projectId) {
+            setError("Please select a project.");
             return;
         }
 
-        setLoading(true);
-        setError("");
-        setResult(null);
+        // -------------------------------------------------
+        // FILE CHECK
+        // -------------------------------------------------
 
-        // Start scanning
-        setScanStatus("scanning");
+        if (!file) {
+            setError("Please select a file.");
+            return;
+        }
 
-        console.log("Starting security scan...");
-        console.log("File:", file.name);
+        // -------------------------------------------------
+        // FILE SIZE CHECK
+        // -------------------------------------------------
+
+        const maxSize = 5 * 1024 * 1024;
+
+        if (file.size > maxSize) {
+            setError(
+                "File is too large. Maximum size is 5 MB."
+            );
+            return;
+        }
+
+        setLoadingUpload(true);
 
         try {
+            // -------------------------------------------------
+            // STORE SELECTED PROJECT
+            // -------------------------------------------------
+
+            localStorage.setItem(
+                "selected_project_id",
+                String(projectId)
+            );
+
+            // -------------------------------------------------
+            // CREATE FORM DATA
+            // -------------------------------------------------
+
             const formData = new FormData();
 
-            formData.append("file", file);
+            formData.append(
+                "project_id",
+                String(projectId)
+            );
 
-            console.log("Sending file to /upload");
+            formData.append(
+                "file",
+                file
+            );
+
+            // -------------------------------------------------
+            // DEBUG
+            // -------------------------------------------------
+
+            console.log(
+                "Sending project_id:",
+                projectId
+            );
+
+            console.log(
+                "Sending file:",
+                file.name
+            );
+
+            // -------------------------------------------------
+            // API REQUEST
+            // -------------------------------------------------
 
             const response = await api.post(
                 "/upload",
                 formData
             );
 
-            console.log("SCAN RESPONSE:", response.data);
+            console.log(
+                "Upload response:",
+                response.data
+            );
 
-            // Save actual backend result
-            setResult(response.data);
+            // -------------------------------------------------
+            // SUCCESS
+            // -------------------------------------------------
 
-            // Scan completed successfully
-            setScanStatus("completed");
+            setSuccess(
+                "Security scan completed!"
+            );
 
+            // -------------------------------------------------
+            // GO TO SCAN RESULTS
+            // -------------------------------------------------
+
+            navigate(
+                "/scan-results",
+                {
+                    state: {
+                        result: response.data,
+                        projectId: projectId
+                    }
+                }
+            );
         } catch (error) {
-            console.error("Scan error:", error);
+            console.error(
+                "Upload failed:",
+                error
+            );
 
-            // Scan failed
-            setScanStatus("failed");
-
-            setError(getErrorMessage(error));
-
+            setError(
+                error.userMessage ||
+                error.response?.data?.detail ||
+                "Upload failed. Please try again."
+            );
         } finally {
-            setLoading(false);
+            setLoadingUpload(false);
         }
     };
 
-    const getSeverityIndicator = (severity) => {
-        if (!severity) {
-            return "⚪ Unknown";
-        }
-
-        const normalizedSeverity =
-            severity.toLowerCase();
-
-        switch (normalizedSeverity) {
-            case "critical":
-                return "🔴 Critical";
-
-            case "high":
-                return "🟠 High";
-
-            case "medium":
-                return "🟡 Medium";
-
-            case "low":
-                return "🟢 Low";
-
-            default:
-                return `⚪ ${severity}`;
-        }
-    };
-
-    const getLanguage = (filename) => {
-        if (!filename) {
-            return "Unknown";
-        }
-
-        const extension =
-            filename.split(".").pop()?.toLowerCase();
-
-        switch (extension) {
-            case "py":
-                return "Python";
-
-            case "js":
-                return "JavaScript";
-
-            case "jsx":
-                return "React / JavaScript";
-
-            case "java":
-                return "Java";
-
-            case "cpp":
-                return "C++";
-
-            case "c":
-                return "C";
-
-            case "php":
-                return "PHP";
-
-            case "ts":
-                return "TypeScript";
-
-            case "tsx":
-                return "React / TypeScript";
-
-            default:
-                return "Unknown";
-        }
-    };
+    // =====================================================
+    // UI
+    // =====================================================
 
     return (
         <div
             style={{
-                padding: "40px",
-                maxWidth: "900px",
-                margin: "0 auto",
+                padding: "30px"
             }}
         >
-            <h1>Security Scan</h1>
+            {/* =================================================
+                TITLE
+            ================================================= */}
+
+            <h1>
+                Upload Source Code
+            </h1>
 
             <p>
-                Upload a source-code file to scan for
-                security vulnerabilities.
+                Select a project and upload
+                source code for security scanning.
             </p>
 
-            {/* Upload Section */}
+            <hr />
+
+            {/* =================================================
+                FORM
+            ================================================= */}
+
             <form onSubmit={handleUpload}>
-                <div
-                    style={{
-                        marginTop: "30px",
-                        padding: "30px",
-                        border: "1px solid #ddd",
-                        borderRadius: "10px",
-                    }}
-                >
+
+                {/* =================================================
+                    PROJECT
+                ================================================= */}
+
+                <div>
+                    <label htmlFor="project">
+                        <strong>
+                            Select Project
+                        </strong>
+                    </label>
+
+                    <br />
+                    <br />
+
+                    {loadingProjects ? (
+                        <p>
+                            Loading projects...
+                        </p>
+                    ) : projects.length === 0 ? (
+                        <div>
+                            <p>
+                                No projects found.
+                                Please create a project first.
+                            </p>
+
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    navigate("/projects")
+                                }
+                            >
+                                Go to Projects
+                            </button>
+                        </div>
+                    ) : (
+                        <select
+                            id="project"
+                            value={projectId}
+                            onChange={handleProjectChange}
+                        >
+                            <option value="">
+                                -- Select Project --
+                            </option>
+
+                            {projects.map(
+                                (project) => (
+                                    <option
+                                        key={project.id}
+                                        value={project.id}
+                                    >
+                                        {project.name}
+                                    </option>
+                                )
+                            )}
+                        </select>
+                    )}
+                </div>
+
+                <br />
+
+                {/* =================================================
+                    SELECTED PROJECT
+                ================================================= */}
+
+                {projectId && (
+                    <p>
+                        <strong>
+                            Selected Project ID:
+                        </strong>{" "}
+                        {projectId}
+                    </p>
+                )}
+
+                {/* =================================================
+                    FILE
+                ================================================= */}
+
+                <div>
+                    <label htmlFor="file">
+                        <strong>
+                            Select Source File
+                        </strong>
+                    </label>
+
+                    <br />
+                    <br />
+
                     <input
+                        id="file"
                         type="file"
                         onChange={handleFileChange}
-                        disabled={loading}
                     />
+                </div>
 
-                    {file && (
+                <br />
+
+                {/* =================================================
+                    SELECTED FILE
+                ================================================= */}
+
+                {file && (
+                    <div>
                         <p>
-                            Selected file:{" "}
-                            <strong>{file.name}</strong>
+                            <strong>
+                                Selected file:
+                            </strong>{" "}
+                            {file.name}
                         </p>
-                    )}
 
-                    <button
-                        type="submit"
-                        disabled={!file || loading}
+                        <p>
+                            <strong>
+                                Size:
+                            </strong>{" "}
+                            {(
+                                file.size / 1024
+                            ).toFixed(2)}{" "}
+                            KB
+                        </p>
+                    </div>
+                )}
+
+                <br />
+
+                {/* =================================================
+                    ERROR
+                ================================================= */}
+
+                {error && (
+                    <p
                         style={{
-                            marginTop: "20px",
-                            padding: "12px 25px",
-                            cursor:
-                                !file || loading
-                                    ? "not-allowed"
-                                    : "pointer",
+                            color: "red"
                         }}
                     >
-                        {loading
-                            ? "Scanning..."
-                            : "Upload & Scan"}
-                    </button>
-                </div>
-            </form>
-
-            {/* Scan Status */}
-            <div
-                style={{
-                    marginTop: "25px",
-                    padding: "20px",
-                    border: "1px solid #ddd",
-                    borderRadius: "8px",
-                }}
-            >
-                <h3>Scan Status</h3>
-
-                {scanStatus === "idle" && (
-                    <p>⚪ Ready to scan</p>
-                )}
-
-                {scanStatus === "scanning" && (
-                    <p>
-                        🔄 <strong>Scanning...</strong>
-                        <br />
-                        Please wait while the backend
-                        analyzes your file.
-                    </p>
-                )}
-
-                {scanStatus === "completed" && (
-                    <p>
-                        ✅ <strong>Scan Completed</strong>
-                    </p>
-                )}
-
-                {scanStatus === "failed" && (
-                    <p>
-                        ❌ <strong>Scan Failed</strong>
-                    </p>
-                )}
-            </div>
-
-            {/* Error Message */}
-            {error && (
-                <div
-                    style={{
-                        marginTop: "25px",
-                        padding: "15px",
-                        border: "1px solid red",
-                        borderRadius: "8px",
-                        color: "red",
-                        backgroundColor: "#fff5f5",
-                        whiteSpace: "pre-wrap",
-                    }}
-                >
-                    <strong>Error:</strong>
-
-                    <div style={{ marginTop: "8px" }}>
                         {error}
-                    </div>
-                </div>
-            )}
-
-            {/* Scan Results */}
-            {result && (
-                <div
-                    style={{
-                        marginTop: "30px",
-                        padding: "25px",
-                        border: "1px solid #ddd",
-                        borderRadius: "10px",
-                    }}
-                >
-                    <h2>Scan Results</h2>
-
-                    {/* File Information */}
-                    <div
-                        style={{
-                            marginTop: "20px",
-                            padding: "20px",
-                            border: "1px solid #ddd",
-                            borderRadius: "8px",
-                        }}
-                    >
-                        <h3>File Information</h3>
-
-                        <p>
-                            <strong>File Name:</strong>{" "}
-                            {result.filename}
-                        </p>
-
-                        <p>
-                            <strong>Language:</strong>{" "}
-                            {getLanguage(result.filename)}
-                        </p>
-
-                        <p>
-                            <strong>File Size:</strong>{" "}
-                            {result.file_size} bytes
-                        </p>
-
-                        <p>
-                            <strong>Uploaded By:</strong>{" "}
-                            {result.uploaded_by}
-                        </p>
-
-                        <p>
-                            <strong>Status:</strong>{" "}
-                            {scanStatus === "completed"
-                                ? "Scan Completed"
-                                : scanStatus === "failed"
-                                ? "Scan Failed"
-                                : "Scanning..."}
-                        </p>
-                    </div>
-
-                    {/* Total Vulnerabilities */}
-                    <p style={{ marginTop: "20px" }}>
-                        <strong>
-                            Total vulnerabilities:
-                        </strong>{" "}
-                        {result.total_vulnerabilities}
                     </p>
+                )}
 
-                    {/* Severity Summary */}
-                    {result.summary && (
-                        <div
-                            style={{
-                                marginTop: "20px",
-                                padding: "20px",
-                                border: "1px solid #ddd",
-                                borderRadius: "8px",
-                            }}
-                        >
-                            <h3>Severity Summary</h3>
+                {/* =================================================
+                    SUCCESS
+                ================================================= */}
 
-                            <p>
-                                🔴{" "}
-                                <strong>Critical:</strong>{" "}
-                                {result.summary.critical ?? 0}
-                            </p>
-
-                            <p>
-                                🟠{" "}
-                                <strong>High:</strong>{" "}
-                                {result.summary.high ?? 0}
-                            </p>
-
-                            <p>
-                                🟡{" "}
-                                <strong>Medium:</strong>{" "}
-                                {result.summary.medium ?? 0}
-                            </p>
-
-                            <p>
-                                🟢{" "}
-                                <strong>Low:</strong>{" "}
-                                {result.summary.low ?? 0}
-                            </p>
-                        </div>
-                    )}
-
-                    {/* Vulnerability List */}
-                    <h3
+                {success && (
+                    <p
                         style={{
-                            marginTop: "25px",
+                            color: "green"
                         }}
                     >
-                        Vulnerabilities
-                    </h3>
+                        {success}
+                    </p>
+                )}
 
-                    {result.vulnerabilities &&
-                    result.vulnerabilities.length > 0 ? (
-                        result.vulnerabilities.map(
-                            (item, index) => (
-                                <div
-                                    key={index}
-                                    style={{
-                                        marginTop: "15px",
-                                        padding: "18px",
-                                        border: "1px solid #ddd",
-                                        borderRadius: "8px",
-                                    }}
-                                >
-                                    {/* Severity */}
-                                    <div
-                                        style={{
-                                            fontSize: "18px",
-                                            fontWeight: "bold",
-                                            marginBottom: "10px",
-                                        }}
-                                    >
-                                        {getSeverityIndicator(
-                                            item.severity
-                                        )}
-                                    </div>
+                {/* =================================================
+                    BUTTON
+                ================================================= */}
 
-                                    {/* Vulnerability Name */}
-                                    <div
-                                        style={{
-                                            fontSize: "17px",
-                                            fontWeight: "bold",
-                                            marginBottom: "8px",
-                                        }}
-                                    >
-                                        {item.vulnerability ||
-                                            "Unknown vulnerability"}
-                                    </div>
+                <button
+                    type="submit"
+                    disabled={
+                        loadingUpload ||
+                        loadingProjects ||
+                        projects.length === 0
+                    }
+                >
+                    {loadingUpload
+                        ? "Uploading and Scanning..."
+                        : "Upload and Scan"}
+                </button>
 
-                                    {/* Description */}
-                                    {item.description && (
-                                        <div
-                                            style={{
-                                                marginBottom: "8px",
-                                            }}
-                                        >
-                                            {item.description}
-                                        </div>
-                                    )}
-
-                                    {/* File */}
-                                    {item.file && (
-                                        <div>
-                                            <strong>
-                                                File:
-                                            </strong>{" "}
-                                            {item.file}
-                                        </div>
-                                    )}
-
-                                    {/* Line */}
-                                    {item.line && (
-                                        <div>
-                                            <strong>
-                                                Line:
-                                            </strong>{" "}
-                                            {item.line}
-                                        </div>
-                                    )}
-
-                                    {/* Confidence */}
-                                    {item.confidence && (
-                                        <div>
-                                            <strong>
-                                                Confidence:
-                                            </strong>{" "}
-                                            {item.confidence}
-                                        </div>
-                                    )}
-
-                                    {/* Status */}
-                                    {item.status && (
-                                        <div
-                                            style={{
-                                                marginTop: "8px",
-                                            }}
-                                        >
-                                            <strong>
-                                                Status:
-                                            </strong>{" "}
-                                            {item.status}
-                                        </div>
-                                    )}
-                                </div>
-                            )
-                        )
-                    ) : (
-                        <p>
-                            No vulnerabilities were detected.
-                        </p>
-                    )}
-                </div>
-            )}
+            </form>
         </div>
     );
 }
