@@ -2,6 +2,11 @@
 Prompt templates for AI vulnerability analysis.
 """
 
+
+# ------------------------------------------------------
+# Base prompt
+# ------------------------------------------------------
+
 BASE_PROMPT = """
 You are a cybersecurity expert.
 
@@ -16,6 +21,11 @@ Provide:
 
 Keep the response clear, simple, and technically accurate.
 """
+
+
+# ------------------------------------------------------
+# Vulnerability-specific prompts
+# ------------------------------------------------------
 
 SQL_INJECTION_PROMPT = """
 You are a cybersecurity expert.
@@ -36,6 +46,7 @@ Vulnerability Details:
 Keep the explanation simple and under 150 words.
 """
 
+
 XSS_PROMPT = """
 You are a cybersecurity expert.
 
@@ -54,6 +65,7 @@ Vulnerability Details:
 
 Keep the explanation simple and under 150 words.
 """
+
 
 COMMAND_INJECTION_PROMPT = """
 You are a cybersecurity expert.
@@ -74,6 +86,7 @@ Vulnerability Details:
 Keep the explanation simple and under 150 words.
 """
 
+
 HARDCODED_CREDENTIALS_PROMPT = """
 You are a cybersecurity expert.
 
@@ -92,6 +105,11 @@ Vulnerability Details:
 
 Keep the explanation simple and under 150 words.
 """
+
+
+# ------------------------------------------------------
+# Vulnerability prompt map
+# ------------------------------------------------------
 
 PROMPT_MAP = {
     "SQL Injection": SQL_INJECTION_PROMPT,
@@ -114,6 +132,10 @@ def get_prompt(vulnerability):
 
     return BASE_PROMPT + "\n\nVulnerability: {details}"
 
+
+# ------------------------------------------------------
+# Legacy dynamic prompt builder
+# ------------------------------------------------------
 
 def build_prompt(scanner_result):
     """
@@ -174,6 +196,8 @@ Vulnerable Code:
     return prompt_template.format(
         details=details
     )
+
+
 # ------------------------------------------------------
 # Recommendation prompts
 # ------------------------------------------------------
@@ -256,6 +280,12 @@ RECOMMENDATION_MAP = {
     "Command Injection": COMMAND_INJECTION_RECOMMENDATION,
     "Hardcoded Credentials": HARDCODED_CREDENTIALS_RECOMMENDATION,
 }
+
+
+# ------------------------------------------------------
+# Structured AI analysis prompt
+# ------------------------------------------------------
+
 STRUCTURED_ANALYSIS_PROMPT = """
 You are a cybersecurity code analysis assistant.
 
@@ -298,7 +328,54 @@ Rules:
 """
 
 
+# ------------------------------------------------------
+# Focused Finding → AI input
+# ------------------------------------------------------
+
+def build_ai_input(scanner_result):
+    """
+    Build a focused input object for AI analysis.
+
+    Only the information required by the structured
+    AI analysis prompt is forwarded to the AI layer.
+    """
+
+    return {
+        "vulnerability": scanner_result.get(
+            "vulnerability",
+            "Unknown"
+        ),
+        "severity": scanner_result.get(
+            "severity",
+            "Unknown"
+        ),
+        "confidence": scanner_result.get(
+            "confidence",
+            "Unknown"
+        ),
+        "file": scanner_result.get(
+            "file",
+            "Unknown"
+        ),
+        "line": scanner_result.get(
+            "line",
+            "Unknown"
+        ),
+        "code": scanner_result.get(
+            "code",
+            "Not provided"
+        ),
+    }
+
+
 def build_structured_analysis_prompt(scanner_result):
+    """
+    Build the structured JSON analysis prompt.
+
+    The input should already contain only the fields
+    required for AI analysis.
+    """
+
     return STRUCTURED_ANALYSIS_PROMPT.format(
         vulnerability=scanner_result.get(
             "vulnerability",

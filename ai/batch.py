@@ -3,7 +3,7 @@
 # ======================================================
 
 from .input import VulnerabilityInput
-from .llm import analyze_vulnerability
+from .analysis import analyze_finding
 
 
 # ======================================================
@@ -14,22 +14,22 @@ def analyze_findings(findings):
     """
     Analyze multiple scanner findings.
 
-    Each finding is processed independently using the
-    existing single-finding analysis pipeline.
-
-    Input:
-        List of VulnerabilityInput objects
+    Each finding can be either a dictionary or a
+    VulnerabilityInput object.
 
     Output:
-        Dictionary containing individual results and
-        aggregate information.
+        Dictionary containing individual results
+        and aggregate information.
     """
 
     results = []
 
     for finding in findings:
 
-        result = analyze_vulnerability(
+        if isinstance(finding, VulnerabilityInput):
+            finding = finding.model_dump()
+
+        result = analyze_finding(
             finding
         )
 
@@ -46,7 +46,7 @@ def analyze_findings(findings):
     successful_analyses = sum(
         1
         for result in results
-        if result.get("ai_status") == "success"
+        if result.get("ai_status") == "completed"
     )
 
     failed_analyses = (
@@ -60,37 +60,18 @@ def analyze_findings(findings):
     )
 
     if total_findings > 0:
-
         average_risk_score = round(
-            total_risk_score /
-            total_findings,
+            total_risk_score / total_findings,
             2
         )
-
     else:
-
         average_risk_score = 0
-
-
-    # --------------------------------------------------
-    # Return batch result
-    # --------------------------------------------------
 
     return {
         "findings_count": total_findings,
-
-        "successful_analyses": (
-            successful_analyses
-        ),
-
-        "failed_analyses": (
-            failed_analyses
-        ),
-
-        "average_risk_score": (
-            average_risk_score
-        ),
-
+        "successful_analyses": successful_analyses,
+        "failed_analyses": failed_analyses,
+        "average_risk_score": average_risk_score,
         "results": results
     }
 
@@ -102,29 +83,14 @@ def analyze_findings(findings):
 def analyze_finding_dicts(findings):
     """
     Analyze findings supplied as dictionaries.
-
-    Example:
-
-        [
-            {
-                "file": "app.py",
-                "line": 25,
-                "vulnerability": "SQLi",
-                "severity": "High",
-                "confidence": 90,
-                "code": "query = user_input"
-            }
-        ]
     """
 
     validated_findings = []
 
     for finding in findings:
 
-        validated_finding = (
-            VulnerabilityInput(
-                **finding
-            )
+        validated_finding = VulnerabilityInput(
+            **finding
         )
 
         validated_findings.append(
@@ -134,3 +100,56 @@ def analyze_finding_dicts(findings):
     return analyze_findings(
         validated_findings
     )
+
+
+# ======================================================
+# Generate Security Report
+# ======================================================
+
+def generate_report(
+    findings,
+    project=None
+):
+    """
+    Generate a complete security report.
+
+    Input:
+        findings:
+            List of VulnerabilityInput objects or
+            scanner finding dictionaries.
+
+        project:
+            Optional project name or project path.
+
+    Output:
+        Dictionary containing report metadata,
+        aggregate statistics, and analyzed findings.
+    """
+
+    if not findings:
+        return {
+            "project": project,
+            "total_findings": 0,
+            "successful_analyses": 0,
+            "failed_analyses": 0,
+            "average_risk_score": 0,
+            "findings": []
+        }
+
+    if isinstance(findings[0], dict):
+        batch_result = analyze_finding_dicts(
+            findings
+        )
+    else:
+        batch_result = analyze_findings(
+            findings
+        )
+
+    return {
+        "project": project,
+        "total_findings": batch_result["findings_count"],
+        "successful_analyses": batch_result["successful_analyses"],
+        "failed_analyses": batch_result["failed_analyses"],
+        "average_risk_score": batch_result["average_risk_score"],
+        "findings": batch_result["results"]
+    }

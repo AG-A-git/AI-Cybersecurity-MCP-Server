@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from ai.llm import analyze_vulnerability
+from ai.analysis import analyze_finding
 from ai.utils import format_ai_response
 
 
@@ -22,12 +22,19 @@ class VulnerabilityRequest(BaseModel):
 
 
 class VulnerabilityResponse(BaseModel):
+    file: str
+    line: int
+    vulnerability: str
     severity: str
+    confidence: float
     risk_score: int | float
+    risk_level: str
     owasp: str
     cwe: str
-    explanation: str
-    recommendation: str
+    ai_status: str
+    explanation: str | None
+    impact: str | None
+    recommendation: str | None
 
 
 @app.get("/")
@@ -49,15 +56,6 @@ def analyze(request: VulnerabilityRequest):
         "code": request.code
     }
 
-    analysis = analyze_vulnerability(scanner_result)
+    analysis = analyze_finding(scanner_result)
 
-    formatted_response = format_ai_response(
-        severity=analysis["severity"],
-        risk_score=analysis["risk_score"],
-        owasp=analysis["owasp"],
-        cwe=analysis["cwe"],
-        explanation=analysis["explanation"],
-        recommendation=analysis["recommendation"]
-    )
-
-    return formatted_response
+    return format_ai_response(analysis)

@@ -1,6 +1,9 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from typing import Optional
 
+from ai.analysis import analyze_finding
+
+
 app = FastAPI(
     title="AI Cybersecurity MCP Server",
     version="1.0.0",
@@ -30,66 +33,45 @@ async def analyze(
     try:
         content = await file.read()
 
-        # Only decode text-based files
-        if file.filename.endswith((".py", ".js", ".ts", ".java", ".txt", ".html", ".css")):
+        # Decode text-based files
+        if file.filename.endswith(
+            (".py", ".js", ".ts", ".java", ".txt", ".html", ".css")
+        ):
             code = content.decode("utf-8", errors="replace")
         else:
             code = f"Uploaded file: {file.filename}"
 
         vulnerability_type = vulnerability or "Unknown"
 
-        if vulnerability_type.lower() == "sql injection":
-            severity = "High"
-            risk_score = 85
-            risk_level = "Critical"
-            owasp = "A03:2021 Injection"
-            cwe = "CWE-89"
-
-            explanation = (
-                "The code may be vulnerable to SQL Injection "
-                "because user-controlled input may be included "
-                "directly in a SQL query."
-            )
-
-            recommendation = (
-                "Use parameterized queries or prepared statements "
-                "instead of string concatenation."
-            )
-
-        else:
-            severity = "Medium"
-            risk_score = 50
-            risk_level = "High"
-            owasp = "Unknown"
-            cwe = "Unknown"
-
-            explanation = (
-                "The uploaded code requires further security analysis."
-            )
-
-            recommendation = (
-                "Review the code and apply appropriate secure "
-                "coding practices."
-            )
-
-        return {
+        # Use the centralized AI/risk analysis pipeline.
+        scanner_result = {
             "file": file.filename,
             "line": 1,
-            "code": code,
             "vulnerability": vulnerability_type,
-            "severity": severity,
+            "severity": "Medium",
             "confidence": 90,
-            "risk_score": risk_score,
-            "risk_level": risk_level,
-            "owasp": owasp,
-            "cwe": cwe,
-            "ai_status": "completed",
+            "code": code
+        }
+
+        analysis = analyze_finding(scanner_result)
+
+        return {
+            "file": analysis["file"],
+            "line": analysis["line"],
+            "code": code,
+            "vulnerability": analysis["vulnerability"],
+            "severity": analysis["severity"],
+            "confidence": analysis["confidence"],
+            "risk_score": analysis["risk_score"],
+            "risk_level": analysis["risk_level"],
+            "owasp": analysis["owasp"],
+            "cwe": analysis["cwe"],
+            "ai_status": analysis["ai_status"],
             "ai_analysis": {
-                "severity": severity,
-                "explanation": explanation,
-                "recommendation": recommendation
+                "explanation": analysis["explanation"],
+                "impact": analysis["impact"]
             },
-            "recommendation": recommendation
+            "recommendation": analysis["recommendation"]
         }
 
     except Exception as e:

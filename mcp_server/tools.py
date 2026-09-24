@@ -3,7 +3,7 @@ MCP tools for AI vulnerability analysis.
 """
 
 from ai.input import VulnerabilityInput
-from ai.llm import analyze_vulnerability
+from ai.analysis import analyze_finding
 
 
 # ======================================================
@@ -32,7 +32,7 @@ def run_ai_analysis(scanner_result):
         code=scanner_result["code"]
     )
 
-    return analyze_vulnerability(finding)
+    return analyze_finding(finding)
 
 
 # ======================================================
