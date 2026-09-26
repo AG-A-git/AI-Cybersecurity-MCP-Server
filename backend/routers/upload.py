@@ -30,6 +30,11 @@ from services.upload_service import (
     get_language
 )
 
+from logging_config import get_logger
+
+
+logger = get_logger(__name__)
+
 
 router = APIRouter(
     prefix="/upload",
@@ -198,9 +203,24 @@ async def upload_file(
 
         db.refresh(uploaded_file)
 
+        logger.info(
+            "File uploaded | file_id=%s | project_id=%s | user_id=%s | filename=%s",
+            uploaded_file.id,
+            project_id,
+            current_user.id,
+            uploaded_file.filename
+        )
+
     except Exception:
 
         db.rollback()
+
+        logger.exception(
+            "Upload database persistence failed | project_id=%s | user_id=%s | filename=%s",
+            project_id,
+            current_user.id,
+            file.filename
+        )
 
         # Remove physical file if database operation fails
         if file_path.exists():
@@ -216,12 +236,12 @@ async def upload_file(
     # --------------------------------------------------
 
     return success_response(
-    "File uploaded successfully",
-    {
-        "id": uploaded_file.id,
-        "filename": uploaded_file.filename,
-        "filepath": uploaded_file.filepath,
-        "language": uploaded_file.language,
-        "project_id": uploaded_file.project_id
-    }
-)
+        "File uploaded successfully",
+        {
+            "id": uploaded_file.id,
+            "filename": uploaded_file.filename,
+            "filepath": uploaded_file.filepath,
+            "language": uploaded_file.language,
+            "project_id": uploaded_file.project_id
+        }
+    )

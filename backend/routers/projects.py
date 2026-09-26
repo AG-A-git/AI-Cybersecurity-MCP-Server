@@ -6,6 +6,10 @@ from database import get_db
 from models import Project, User
 from auth import get_current_user
 from response_utils import success_response
+from logging_config import get_logger
+
+
+logger = get_logger(__name__)
 
 
 router = APIRouter(
@@ -75,23 +79,31 @@ def create_project(
         db.add(project)
         db.commit()
         db.refresh(project)
+
+        logger.info(
+            "Project created | project_id=%s | user_id=%s | project_name=%s",
+            project.id,
+            current_user.id,
+            project.project_name
+        )
+
     except Exception:
         db.rollback()
 
         raise HTTPException(
             status_code=500,
             detail="Failed to create project"
-            )
+        )
 
     return success_response(
-    "Project created successfully",
-    {
-        "id": project.id,
-        "project_name": project.project_name,
-        "description": project.description,
-        "owner_id": project.owner_id
-    }
-)
+        "Project created successfully",
+        {
+            "id": project.id,
+            "project_name": project.project_name,
+            "description": project.description,
+            "owner_id": project.owner_id
+        }
+    )
 
 
 @router.get("/")
@@ -115,17 +127,17 @@ def get_projects(
     ).all()
 
     return success_response(
-    "Projects retrieved successfully",
-    [
-        {
-            "id": project.id,
-            "project_name": project.project_name,
-            "description": project.description,
-            "owner_id": project.owner_id
-        }
-        for project in projects
-    ]
-)
+        "Projects retrieved successfully",
+        [
+            {
+                "id": project.id,
+                "project_name": project.project_name,
+                "description": project.description,
+                "owner_id": project.owner_id
+            }
+            for project in projects
+        ]
+    )
 
 
 @router.get("/{project_id}")
@@ -159,20 +171,27 @@ def get_project(
     # 3. Verify ownership
     # ---------------------------------------------------------
     if project.owner_id != current_user.id:
+        logger.warning(
+            "Unauthorized project access | project_id=%s | user_id=%s | owner_id=%s",
+            project_id,
+            current_user.id,
+            project.owner_id
+        )
+
         raise HTTPException(
             status_code=403,
             detail="You do not have permission to view this project"
         )
 
     return success_response(
-    "Project retrieved successfully",
-    {
-        "id": project.id,
-        "project_name": project.project_name,
-        "description": project.description,
-        "owner_id": project.owner_id
-    }
-)
+        "Project retrieved successfully",
+        {
+            "id": project.id,
+            "project_name": project.project_name,
+            "description": project.description,
+            "owner_id": project.owner_id
+        }
+    )
 
 
 @router.delete("/{project_id}")
@@ -206,6 +225,13 @@ def delete_project(
     # 3. Verify ownership
     # ---------------------------------------------------------
     if project.owner_id != current_user.id:
+        logger.warning(
+            "Unauthorized project deletion | project_id=%s | user_id=%s | owner_id=%s",
+            project_id,
+            current_user.id,
+            project.owner_id
+        )
+
         raise HTTPException(
             status_code=403,
             detail="You do not have permission to delete this project"
@@ -217,16 +243,24 @@ def delete_project(
     try:
         db.delete(project)
         db.commit()
+
+        logger.info(
+            "Project deleted | project_id=%s | user_id=%s",
+            project_id,
+            current_user.id
+        )
+
     except Exception:
         db.rollback()
+
         raise HTTPException(
             status_code=500,
             detail="Failed to delete project"
-            )
+        )
 
     return success_response(
-    "Project deleted successfully",
-    {
-        "project_id": project_id
-    }
-)
+        "Project deleted successfully",
+        {
+            "project_id": project_id
+        }
+    )

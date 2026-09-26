@@ -5,13 +5,19 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+from logging_config import setup_logging, get_logger
+
+setup_logging()
+logger = get_logger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from database import engine
 from models import Base
 from config import PROJECT_NAME
 from config import PROJECT_VERSION
 from config import PROJECT_DESCRIPTION
+from fastapi.responses import JSONResponse
+from logging_config import get_logger
 from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -34,6 +40,24 @@ app = FastAPI(
     version=PROJECT_VERSION,
     description=PROJECT_DESCRIPTION
 )
+@app.exception_handler(Exception)
+async def global_exception_handler(
+    request: Request,
+    exc: Exception
+):
+    logger.exception(
+        "Unhandled application exception | method=%s | path=%s",
+        request.method,
+        request.url.path
+    )
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "message": "An unexpected server error occurred."
+        }
+    )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
