@@ -1,5 +1,6 @@
 import ast
 
+from scanner.context import build_rule_context, get_source_context
 from scanner.finding import create_finding
 
 
@@ -111,6 +112,19 @@ def scan_sensitive_data_exposure(file_path):
     except SyntaxError:
         return results
 
+    try:
+        context = build_rule_context(file_path)
+
+    except (
+        SyntaxError,
+        ValueError,
+        OSError,
+        UnicodeError
+    ):
+        context = {
+            "lines": code.splitlines()
+        }
+
     lines = code.splitlines()
 
     for node in ast.walk(tree):
@@ -126,17 +140,22 @@ def scan_sensitive_data_exposure(file_path):
 
         code_line = lines[node.lineno - 1].strip()
 
-        results.append(
-            create_finding(
-                file_name=file_path,
-                line_number=node.lineno,
-                vulnerability_type="Sensitive Data Exposure",
-                severity="High",
-                confidence=90,
-                code=code_line,
-                owasp="A02: Cryptographic Failures",
-                cwe="CWE-532"
-            )
+        finding = create_finding(
+            file_name=file_path,
+            line_number=node.lineno,
+            vulnerability_type="Sensitive Data Exposure",
+            severity="High",
+            confidence=90,
+            code=code_line,
+            owasp="A02: Cryptographic Failures",
+            cwe="CWE-532"
         )
+
+        finding["source_context"] = get_source_context(
+            context,
+            node.lineno
+        )
+
+        results.append(finding)
 
     return results

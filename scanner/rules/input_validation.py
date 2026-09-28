@@ -1,5 +1,6 @@
 import re
 
+from scanner.context import build_rule_context, get_source_context
 from scanner.finding import create_finding
 
 
@@ -102,21 +103,28 @@ def _add_finding(
     confidence,
     code,
     cwe,
+    context=None,
 ):
     """Create a standardized vulnerability finding."""
 
-    findings.append(
-        create_finding(
-            file_name=file_path,
-            line_number=line_number,
-            vulnerability_type=vulnerability_type,
-            severity="High",
-            confidence=confidence,
-            code=code,
-            owasp="A03: Injection",
-            cwe=cwe,
-        )
+    finding = create_finding(
+        file_name=file_path,
+        line_number=line_number,
+        vulnerability_type=vulnerability_type,
+        severity="High",
+        confidence=confidence,
+        code=code,
+        owasp="A03: Injection",
+        cwe=cwe,
     )
+
+    if context is not None:
+        finding["source_context"] = get_source_context(
+            context,
+            line_number
+        )
+
+    findings.append(finding)
 
 
 def scan_input_validation(file_path):
@@ -153,6 +161,22 @@ def scan_input_validation(file_path):
 
     except (FileNotFoundError, OSError):
         return findings
+
+    try:
+        context = build_rule_context(file_path)
+
+    except (
+        SyntaxError,
+        ValueError,
+        OSError,
+        UnicodeError
+    ):
+        context = {
+            "lines": [
+                line.rstrip("\n")
+                for line in lines
+            ]
+        }
 
     # Variables directly assigned from user input.
     user_input_variables = set()
@@ -255,6 +279,7 @@ def scan_input_validation(file_path):
                     confidence=90,
                     code=stripped,
                     cwe="CWE-89",
+                    context=context,
                 )
 
         if _matches_any(COMMAND_SINK_PATTERNS, stripped):
@@ -269,6 +294,7 @@ def scan_input_validation(file_path):
                     confidence=90,
                     code=stripped,
                     cwe="CWE-78",
+                    context=context,
                 )
 
         if _matches_any(XSS_SINK_PATTERNS, stripped):
@@ -283,6 +309,7 @@ def scan_input_validation(file_path):
                     confidence=85,
                     code=stripped,
                     cwe="CWE-79",
+                    context=context,
                 )
 
         # ---------------------------------------------------------
@@ -322,6 +349,7 @@ def scan_input_validation(file_path):
                     confidence=confidence,
                     code=stripped,
                     cwe="CWE-89",
+                    context=context,
                 )
 
             # -----------------------------------------------------
@@ -340,6 +368,7 @@ def scan_input_validation(file_path):
                     confidence=confidence,
                     code=stripped,
                     cwe="CWE-78",
+                    context=context,
                 )
 
             # -----------------------------------------------------
@@ -358,6 +387,7 @@ def scan_input_validation(file_path):
                     confidence=confidence,
                     code=stripped,
                     cwe="CWE-79",
+                    context=context,
                 )
 
     return findings

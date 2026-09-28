@@ -1,5 +1,6 @@
 import re
 
+from scanner.context import build_rule_context, get_source_context
 from scanner.finding import create_finding
 from scanner.confidence import calculate_confidence
 
@@ -43,6 +44,22 @@ def scan_command(file_path):
     except (FileNotFoundError, OSError):
         return results
 
+    try:
+        context = build_rule_context(file_path)
+
+    except (
+        SyntaxError,
+        ValueError,
+        OSError,
+        UnicodeError
+    ):
+        context = {
+            "lines": [
+                line.rstrip("\n")
+                for line in lines
+            ]
+        }
+
     for line_number, line in enumerate(lines, start=1):
 
         # --------------------------------------------------
@@ -66,18 +83,23 @@ def scan_command(file_path):
                 # cannot prove where the variable came from.
                 confidence = calculate_confidence()
 
-            results.append(
-                create_finding(
-                    file_name=file_path,
-                    line_number=line_number,
-                    vulnerability_type="Command Injection",
-                    severity="High",
-                    confidence=confidence,
-                    code=line.strip(),
-                    owasp="A03: Injection",
-                    cwe="CWE-78"
-                )
+            finding = create_finding(
+                file_name=file_path,
+                line_number=line_number,
+                vulnerability_type="Command Injection",
+                severity="High",
+                confidence=confidence,
+                code=line.strip(),
+                owasp="A03: Injection",
+                cwe="CWE-78"
             )
+
+            finding["source_context"] = get_source_context(
+                context,
+                line_number
+            )
+
+            results.append(finding)
 
             continue
 
@@ -126,17 +148,22 @@ def scan_command(file_path):
             direct_source=True
         )
 
-        results.append(
-            create_finding(
-                file_name=file_path,
-                line_number=line_number,
-                vulnerability_type="Command Injection",
-                severity="Critical",
-                confidence=confidence,
-                code=line.strip(),
-                owasp="A03: Injection",
-                cwe="CWE-78"
-            )
+        finding = create_finding(
+            file_name=file_path,
+            line_number=line_number,
+            vulnerability_type="Command Injection",
+            severity="Critical",
+            confidence=confidence,
+            code=line.strip(),
+            owasp="A03: Injection",
+            cwe="CWE-78"
         )
+
+        finding["source_context"] = get_source_context(
+            context,
+            line_number
+        )
+
+        results.append(finding)
 
     return results

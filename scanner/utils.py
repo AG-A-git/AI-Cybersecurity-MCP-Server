@@ -1,5 +1,7 @@
 import logging
 
+from scanner.context import build_rule_context
+
 from scanner.rules.sql import scan_sql
 from scanner.rules.xss import scan_xss
 from scanner.rules.credentials import scan_credentials
@@ -47,11 +49,46 @@ def load_rules():
 def run_all_rules(file_path):
     """
     Run all vulnerability rules against a file.
-    If one rule fails, log the error and continue with the remaining rules.
+
+    A shared rule context is built once per file so future
+    context-aware rules can reuse parsed source information.
+
+    Existing rules continue to receive file_path for backward
+    compatibility.
+
+    If context creation fails, the scanner returns no findings
+    for that file rather than crashing the complete scan.
+
+    If one rule fails, the error is logged and the remaining
+    rules continue to run.
     """
     results = []
     rules = load_rules()
 
+    # Build shared context once for this file.
+    try:
+        context = build_rule_context(file_path)
+
+        logger.debug(
+            "Built rule context for %s: language=%s, lines=%d, "
+            "imports=%d, functions=%d, variables=%d",
+            file_path,
+            context["language"],
+            len(context["lines"]),
+            len(context["imports"]),
+            len(context["functions"]),
+            len(context["variables"]),
+        )
+
+    except (SyntaxError, ValueError, OSError, UnicodeError) as error:
+        logger.exception(
+            "Failed to build rule context for %s: %s",
+            file_path,
+            error
+        )
+        return results
+
+    # Existing rules continue to use the original file_path API.
     for rule in rules:
         try:
             rule_results = rule(file_path)

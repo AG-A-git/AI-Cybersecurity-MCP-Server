@@ -2,6 +2,7 @@
 import ast
 from pathlib import Path
 
+from scanner.context import build_rule_context, get_source_context
 from scanner.finding import create_finding
 
 
@@ -49,6 +50,21 @@ def _is_untrusted_variable(node, untrusted_variables):
     )
 
 
+def _add_source_context(finding, context, line_number):
+    """
+    Add surrounding source-code context to a finding.
+
+    The existing finding fields remain unchanged.
+    """
+
+    finding["source_context"] = get_source_context(
+        context,
+        line_number
+    )
+
+    return finding
+
+
 def detect_ssrf(source_code, file_name="unknown"):
     """
     Detect Server-Side Request Forgery (SSRF).
@@ -77,6 +93,19 @@ def detect_ssrf(source_code, file_name="unknown"):
 
     except SyntaxError:
         return findings
+
+    try:
+        context = build_rule_context(file_name)
+
+    except (
+        SyntaxError,
+        ValueError,
+        OSError,
+        UnicodeError
+    ):
+        context = {
+            "lines": source_code.splitlines()
+        }
 
     untrusted_variables = set()
 
@@ -149,16 +178,22 @@ def detect_ssrf(source_code, file_name="unknown"):
                     or ""
                 )
 
+                finding = create_finding(
+                    vulnerability_type="SSRF",
+                    file_name=file_name,
+                    line_number=node.lineno,
+                    severity="High",
+                    confidence=90,
+                    code=code_line,
+                    owasp="A10: Server-Side Request Forgery",
+                    cwe="CWE-918"
+                )
+
                 findings.append(
-                    create_finding(
-                        vulnerability_type="SSRF",
-                        file_name=file_name,
-                        line_number=node.lineno,
-                        severity="High",
-                        confidence=90,
-                        code=code_line,
-                        owasp="A10: Server-Side Request Forgery",
-                        cwe="CWE-918"
+                    _add_source_context(
+                        finding,
+                        context,
+                        node.lineno
                     )
                 )
 
@@ -189,16 +224,22 @@ def detect_ssrf(source_code, file_name="unknown"):
                     or ""
                 )
 
+                finding = create_finding(
+                    vulnerability_type="SSRF",
+                    file_name=file_name,
+                    line_number=node.lineno,
+                    severity="High",
+                    confidence=90,
+                    code=code_line,
+                    owasp="A10: Server-Side Request Forgery",
+                    cwe="CWE-918"
+                )
+
                 findings.append(
-                    create_finding(
-                        vulnerability_type="SSRF",
-                        file_name=file_name,
-                        line_number=node.lineno,
-                        severity="High",
-                        confidence=90,
-                        code=code_line,
-                        owasp="A10: Server-Side Request Forgery",
-                        cwe="CWE-918"
+                    _add_source_context(
+                        finding,
+                        context,
+                        node.lineno
                     )
                 )
 

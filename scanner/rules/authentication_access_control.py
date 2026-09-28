@@ -1,5 +1,6 @@
 import ast
 
+from scanner.context import build_rule_context, get_source_context
 from scanner.finding import create_finding
 
 
@@ -175,7 +176,12 @@ def is_sensitive_route(function_node):
 # Insecure Authentication
 # ============================================================
 
-def scan_insecure_authentication(tree, code, file_path):
+def scan_insecure_authentication(
+    tree,
+    code,
+    file_path,
+    context=None
+):
     """
     Detect obvious weak password comparisons.
 
@@ -236,18 +242,24 @@ def scan_insecure_authentication(tree, code, file_path):
 
         code_line = code.splitlines()[node.lineno - 1].strip()
 
-        results.append(
-            create_finding(
-                file_name=file_path,
-                line_number=node.lineno,
-                vulnerability_type="Insecure Authentication",
-                severity="High",
-                confidence=confidence,
-                code=code_line,
-                owasp="A07: Identification and Authentication Failures",
-                cwe="CWE-521"
-            )
+        finding = create_finding(
+            file_name=file_path,
+            line_number=node.lineno,
+            vulnerability_type="Insecure Authentication",
+            severity="High",
+            confidence=confidence,
+            code=code_line,
+            owasp="A07: Identification and Authentication Failures",
+            cwe="CWE-521"
         )
+
+        if context is not None:
+            finding["source_context"] = get_source_context(
+                context,
+                node.lineno
+            )
+
+        results.append(finding)
 
     return results
 
@@ -256,7 +268,12 @@ def scan_insecure_authentication(tree, code, file_path):
 # Potential Broken Access Control
 # ============================================================
 
-def scan_broken_access_control(tree, code, file_path):
+def scan_broken_access_control(
+    tree,
+    code,
+    file_path,
+    context=None
+):
     """
     Detect sensitive Flask/FastAPI routes that do not contain
     an obvious authorization mechanism.
@@ -274,7 +291,10 @@ def scan_broken_access_control(tree, code, file_path):
 
     for node in ast.walk(tree):
 
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        if not isinstance(
+            node,
+            (ast.FunctionDef, ast.AsyncFunctionDef)
+        ):
             continue
 
         # Only inspect sensitive routes.
@@ -287,18 +307,24 @@ def scan_broken_access_control(tree, code, file_path):
 
         code_line = code.splitlines()[node.lineno - 1].strip()
 
-        results.append(
-            create_finding(
-                file_name=file_path,
-                line_number=node.lineno,
-                vulnerability_type="Potential Broken Access Control",
-                severity="High",
-                confidence=65,
-                code=code_line,
-                owasp="A01: Broken Access Control",
-                cwe="CWE-862"
-            )
+        finding = create_finding(
+            file_name=file_path,
+            line_number=node.lineno,
+            vulnerability_type="Potential Broken Access Control",
+            severity="High",
+            confidence=65,
+            code=code_line,
+            owasp="A01: Broken Access Control",
+            cwe="CWE-862"
         )
+
+        if context is not None:
+            finding["source_context"] = get_source_context(
+                context,
+                node.lineno
+            )
+
+        results.append(finding)
 
     return results
 
@@ -337,11 +363,26 @@ def scan_authentication_access_control(file_path):
     except SyntaxError:
         return results
 
+    # Build shared rule context once for this file.
+    try:
+        context = build_rule_context(file_path)
+
+    except (
+        SyntaxError,
+        ValueError,
+        OSError,
+        UnicodeError
+    ):
+        context = {
+            "lines": code.splitlines()
+        }
+
     results.extend(
         scan_insecure_authentication(
             tree,
             code,
-            file_path
+            file_path,
+            context
         )
     )
 
@@ -349,7 +390,8 @@ def scan_authentication_access_control(file_path):
         scan_broken_access_control(
             tree,
             code,
-            file_path
+            file_path,
+            context
         )
     )
 

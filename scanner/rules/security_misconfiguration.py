@@ -1,5 +1,6 @@
 import ast
 
+from scanner.context import build_rule_context, get_source_context
 from scanner.finding import create_finding
 
 
@@ -51,6 +52,23 @@ def scan_security_misconfiguration(file_path):
         return results
 
     # ---------------------------------------------------------
+    # Build shared rule context
+    # ---------------------------------------------------------
+
+    try:
+        context = build_rule_context(file_path)
+
+    except (
+        SyntaxError,
+        ValueError,
+        OSError,
+        UnicodeError
+    ):
+        context = {
+            "lines": code.splitlines()
+        }
+
+    # ---------------------------------------------------------
     # Find app.run(debug=True)
     # ---------------------------------------------------------
 
@@ -92,17 +110,22 @@ def scan_security_misconfiguration(file_path):
 
                 code_line = code.splitlines()[node.lineno - 1].strip()
 
-                results.append(
-                    create_finding(
-                        file_name=file_path,
-                        line_number=node.lineno,
-                        vulnerability_type="Security Misconfiguration",
-                        severity="Medium",
-                        confidence=95,
-                        code=code_line,
-                        owasp="A05: Security Misconfiguration",
-                        cwe="CWE-489"
-                    )
+                finding = create_finding(
+                    file_name=file_path,
+                    line_number=node.lineno,
+                    vulnerability_type="Security Misconfiguration",
+                    severity="Medium",
+                    confidence=95,
+                    code=code_line,
+                    owasp="A05: Security Misconfiguration",
+                    cwe="CWE-489"
                 )
+
+                finding["source_context"] = get_source_context(
+                    context,
+                    node.lineno
+                )
+
+                results.append(finding)
 
     return results

@@ -1,5 +1,6 @@
 import re
 
+from scanner.context import build_rule_context, get_source_context
 from scanner.finding import create_finding
 
 
@@ -58,6 +59,22 @@ def scan_credentials(file_path):
     except (FileNotFoundError, OSError):
         return results
 
+    try:
+        context = build_rule_context(file_path)
+
+    except (
+        SyntaxError,
+        ValueError,
+        OSError,
+        UnicodeError
+    ):
+        context = {
+            "lines": [
+                line.rstrip("\n")
+                for line in lines
+            ]
+        }
+
     for line_number, line in enumerate(lines, start=1):
 
         match = HARDCODED_SECRET_PATTERN.search(line)
@@ -75,17 +92,22 @@ def scan_credentials(file_path):
         if secret_value.lower() in SAFE_VALUES:
             continue
 
-        results.append(
-            create_finding(
-                file_name=file_path,
-                line_number=line_number,
-                vulnerability_type="Hardcoded Credentials / Secrets",
-                severity="High",
-                confidence=90,
-                code=line.strip(),
-                owasp="A07: Identification and Authentication Failures",
-                cwe="CWE-798"
-            )
+        finding = create_finding(
+            file_name=file_path,
+            line_number=line_number,
+            vulnerability_type="Hardcoded Credentials / Secrets",
+            severity="High",
+            confidence=90,
+            code=line.strip(),
+            owasp="A07: Identification and Authentication Failures",
+            cwe="CWE-798"
         )
+
+        finding["source_context"] = get_source_context(
+            context,
+            line_number
+        )
+
+        results.append(finding)
 
     return results

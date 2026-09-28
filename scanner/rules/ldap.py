@@ -1,5 +1,6 @@
 import ast
 
+from scanner.context import build_rule_context, get_source_context
 from scanner.finding import create_finding
 
 
@@ -120,6 +121,19 @@ def scan_ldap(file_path):
     except SyntaxError:
         return results
 
+    try:
+        context = build_rule_context(file_path)
+
+    except (
+        SyntaxError,
+        ValueError,
+        OSError,
+        UnicodeError
+    ):
+        context = {
+            "lines": code.splitlines()
+        }
+
     tainted_variables = set()
     tainted_queries = {}
 
@@ -190,18 +204,23 @@ def scan_ldap(file_path):
                 else:
                     code_line = ""
 
-                results.append(
-                    create_finding(
-                        file_name=file_path,
-                        line_number=line_number,
-                        vulnerability_type="LDAP Injection",
-                        severity="High",
-                        confidence=85,
-                        code=code_line,
-                        owasp="A03: Injection",
-                        cwe="CWE-90"
-                    )
+                finding = create_finding(
+                    file_name=file_path,
+                    line_number=line_number,
+                    vulnerability_type="LDAP Injection",
+                    severity="High",
+                    confidence=85,
+                    code=code_line,
+                    owasp="A03: Injection",
+                    cwe="CWE-90"
                 )
+
+                finding["source_context"] = get_source_context(
+                    context,
+                    line_number
+                )
+
+                results.append(finding)
 
                 break
 

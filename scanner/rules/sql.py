@@ -1,5 +1,6 @@
 import re
 
+from scanner.context import build_rule_context, get_source_context
 from scanner.finding import create_finding
 
 
@@ -50,24 +51,45 @@ def scan_sql(file_path):
     except (FileNotFoundError, OSError):
         return results
 
+    try:
+        context = build_rule_context(file_path)
+
+    except (
+        SyntaxError,
+        ValueError,
+        OSError,
+        UnicodeError
+    ):
+        context = {
+            "lines": [
+                line.rstrip("\n")
+                for line in lines
+            ]
+        }
+
     for line_number, line in enumerate(lines, start=1):
 
         for pattern in SQL_PATTERNS:
 
             if pattern.search(line):
 
-                results.append(
-                    create_finding(
-                        file_name=file_path,
-                        line_number=line_number,
-                        vulnerability_type="SQL Injection",
-                        severity="Critical",
-                        confidence=95,
-                        code=line.strip(),
-                        owasp="A03: Injection",
-                        cwe="CWE-89"
-                    )
+                finding = create_finding(
+                    file_name=file_path,
+                    line_number=line_number,
+                    vulnerability_type="SQL Injection",
+                    severity="Critical",
+                    confidence=95,
+                    code=line.strip(),
+                    owasp="A03: Injection",
+                    cwe="CWE-89"
                 )
+
+                finding["source_context"] = get_source_context(
+                    context,
+                    line_number
+                )
+
+                results.append(finding)
 
                 break
 
