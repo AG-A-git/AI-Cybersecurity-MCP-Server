@@ -1,10 +1,22 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 
 function Dashboard() {
     const [dashboard, setDashboard] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+
+    const navigate = useNavigate();
+
+    // =====================================================
+    // LOGOUT
+    // =====================================================
+
+    const handleLogout = () => {
+        localStorage.removeItem("access_token");
+        navigate("/login");
+    };
 
     // =====================================================
     // FETCH DASHBOARD DATA
@@ -21,10 +33,7 @@ function Dashboard() {
 
             setDashboard(response.data);
         } catch (error) {
-            console.error(
-                "Failed to load dashboard:",
-                error
-            );
+            console.error("Failed to load dashboard:", error);
 
             setError(
                 error.userMessage ||
@@ -72,6 +81,14 @@ function Dashboard() {
                 >
                     Try Again
                 </button>
+
+                <button
+                    type="button"
+                    onClick={handleLogout}
+                    style={{ marginLeft: "10px" }}
+                >
+                    Logout
+                </button>
             </div>
         );
     }
@@ -85,19 +102,74 @@ function Dashboard() {
             <div style={{ padding: "30px" }}>
                 <h1>Dashboard</h1>
                 <p>No dashboard data available.</p>
+
+                <button
+                    type="button"
+                    onClick={handleLogout}
+                >
+                    Logout
+                </button>
             </div>
         );
     }
 
     // =====================================================
-    // DATA
+    // REAL BACKEND DATA
     // =====================================================
+
+    const critical =
+        dashboard.critical_vulnerabilities ?? 0;
+
+    const high =
+        dashboard.high_vulnerabilities ?? 0;
+
+    const medium =
+        dashboard.medium_vulnerabilities ?? 0;
+
+    const low =
+        dashboard.low_vulnerabilities ?? 0;
+
+    const totalVulnerabilities =
+        critical + high + medium + low;
 
     const recentScans =
         dashboard.recent_scans || [];
 
     const vulnerabilityTrend =
         dashboard.vulnerability_trend || [];
+
+    // =====================================================
+    // SEVERITY DATA
+    // =====================================================
+
+    const severityData = [
+        {
+            name: "Critical",
+            value: critical,
+        },
+        {
+            name: "High",
+            value: high,
+        },
+        {
+            name: "Medium",
+            value: medium,
+        },
+        {
+            name: "Low",
+            value: low,
+        },
+    ];
+
+    const maxSeverityValue =
+        Math.max(
+            ...severityData.map((item) => item.value),
+            1
+        );
+
+    // =====================================================
+    // RENDER
+    // =====================================================
 
     return (
         <div
@@ -111,12 +183,29 @@ function Dashboard() {
             {/* HEADER */}
             {/* ================================================= */}
 
-            <h1>Dashboard</h1>
+            <div
+                style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                }}
+            >
+                <div>
+                    <h1>Dashboard</h1>
 
-            <p>
-                Overview of your cybersecurity projects
-                and vulnerability scans.
-            </p>
+                    <p>
+                        Overview of your cybersecurity projects
+                        and vulnerability scans.
+                    </p>
+                </div>
+
+                <button
+                    type="button"
+                    onClick={handleLogout}
+                >
+                    Logout
+                </button>
+            </div>
 
             <hr />
 
@@ -177,6 +266,27 @@ function Dashboard() {
                         </p>
                     </div>
 
+                    {/* TOTAL VULNERABILITIES */}
+
+                    <div
+                        style={{
+                            border: "1px solid #ccc",
+                            borderRadius: "8px",
+                            padding: "20px",
+                        }}
+                    >
+                        <h3>Total Vulnerabilities</h3>
+
+                        <p
+                            style={{
+                                fontSize: "30px",
+                                fontWeight: "bold",
+                            }}
+                        >
+                            {totalVulnerabilities}
+                        </p>
+                    </div>
+
                     {/* CRITICAL */}
 
                     <div
@@ -194,8 +304,7 @@ function Dashboard() {
                                 fontWeight: "bold",
                             }}
                         >
-                            {dashboard.critical_vulnerabilities ??
-                                0}
+                            {critical}
                         </p>
                     </div>
 
@@ -216,8 +325,7 @@ function Dashboard() {
                                 fontWeight: "bold",
                             }}
                         >
-                            {dashboard.high_vulnerabilities ??
-                                0}
+                            {high}
                         </p>
                     </div>
 
@@ -238,8 +346,7 @@ function Dashboard() {
                                 fontWeight: "bold",
                             }}
                         >
-                            {dashboard.medium_vulnerabilities ??
-                                0}
+                            {medium}
                         </p>
                     </div>
 
@@ -260,15 +367,14 @@ function Dashboard() {
                                 fontWeight: "bold",
                             }}
                         >
-                            {dashboard.low_vulnerabilities ??
-                                0}
+                            {low}
                         </p>
                     </div>
                 </div>
             </section>
 
             {/* ================================================= */}
-            {/* VULNERABILITY DISTRIBUTION */}
+            {/* SEVERITY DISTRIBUTION */}
             {/* ================================================= */}
 
             <section
@@ -279,100 +385,112 @@ function Dashboard() {
                     padding: "20px",
                 }}
             >
-                <h2>Vulnerability Distribution</h2>
+                <h2>Severity Distribution</h2>
 
-                {(() => {
-                    const values = [
-                        dashboard.critical_vulnerabilities || 0,
-                        dashboard.high_vulnerabilities || 0,
-                        dashboard.medium_vulnerabilities || 0,
-                        dashboard.low_vulnerabilities || 0,
-                    ];
-
-                    const maxValue =
-                        Math.max(...values, 1);
-
-                    const data = [
-                        {
-                            name: "Critical",
-                            value:
-                                dashboard.critical_vulnerabilities ||
-                                0,
-                        },
-                        {
-                            name: "High",
-                            value:
-                                dashboard.high_vulnerabilities ||
-                                0,
-                        },
-                        {
-                            name: "Medium",
-                            value:
-                                dashboard.medium_vulnerabilities ||
-                                0,
-                        },
-                        {
-                            name: "Low",
-                            value:
-                                dashboard.low_vulnerabilities ||
-                                0,
-                        },
-                    ];
-
-                    return (
-                        <div style={{ marginTop: "20px" }}>
-                            {data.map((item) => (
+                {totalVulnerabilities === 0 ? (
+                    <p>No vulnerabilities found.</p>
+                ) : (
+                    <div style={{ marginTop: "20px" }}>
+                        {severityData.map((item) => (
+                            <div
+                                key={item.name}
+                                style={{
+                                    marginBottom: "18px",
+                                }}
+                            >
                                 <div
-                                    key={item.name}
                                     style={{
-                                        marginBottom: "18px",
+                                        display: "flex",
+                                        justifyContent:
+                                            "space-between",
+                                        marginBottom: "5px",
+                                    }}
+                                >
+                                    <strong>
+                                        {item.name}
+                                    </strong>
+
+                                    <span>
+                                        {item.value}
+                                    </span>
+                                </div>
+
+                                <div
+                                    style={{
+                                        width: "100%",
+                                        height: "25px",
+                                        background: "#eee",
+                                        borderRadius: "5px",
+                                        overflow: "hidden",
                                     }}
                                 >
                                     <div
                                         style={{
-                                            display: "flex",
-                                            justifyContent:
-                                                "space-between",
-                                            marginBottom: "5px",
+                                            width: `${
+                                                (item.value /
+                                                    maxSeverityValue) *
+                                                100
+                                            }%`,
+                                            height: "100%",
+                                            background: "#555",
+                                            borderRadius: "5px",
                                         }}
-                                    >
-                                        <strong>
-                                            {item.name}
-                                        </strong>
-
-                                        <span>
-                                            {item.value}
-                                        </span>
-                                    </div>
-
-                                    <div
-                                        style={{
-                                            width: "100%",
-                                            height: "25px",
-                                            background:
-                                                "#eee",
-                                            borderRadius:
-                                                "5px",
-                                            overflow:
-                                                "hidden",
-                                        }}
-                                    >
-                                        <div
-                                            style={{
-                                                width: `${(item.value / maxValue) * 100}%`,
-                                                height: "100%",
-                                                background:
-                                                    "#555",
-                                                borderRadius:
-                                                    "5px",
-                                            }}
-                                        />
-                                    </div>
+                                    />
                                 </div>
-                            ))}
-                        </div>
-                    );
-                })()}
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </section>
+
+            {/* ================================================= */}
+            {/* RISK OVERVIEW */}
+            {/* ================================================= */}
+
+            <section
+                style={{
+                    marginTop: "30px",
+                    border: "1px solid #ccc",
+                    borderRadius: "8px",
+                    padding: "20px",
+                }}
+            >
+                <h2>Risk Overview</h2>
+
+                <p>
+                    Current vulnerability counts grouped by
+                    backend-provided severity.
+                </p>
+
+                <div
+                    style={{
+                        display: "grid",
+                        gridTemplateColumns:
+                            "repeat(auto-fit, minmax(180px, 1fr))",
+                        gap: "15px",
+                        marginTop: "20px",
+                    }}
+                >
+                    <div>
+                        <strong>Critical Risk</strong>
+                        <p>{critical}</p>
+                    </div>
+
+                    <div>
+                        <strong>High Risk</strong>
+                        <p>{high}</p>
+                    </div>
+
+                    <div>
+                        <strong>Medium Risk</strong>
+                        <p>{medium}</p>
+                    </div>
+
+                    <div>
+                        <strong>Low Risk</strong>
+                        <p>{low}</p>
+                    </div>
+                </div>
             </section>
 
             {/* ================================================= */}
@@ -400,18 +518,15 @@ function Dashboard() {
                         <table
                             style={{
                                 width: "100%",
-                                borderCollapse:
-                                    "collapse",
+                                borderCollapse: "collapse",
                             }}
                         >
                             <thead>
                                 <tr>
                                     <th
                                         style={{
-                                            textAlign:
-                                                "left",
-                                            padding:
-                                                "10px",
+                                            textAlign: "left",
+                                            padding: "10px",
                                             borderBottom:
                                                 "1px solid #ccc",
                                         }}
@@ -421,10 +536,8 @@ function Dashboard() {
 
                                     <th
                                         style={{
-                                            textAlign:
-                                                "left",
-                                            padding:
-                                                "10px",
+                                            textAlign: "left",
+                                            padding: "10px",
                                             borderBottom:
                                                 "1px solid #ccc",
                                         }}
@@ -434,10 +547,8 @@ function Dashboard() {
 
                                     <th
                                         style={{
-                                            textAlign:
-                                                "left",
-                                            padding:
-                                                "10px",
+                                            textAlign: "left",
+                                            padding: "10px",
                                             borderBottom:
                                                 "1px solid #ccc",
                                         }}
@@ -447,10 +558,8 @@ function Dashboard() {
 
                                     <th
                                         style={{
-                                            textAlign:
-                                                "left",
-                                            padding:
-                                                "10px",
+                                            textAlign: "left",
+                                            padding: "10px",
                                             borderBottom:
                                                 "1px solid #ccc",
                                         }}
@@ -463,59 +572,45 @@ function Dashboard() {
                             <tbody>
                                 {recentScans.map(
                                     (scan, index) => (
-                                        <tr
-                                            key={index}
-                                        >
+                                        <tr key={index}>
                                             <td
                                                 style={{
-                                                    padding:
-                                                        "10px",
+                                                    padding: "10px",
                                                     borderBottom:
                                                         "1px solid #eee",
                                                 }}
                                             >
-                                                {
-                                                    scan.project
-                                                }
+                                                {scan.project}
                                             </td>
 
                                             <td
                                                 style={{
-                                                    padding:
-                                                        "10px",
+                                                    padding: "10px",
                                                     borderBottom:
                                                         "1px solid #eee",
                                                 }}
                                             >
-                                                {
-                                                    scan.date
-                                                }
+                                                {scan.date}
                                             </td>
 
                                             <td
                                                 style={{
-                                                    padding:
-                                                        "10px",
+                                                    padding: "10px",
                                                     borderBottom:
                                                         "1px solid #eee",
                                                 }}
                                             >
-                                                {
-                                                    scan.issues_found
-                                                }
+                                                {scan.issues_found}
                                             </td>
 
                                             <td
                                                 style={{
-                                                    padding:
-                                                        "10px",
+                                                    padding: "10px",
                                                     borderBottom:
                                                         "1px solid #eee",
                                                 }}
                                             >
-                                                {
-                                                    scan.status
-                                                }
+                                                {scan.status}
                                             </td>
                                         </tr>
                                     )
@@ -554,18 +649,15 @@ function Dashboard() {
                         <table
                             style={{
                                 width: "100%",
-                                borderCollapse:
-                                    "collapse",
+                                borderCollapse: "collapse",
                             }}
                         >
                             <thead>
                                 <tr>
                                     <th
                                         style={{
-                                            textAlign:
-                                                "left",
-                                            padding:
-                                                "10px",
+                                            textAlign: "left",
+                                            padding: "10px",
                                             borderBottom:
                                                 "1px solid #ccc",
                                         }}
@@ -575,10 +667,8 @@ function Dashboard() {
 
                                     <th
                                         style={{
-                                            textAlign:
-                                                "left",
-                                            padding:
-                                                "10px",
+                                            textAlign: "left",
+                                            padding: "10px",
                                             borderBottom:
                                                 "1px solid #ccc",
                                         }}
@@ -588,10 +678,8 @@ function Dashboard() {
 
                                     <th
                                         style={{
-                                            textAlign:
-                                                "left",
-                                            padding:
-                                                "10px",
+                                            textAlign: "left",
+                                            padding: "10px",
                                             borderBottom:
                                                 "1px solid #ccc",
                                         }}
@@ -601,10 +689,8 @@ function Dashboard() {
 
                                     <th
                                         style={{
-                                            textAlign:
-                                                "left",
-                                            padding:
-                                                "10px",
+                                            textAlign: "left",
+                                            padding: "10px",
                                             borderBottom:
                                                 "1px solid #ccc",
                                         }}
@@ -614,10 +700,8 @@ function Dashboard() {
 
                                     <th
                                         style={{
-                                            textAlign:
-                                                "left",
-                                            padding:
-                                                "10px",
+                                            textAlign: "left",
+                                            padding: "10px",
                                             borderBottom:
                                                 "1px solid #ccc",
                                         }}
@@ -630,72 +714,55 @@ function Dashboard() {
                             <tbody>
                                 {vulnerabilityTrend.map(
                                     (item, index) => (
-                                        <tr
-                                            key={index}
-                                        >
+                                        <tr key={index}>
                                             <td
                                                 style={{
-                                                    padding:
-                                                        "10px",
+                                                    padding: "10px",
                                                     borderBottom:
                                                         "1px solid #eee",
                                                 }}
                                             >
-                                                {
-                                                    item.date
-                                                }
+                                                {item.date}
                                             </td>
 
                                             <td
                                                 style={{
-                                                    padding:
-                                                        "10px",
+                                                    padding: "10px",
                                                     borderBottom:
                                                         "1px solid #eee",
                                                 }}
                                             >
-                                                {
-                                                    item.critical
-                                                }
+                                                {item.critical ?? 0}
                                             </td>
 
                                             <td
                                                 style={{
-                                                    padding:
-                                                        "10px",
+                                                    padding: "10px",
                                                     borderBottom:
                                                         "1px solid #eee",
                                                 }}
                                             >
-                                                {
-                                                    item.high
-                                                }
+                                                {item.high ?? 0}
                                             </td>
 
                                             <td
                                                 style={{
-                                                    padding:
-                                                        "10px",
+                                                    padding: "10px",
                                                     borderBottom:
                                                         "1px solid #eee",
                                                 }}
                                             >
-                                                {
-                                                    item.medium
-                                                }
+                                                {item.medium ?? 0}
                                             </td>
 
                                             <td
                                                 style={{
-                                                    padding:
-                                                        "10px",
+                                                    padding: "10px",
                                                     borderBottom:
                                                         "1px solid #eee",
                                                 }}
                                             >
-                                                {
-                                                    item.low
-                                                }
+                                                {item.low ?? 0}
                                             </td>
                                         </tr>
                                     )
@@ -713,6 +780,8 @@ function Dashboard() {
             <div
                 style={{
                     marginTop: "30px",
+                    display: "flex",
+                    gap: "10px",
                 }}
             >
                 <button
@@ -720,6 +789,13 @@ function Dashboard() {
                     onClick={fetchDashboard}
                 >
                     Refresh Dashboard
+                </button>
+
+                <button
+                    type="button"
+                    onClick={handleLogout}
+                >
+                    Logout
                 </button>
             </div>
         </div>

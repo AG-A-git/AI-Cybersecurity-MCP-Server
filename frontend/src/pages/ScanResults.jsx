@@ -17,7 +17,8 @@ function ScanResults() {
     // =====================================================
 
     const [severityFilter, setSeverityFilter] = useState("All");
-    const [sortOrder, setSortOrder] = useState("high-to-low");
+    const [typeFilter, setTypeFilter] = useState("All");
+    const [sortOrder, setSortOrder] = useState("severity-high");
 
     // =====================================================
     // NO RESULT
@@ -44,7 +45,11 @@ function ScanResults() {
     // DATA FROM BACKEND
     // =====================================================
 
-    const vulnerabilities = result.vulnerabilities || [];
+    const vulnerabilities = Array.isArray(
+        result.vulnerabilities
+    )
+        ? result.vulnerabilities
+        : [];
 
     const summary = result.summary || {
         critical: 0,
@@ -65,15 +70,53 @@ function ScanResults() {
     };
 
     // =====================================================
-    // FILTER
+    // GET VULNERABILITY TYPE
     // =====================================================
 
-    const filteredVulnerabilities =
+    const getVulnerabilityType = (item) => {
+        return (
+            item.vulnerability_type ||
+            item.vulnerability ||
+            item.type ||
+            "Unknown"
+        );
+    };
+
+    // =====================================================
+    // UNIQUE VULNERABILITY TYPES
+    // =====================================================
+
+    const vulnerabilityTypes = [
+        ...new Set(
+            vulnerabilities.map((item) =>
+                getVulnerabilityType(item)
+            )
+        ),
+    ].sort();
+
+    // =====================================================
+    // FILTER BY SEVERITY
+    // =====================================================
+
+    const severityFiltered =
         severityFilter === "All"
             ? vulnerabilities
             : vulnerabilities.filter(
                   (item) =>
                       item.severity === severityFilter
+              );
+
+    // =====================================================
+    // FILTER BY VULNERABILITY TYPE
+    // =====================================================
+
+    const filteredVulnerabilities =
+        typeFilter === "All"
+            ? severityFiltered
+            : severityFiltered.filter(
+                  (item) =>
+                      getVulnerabilityType(item) ===
+                      typeFilter
               );
 
     // =====================================================
@@ -83,17 +126,127 @@ function ScanResults() {
     const sortedVulnerabilities = [
         ...filteredVulnerabilities,
     ].sort((a, b) => {
-        const rankA =
-            severityRank[a.severity] || 0;
+        // -----------------------------------------------
+        // SEVERITY HIGH TO LOW
+        // -----------------------------------------------
 
-        const rankB =
-            severityRank[b.severity] || 0;
+        if (sortOrder === "severity-high") {
+            const rankA =
+                severityRank[a.severity] || 0;
 
-        if (sortOrder === "high-to-low") {
+            const rankB =
+                severityRank[b.severity] || 0;
+
             return rankB - rankA;
         }
 
-        return rankA - rankB;
+        // -----------------------------------------------
+        // SEVERITY LOW TO HIGH
+        // -----------------------------------------------
+
+        if (sortOrder === "severity-low") {
+            const rankA =
+                severityRank[a.severity] || 0;
+
+            const rankB =
+                severityRank[b.severity] || 0;
+
+            return rankA - rankB;
+        }
+
+        // -----------------------------------------------
+        // RISK HIGH TO LOW
+        // -----------------------------------------------
+
+        if (sortOrder === "risk-high") {
+            const riskA =
+                Number(a.risk_score) || 0;
+
+            const riskB =
+                Number(b.risk_score) || 0;
+
+            return riskB - riskA;
+        }
+
+        // -----------------------------------------------
+        // RISK LOW TO HIGH
+        // -----------------------------------------------
+
+        if (sortOrder === "risk-low") {
+            const riskA =
+                Number(a.risk_score) || 0;
+
+            const riskB =
+                Number(b.risk_score) || 0;
+
+            return riskA - riskB;
+        }
+
+        // -----------------------------------------------
+        // FILE NAME A-Z
+        // -----------------------------------------------
+
+        if (sortOrder === "file-az") {
+            const fileA =
+                a.file_name ||
+                a.filename ||
+                "";
+
+            const fileB =
+                b.file_name ||
+                b.filename ||
+                "";
+
+            return fileA.localeCompare(fileB);
+        }
+
+        // -----------------------------------------------
+        // FILE NAME Z-A
+        // -----------------------------------------------
+
+        if (sortOrder === "file-za") {
+            const fileA =
+                a.file_name ||
+                a.filename ||
+                "";
+
+            const fileB =
+                b.file_name ||
+                b.filename ||
+                "";
+
+            return fileB.localeCompare(fileA);
+        }
+
+        // -----------------------------------------------
+        // LINE NUMBER LOW TO HIGH
+        // -----------------------------------------------
+
+        if (sortOrder === "line-low") {
+            const lineA =
+                Number(a.line_number) || 0;
+
+            const lineB =
+                Number(b.line_number) || 0;
+
+            return lineA - lineB;
+        }
+
+        // -----------------------------------------------
+        // LINE NUMBER HIGH TO LOW
+        // -----------------------------------------------
+
+        if (sortOrder === "line-high") {
+            const lineA =
+                Number(a.line_number) || 0;
+
+            const lineB =
+                Number(b.line_number) || 0;
+
+            return lineB - lineA;
+        }
+
+        return 0;
     });
 
     // =====================================================
@@ -105,7 +258,10 @@ function ScanResults() {
             state: {
                 vulnerability: vulnerability,
                 projectId: projectId,
-                fileName: result?.filename,
+                fileName:
+                    vulnerability.file_name ||
+                    vulnerability.filename ||
+                    result.filename,
             },
         });
     };
@@ -126,6 +282,16 @@ function ScanResults() {
         navigate("/projects");
     };
 
+    // =====================================================
+    // RESET FILTERS
+    // =====================================================
+
+    const handleResetFilters = () => {
+        setSeverityFilter("All");
+        setTypeFilter("All");
+        setSortOrder("severity-high");
+    };
+
     return (
         <div
             style={{
@@ -141,7 +307,8 @@ function ScanResults() {
             <h1>Scan Results</h1>
 
             <p>
-                Security analysis results for the uploaded source file.
+                Security analysis results for the uploaded
+                source file.
             </p>
 
             <hr />
@@ -167,7 +334,9 @@ function ScanResults() {
 
                 <p>
                     <strong>Project ID:</strong>{" "}
-                    {projectId || result.project_id || "N/A"}
+                    {projectId ||
+                        result.project_id ||
+                        "N/A"}
                 </p>
 
                 <p>
@@ -342,7 +511,9 @@ function ScanResults() {
                         alignItems: "center",
                     }}
                 >
-                    {/* FILTER */}
+                    {/* ================================================= */}
+                    {/* SEVERITY FILTER */}
+                    {/* ================================================= */}
 
                     <div>
                         <label htmlFor="severityFilter">
@@ -386,7 +557,50 @@ function ScanResults() {
                         </select>
                     </div>
 
+                    {/* ================================================= */}
+                    {/* VULNERABILITY TYPE FILTER */}
+                    {/* ================================================= */}
+
+                    <div>
+                        <label htmlFor="typeFilter">
+                            <strong>
+                                Vulnerability Type:
+                            </strong>
+                        </label>
+
+                        <select
+                            id="typeFilter"
+                            value={typeFilter}
+                            onChange={(e) =>
+                                setTypeFilter(
+                                    e.target.value
+                                )
+                            }
+                            style={{
+                                marginLeft: "10px",
+                                padding: "6px",
+                            }}
+                        >
+                            <option value="All">
+                                All
+                            </option>
+
+                            {vulnerabilityTypes.map(
+                                (type) => (
+                                    <option
+                                        key={type}
+                                        value={type}
+                                    >
+                                        {type}
+                                    </option>
+                                )
+                            )}
+                        </select>
+                    </div>
+
+                    {/* ================================================= */}
                     {/* SORT */}
+                    {/* ================================================= */}
 
                     <div>
                         <label htmlFor="sortOrder">
@@ -408,15 +622,50 @@ function ScanResults() {
                                 padding: "6px",
                             }}
                         >
-                            <option value="high-to-low">
+                            <option value="severity-high">
                                 Highest Severity First
                             </option>
 
-                            <option value="low-to-high">
+                            <option value="severity-low">
                                 Lowest Severity First
+                            </option>
+
+                            <option value="risk-high">
+                                Highest Risk First
+                            </option>
+
+                            <option value="risk-low">
+                                Lowest Risk First
+                            </option>
+
+                            <option value="file-az">
+                                File Name A-Z
+                            </option>
+
+                            <option value="file-za">
+                                File Name Z-A
+                            </option>
+
+                            <option value="line-low">
+                                Line Number Low to High
+                            </option>
+
+                            <option value="line-high">
+                                Line Number High to Low
                             </option>
                         </select>
                     </div>
+
+                    {/* ================================================= */}
+                    {/* RESET */}
+                    {/* ================================================= */}
+
+                    <button
+                        type="button"
+                        onClick={handleResetFilters}
+                    >
+                        Reset Filters
+                    </button>
                 </div>
             </section>
 
@@ -438,7 +687,11 @@ function ScanResults() {
                     <strong>
                         {sortedVulnerabilities.length}
                     </strong>{" "}
-                    vulnerability/vulnerabilities.
+                    of{" "}
+                    <strong>
+                        {vulnerabilities.length}
+                    </strong>{" "}
+                    vulnerabilities.
                 </p>
 
                 {sortedVulnerabilities.length === 0 ? (
@@ -449,19 +702,32 @@ function ScanResults() {
                             padding: "25px",
                         }}
                     >
-                        <h3>No vulnerabilities found</h3>
+                        <h3>
+                            No vulnerabilities found
+                        </h3>
 
                         <p>
                             No vulnerabilities match
-                            the selected filter.
+                            the selected filters.
                         </p>
+
+                        <button
+                            type="button"
+                            onClick={handleResetFilters}
+                        >
+                            Reset Filters
+                        </button>
                     </div>
                 ) : (
                     <div>
                         {sortedVulnerabilities.map(
                             (item, index) => (
                                 <div
-                                    key={`${item.vulnerability_type || item.vulnerability}-${index}`}
+                                    key={`${
+                                        getVulnerabilityType(
+                                            item
+                                        )
+                                    }-${index}`}
                                     style={{
                                         border: "1px solid #ccc",
                                         borderRadius: "8px",
@@ -474,9 +740,9 @@ function ScanResults() {
                                     {/* ================================================= */}
 
                                     <h3>
-                                        {item.vulnerability_type ||
-                                            item.vulnerability ||
-                                            "Unknown Vulnerability"}
+                                        {getVulnerabilityType(
+                                            item
+                                        )}
                                     </h3>
 
                                     {/* ================================================= */}
@@ -500,7 +766,7 @@ function ScanResults() {
                                     </p>
 
                                     {/* ================================================= */}
-                                    {/* RISK INFORMATION */}
+                                    {/* RISK */}
                                     {/* ================================================= */}
 
                                     <p>
@@ -522,7 +788,33 @@ function ScanResults() {
                                     </p>
 
                                     {/* ================================================= */}
-                                    {/* OWASP / CWE */}
+                                    {/* FILE */}
+                                    {/* ================================================= */}
+
+                                    <p>
+                                        <strong>
+                                            File:
+                                        </strong>{" "}
+                                        {item.file_name ||
+                                            item.filename ||
+                                            result.filename ||
+                                            "N/A"}
+                                    </p>
+
+                                    {/* ================================================= */}
+                                    {/* LINE */}
+                                    {/* ================================================= */}
+
+                                    <p>
+                                        <strong>
+                                            Line:
+                                        </strong>{" "}
+                                        {item.line_number ??
+                                            "N/A"}
+                                    </p>
+
+                                    {/* ================================================= */}
+                                    {/* OWASP */}
                                     {/* ================================================= */}
 
                                     <p>
@@ -532,6 +824,10 @@ function ScanResults() {
                                         {item.owasp ||
                                             "N/A"}
                                     </p>
+
+                                    {/* ================================================= */}
+                                    {/* CWE */}
+                                    {/* ================================================= */}
 
                                     <p>
                                         <strong>

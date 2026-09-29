@@ -1,4 +1,6 @@
-function LoadingState({ message = "Loading..." }) {
+function LoadingState({
+    message = "Loading...",
+}) {
     return (
         <div
             style={{
@@ -14,7 +16,8 @@ function LoadingState({ message = "Loading..." }) {
                     borderTop: "4px solid #333",
                     borderRadius: "50%",
                     margin: "0 auto 20px",
-                    animation: "spin 1s linear infinite",
+                    animation:
+                        "spin 1s linear infinite",
                 }}
             />
 

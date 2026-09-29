@@ -1,24 +1,23 @@
 function EmptyState({
     title = "No data found",
-    message = "There is nothing to display yet.",
-    buttonText,
+    message = "",
+    buttonText = "",
     onButtonClick,
 }) {
     return (
         <div
             style={{
-                padding: "40px",
+                padding: "30px",
                 textAlign: "center",
                 border: "1px solid #ddd",
                 borderRadius: "8px",
-                marginTop: "20px",
             }}
         >
-            <h2>{title}</h2>
+            <h3>{title}</h3>
 
-            <p>{message}</p>
+            {message && <p>{message}</p>}
 
-            {buttonText && onButtonClick && (
+            {buttonText && (
                 <button
                     type="button"
                     onClick={onButtonClick}

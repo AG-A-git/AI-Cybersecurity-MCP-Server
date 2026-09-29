@@ -96,7 +96,14 @@ function Projects() {
     // =====================================================
 
     const handleOpenProject = (projectId) => {
-        navigate(`/projects/${projectId}`);
+        // Store selected project
+        localStorage.setItem(
+            "selected_project_id",
+            String(projectId)
+        );
+
+        // Open existing upload page
+        navigate("/upload");
     };
 
     // =====================================================
@@ -104,7 +111,15 @@ function Projects() {
     // =====================================================
 
     const handleScan = (projectId) => {
-        navigate(`/projects/${projectId}/scan`);
+        // Store selected project
+        localStorage.setItem(
+            "selected_project_id",
+            String(projectId)
+        );
+
+        // Go to upload page where user can select
+        // source code and start the security scan
+        navigate("/upload");
     };
 
     return (
@@ -175,7 +190,9 @@ function Projects() {
                     type="submit"
                     disabled={loading}
                 >
-                    {loading ? "Creating..." : "Create Project"}
+                    {loading
+                        ? "Creating..."
+                        : "Create Project"}
                 </button>
 
             </form>
@@ -215,7 +232,8 @@ function Projects() {
                     <p>No projects found.</p>
 
                     <p>
-                        Create your first project to start scanning.
+                        Create your first project to start
+                        scanning.
                     </p>
                 </div>
             ) : (
@@ -241,7 +259,9 @@ function Projects() {
                             {/* DESCRIPTION */}
 
                             <p>
-                                <strong>Description:</strong>{" "}
+                                <strong>
+                                    Description:
+                                </strong>{" "}
                                 {project.description ||
                                     "No description"}
                             </p>
@@ -249,21 +269,27 @@ function Projects() {
                             {/* PROJECT ID */}
 
                             <p>
-                                <strong>Project ID:</strong>{" "}
+                                <strong>
+                                    Project ID:
+                                </strong>{" "}
                                 {project.id}
                             </p>
 
                             {/* OWNER */}
 
                             <p>
-                                <strong>Owner ID:</strong>{" "}
+                                <strong>
+                                    Owner ID:
+                                </strong>{" "}
                                 {project.owner_id}
                             </p>
 
                             {/* CREATED DATE */}
 
                             <p>
-                                <strong>Created:</strong>{" "}
+                                <strong>
+                                    Created:
+                                </strong>{" "}
                                 {project.created_at
                                     ? new Date(
                                         project.created_at
@@ -281,6 +307,8 @@ function Projects() {
                                 }}
                             >
 
+                                {/* OPEN PROJECT */}
+
                                 <button
                                     onClick={() =>
                                         handleOpenProject(
@@ -291,9 +319,13 @@ function Projects() {
                                     Open Project
                                 </button>
 
+                                {/* SCAN */}
+
                                 <button
                                     onClick={() =>
-                                        handleScan(project.id)
+                                        handleScan(
+                                            project.id
+                                        )
                                     }
                                 >
                                     Scan

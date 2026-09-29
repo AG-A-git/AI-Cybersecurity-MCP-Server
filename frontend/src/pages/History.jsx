@@ -14,10 +14,6 @@ function History() {
     const [error, setError] = useState("");
     const [search, setSearch] = useState("");
 
-    // =====================================================
-    // FETCH HISTORY
-    // =====================================================
-
     const fetchHistory = async () => {
         try {
             setLoading(true);
@@ -27,12 +23,9 @@ function History() {
 
             console.log("Scan history:", response.data);
 
-            setHistory(response.data || []);
+            setHistory(Array.isArray(response.data) ? response.data : []);
         } catch (error) {
-            console.error(
-                "Failed to fetch scan history:",
-                error
-            );
+            console.error("Failed to fetch scan history:", error);
 
             setError(
                 error.userMessage ||
@@ -44,80 +37,63 @@ function History() {
         }
     };
 
-    // =====================================================
-    // INITIAL LOAD
-    // =====================================================
-
     useEffect(() => {
         fetchHistory();
     }, []);
 
-    // =====================================================
-    // SEARCH
-    // =====================================================
-
     const filteredHistory = history.filter((item) => {
-        const searchText =
-            search.toLowerCase().trim();
+        const searchText = search.toLowerCase().trim();
 
         if (!searchText) {
             return true;
         }
 
-        const projectName =
-            item.project_name || "";
-
-        const fileName =
-            item.filename || "";
-
-        const status =
-            item.status || "";
+        const projectName = item.project_name || "";
+        const fileName = item.filename || "";
+        const status = item.status || "";
 
         return (
-            projectName
-                .toLowerCase()
-                .includes(searchText) ||
-            fileName
-                .toLowerCase()
-                .includes(searchText) ||
-            status
-                .toLowerCase()
-                .includes(searchText)
+            projectName.toLowerCase().includes(searchText) ||
+            fileName.toLowerCase().includes(searchText) ||
+            status.toLowerCase().includes(searchText)
         );
     });
-
-    // =====================================================
-    // OPEN PROJECT
-    // =====================================================
 
     const handleOpenProject = (projectId) => {
         localStorage.setItem(
             "selected_project_id",
-            projectId
+            String(projectId)
         );
 
         navigate("/upload");
     };
 
-    // =====================================================
-    // LOADING
-    // =====================================================
+    const handleViewResults = (item) => {
+        /*
+         * The /scans API currently returns only:
+         * id, project_id, project_name, filename, status.
+         *
+         * Therefore we do not invent vulnerability/risk data here.
+         *
+         * Open the project so the user can continue the workflow.
+         */
+        localStorage.setItem(
+            "selected_project_id",
+            String(item.project_id)
+        );
+
+        navigate("/upload");
+    };
 
     if (loading) {
         return (
             <div style={{ padding: "30px" }}>
                 <h1>Scan History</h1>
 
-                <LoadingState
-                    message="Loading scan history..."
-                />
+                <LoadingState message="Loading scan history..." />
             </div>
         );
     }
-
-    // =====================================================
-    // ERROR
-    // =====================================================
 
     if (error) {
         return (
@@ -146,8 +122,6 @@ function History() {
                 margin: "0 auto",
             }}
         >
-            {/* HEADER */}
-
             <h1>Scan History</h1>
 
             <p>
@@ -156,13 +130,8 @@ function History() {
 
             <hr />
 
-            {/* SEARCH */}
-
-            <section
-                style={{
-                    marginTop: "25px",
-                }}
-            >
+            {/* Search */}
+            <section style={{ marginTop: "25px" }}>
                 <label htmlFor="historySearch">
                     <strong>Search scans</strong>
                 </label>
@@ -186,13 +155,8 @@ function History() {
                 />
             </section>
 
-            {/* REFRESH */}
-
-            <div
-                style={{
-                    marginTop: "20px",
-                }}
-            >
+            {/* Refresh */}
+            <div style={{ marginTop: "20px" }}>
                 <button
                     type="button"
                     onClick={fetchHistory}
@@ -201,8 +165,7 @@ function History() {
                 </button>
             </div>
 
-            {/* EMPTY */}
-
+            {/* No history */}
             {history.length === 0 ? (
                 <EmptyState
                     title="No scans found"
@@ -214,13 +177,7 @@ function History() {
                 />
             ) : (
                 <>
-                    {/* RESULT COUNT */}
-
-                    <p
-                        style={{
-                            marginTop: "30px",
-                        }}
-                    >
+                    <p style={{ marginTop: "30px" }}>
                         Showing{" "}
                         <strong>
                             {filteredHistory.length}
@@ -232,16 +189,12 @@ function History() {
                         scans.
                     </p>
 
-                    {/* NO SEARCH RESULTS */}
-
                     {filteredHistory.length === 0 ? (
                         <EmptyState
                             title="No matching scans"
                             message="Try a different search term."
                         />
                     ) : (
-                        /* TABLE */
-
                         <div
                             style={{
                                 marginTop: "20px",
@@ -251,87 +204,32 @@ function History() {
                             <table
                                 style={{
                                     width: "100%",
-                                    borderCollapse:
-                                        "collapse",
+                                    borderCollapse: "collapse",
                                 }}
                             >
                                 <thead>
                                     <tr>
-                                        <th
-                                            style={{
-                                                textAlign:
-                                                    "left",
-                                                padding:
-                                                    "12px",
-                                                borderBottom:
-                                                    "2px solid #ccc",
-                                            }}
-                                        >
+                                        <th style={{ padding: "10px" }}>
                                             #
                                         </th>
 
-                                        <th
-                                            style={{
-                                                textAlign:
-                                                    "left",
-                                                padding:
-                                                    "12px",
-                                                borderBottom:
-                                                    "2px solid #ccc",
-                                            }}
-                                        >
+                                        <th style={{ padding: "10px" }}>
+                                            Scan ID
+                                        </th>
+
+                                        <th style={{ padding: "10px" }}>
                                             Project
                                         </th>
 
-                                        <th
-                                            style={{
-                                                textAlign:
-                                                    "left",
-                                                padding:
-                                                    "12px",
-                                                borderBottom:
-                                                    "2px solid #ccc",
-                                            }}
-                                        >
+                                        <th style={{ padding: "10px" }}>
                                             File
                                         </th>
 
-                                        <th
-                                            style={{
-                                                textAlign:
-                                                    "left",
-                                                padding:
-                                                    "12px",
-                                                borderBottom:
-                                                    "2px solid #ccc",
-                                            }}
-                                        >
-                                            Project ID
-                                        </th>
-
-                                        <th
-                                            style={{
-                                                textAlign:
-                                                    "left",
-                                                padding:
-                                                    "12px",
-                                                borderBottom:
-                                                    "2px solid #ccc",
-                                            }}
-                                        >
+                                        <th style={{ padding: "10px" }}>
                                             Status
                                         </th>
 
-                                        <th
-                                            style={{
-                                                textAlign:
-                                                    "left",
-                                                padding:
-                                                    "12px",
-                                                borderBottom:
-                                                    "2px solid #ccc",
-                                            }}
-                                        >
+                                        <th style={{ padding: "10px" }}>
                                             Action
                                         </th>
                                     </tr>
@@ -348,10 +246,7 @@ function History() {
                                             >
                                                 <td
                                                     style={{
-                                                        padding:
-                                                            "12px",
-                                                        borderBottom:
-                                                            "1px solid #eee",
+                                                        padding: "10px",
                                                     }}
                                                 >
                                                     {index + 1}
@@ -359,10 +254,15 @@ function History() {
 
                                                 <td
                                                     style={{
-                                                        padding:
-                                                            "12px",
-                                                        borderBottom:
-                                                            "1px solid #eee",
+                                                        padding: "10px",
+                                                    }}
+                                                >
+                                                    #{item.id}
+                                                </td>
+
+                                                <td
+                                                    style={{
+                                                        padding: "10px",
                                                     }}
                                                 >
                                                     {item.project_name ||
@@ -371,10 +271,7 @@ function History() {
 
                                                 <td
                                                     style={{
-                                                        padding:
-                                                            "12px",
-                                                        borderBottom:
-                                                            "1px solid #eee",
+                                                        padding: "10px",
                                                     }}
                                                 >
                                                     {item.filename ||
@@ -383,36 +280,31 @@ function History() {
 
                                                 <td
                                                     style={{
-                                                        padding:
-                                                            "12px",
-                                                        borderBottom:
-                                                            "1px solid #eee",
-                                                    }}
-                                                >
-                                                    {item.project_id ||
-                                                        "N/A"}
-                                                </td>
-
-                                                <td
-                                                    style={{
-                                                        padding:
-                                                            "12px",
-                                                        borderBottom:
-                                                            "1px solid #eee",
+                                                        padding: "10px",
                                                     }}
                                                 >
                                                     {item.status ||
-                                                        "Completed"}
+                                                        "Unknown"}
                                                 </td>
 
                                                 <td
                                                     style={{
-                                                        padding:
-                                                            "12px",
-                                                        borderBottom:
-                                                            "1px solid #eee",
+                                                        padding: "10px",
                                                     }}
                                                 >
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            handleViewResults(
+                                                                item
+                                                            )
+                                                        }
+                                                    >
+                                                        View Results
+                                                    </button>
+
+                                                    {" "}
+
                                                     <button
                                                         type="button"
                                                         onClick={() =>
