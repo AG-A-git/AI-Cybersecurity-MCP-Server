@@ -1,6 +1,7 @@
 import re
 
 from scanner.context import build_rule_context, get_source_context
+from scanner.evidence import build_evidence
 from scanner.finding import create_finding
 
 
@@ -29,6 +30,30 @@ SQL_PATTERNS = [
         re.IGNORECASE
     ),
 ]
+
+
+def _extract_concatenated_variable(line):
+    """
+    Extract the variable/expression appearing after '+'.
+
+    Example:
+
+        query = "SELECT * FROM users WHERE name='" + username
+
+    Returns:
+
+        username
+    """
+
+    match = re.search(
+        r'\+\s*([A-Za-z_][A-Za-z0-9_\.]*)',
+        line
+    )
+
+    if match:
+        return match.group(1)
+
+    return None
 
 
 def scan_sql(file_path):
@@ -73,6 +98,22 @@ def scan_sql(file_path):
 
             if pattern.search(line):
 
+                tainted_variable = _extract_concatenated_variable(
+                    line
+                )
+
+                evidence = build_evidence(
+                    source=tainted_variable,
+                    source_line=line_number,
+                    tainted_variable=tainted_variable,
+                    sink="SQL statement construction",
+                    sink_line=line_number,
+                    reason=(
+                        "SQL statement contains string concatenation "
+                        "with a variable or expression."
+                    ),
+                )
+
                 finding = create_finding(
                     file_name=file_path,
                     line_number=line_number,
@@ -81,7 +122,8 @@ def scan_sql(file_path):
                     confidence=95,
                     code=line.strip(),
                     owasp="A03: Injection",
-                    cwe="CWE-89"
+                    cwe="CWE-89",
+                    evidence=evidence
                 )
 
                 finding["source_context"] = get_source_context(

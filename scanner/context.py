@@ -32,6 +32,8 @@ def build_rule_context(file_path):
     imports = []
     functions = []
     variables = {}
+    references = {}
+    variable_lines = {}
 
     if language == "python":
         try:
@@ -39,6 +41,9 @@ def build_rule_context(file_path):
 
             for node in ast.walk(tree):
 
+                # --------------------------------------------------
+                # Imports
+                # --------------------------------------------------
                 if isinstance(node, (ast.Import, ast.ImportFrom)):
                     import_text = ast.get_source_segment(
                         source,
@@ -48,12 +53,18 @@ def build_rule_context(file_path):
                     if import_text:
                         imports.append(import_text)
 
+                # --------------------------------------------------
+                # Functions
+                # --------------------------------------------------
                 elif isinstance(
                     node,
                     (ast.FunctionDef, ast.AsyncFunctionDef)
                 ):
                     functions.append(node.name)
 
+                # --------------------------------------------------
+                # Variable assignments
+                # --------------------------------------------------
                 elif isinstance(node, ast.Assign):
 
                     value = ast.get_source_segment(
@@ -61,10 +72,27 @@ def build_rule_context(file_path):
                         node.value
                     ) or ""
 
+                    # Find variables referenced by the assigned value.
+                    #
+                    # Example:
+                    #   username = request.args.get("username")
+                    #   query = "SELECT ..." + username
+                    #
+                    # This produces:
+                    #   references["username"] == ["request"]
+                    #   references["query"] == ["username"]
+                    referenced_names = [
+                        child.id
+                        for child in ast.walk(node.value)
+                        if isinstance(child, ast.Name)
+                    ]
+
                     for target in node.targets:
 
                         if isinstance(target, ast.Name):
                             variables[target.id] = value
+                            references[target.id] = referenced_names
+                            variable_lines[target.id] = node.lineno
 
         except SyntaxError:
             # Context creation must not crash scanning.
@@ -78,6 +106,8 @@ def build_rule_context(file_path):
         "imports": imports,
         "functions": functions,
         "variables": variables,
+        "references": references,
+        "variable_lines": variable_lines,
     }
 
 

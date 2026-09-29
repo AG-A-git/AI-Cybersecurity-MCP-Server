@@ -87,6 +87,20 @@ def validate_finding(finding):
             f"Invalid severity: {finding['severity']}"
         )
 
+    # --------------------------------------------------------
+    # Validate optional evidence
+    # --------------------------------------------------------
+
+    if "evidence" in finding:
+
+        if not isinstance(
+            finding["evidence"],
+            dict
+        ):
+            raise ValueError(
+                "evidence must be a dictionary"
+            )
+
     return finding
 
 
@@ -102,13 +116,21 @@ def create_finding(
     confidence,
     code,
     owasp,
-    cwe
+    cwe,
+    evidence=None
 ):
     """
     Create a standardized vulnerability finding.
 
     All scanner rules should use this helper so that
     vulnerability output remains consistent.
+
+    The evidence field is optional and is intended for
+    context-aware analysis such as:
+
+        source -> variable -> sink
+
+    Existing scanner rules do not need to provide evidence.
     """
 
     finding = {
@@ -121,6 +143,13 @@ def create_finding(
         "owasp": owasp,
         "cwe": cwe
     }
+
+    # --------------------------------------------------------
+    # Optional evidence
+    # --------------------------------------------------------
+
+    if evidence is not None:
+        finding["evidence"] = evidence
 
     # Validate before returning the finding.
     return validate_finding(finding)
