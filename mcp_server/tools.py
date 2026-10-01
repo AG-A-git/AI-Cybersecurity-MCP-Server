@@ -32,7 +32,9 @@ def run_ai_analysis(scanner_result):
         code=scanner_result["code"]
     )
 
-    return analyze_finding(finding)
+    # analyze_finding expects the standardized finding
+    # as a mapping/dictionary.
+    return analyze_finding(finding.model_dump())
 
 
 # ======================================================

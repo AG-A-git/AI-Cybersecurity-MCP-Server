@@ -634,11 +634,7 @@ def analyze_vulnerability(
             vulnerability
         )
 
-    except Exception as exc:
-
-        print(
-            f"Unexpected AI analysis error: {exc}"
-        )
+    except Exception:
 
         result["recommendation"] = (
             "AI analysis could not be started."
@@ -657,19 +653,7 @@ def analyze_vulnerability(
             client=client,
         )
 
-        print(
-            "\nRaw AI Analysis:"
-        )
-
-        print(
-            raw_response
-        )
-
-    except TimeoutError as exc:
-
-        print(
-            f"AI service failed: {exc}"
-        )
+    except TimeoutError:
 
         result["ai_status"] = "failed"
 
@@ -679,11 +663,7 @@ def analyze_vulnerability(
 
         return result
 
-    except Exception as exc:
-
-        print(
-            f"Unexpected AI analysis error: {exc}"
-        )
+    except Exception:
 
         result["ai_status"] = "failed"
 
@@ -703,11 +683,7 @@ def analyze_vulnerability(
             raw_response
         )
 
-    except ValueError as exc:
-
-        print(
-            f"AI response is not valid JSON: {exc}"
-        )
+    except ValueError:
 
         result["ai_status"] = "failed"
 
@@ -727,11 +703,7 @@ def analyze_vulnerability(
             **ai_data
         )
 
-    except Exception as exc:
-
-        print(
-            f"AI response validation failed: {exc}"
-        )
+    except Exception:
 
         result["ai_status"] = "failed"
 
@@ -774,27 +746,11 @@ def analyze_vulnerability(
     )
 
     # --------------------------------------------------
-    # Use AI severity if valid
+    # AI severity is intentionally not used to
+    # overwrite the authoritative scanner severity.
+    #
+    # Risk score and risk level remain based on the
+    # deterministic calculation above.
     # --------------------------------------------------
-
-    ai_severity = ai_analysis.get(
-        "severity"
-    )
-
-    if isinstance(
-        ai_severity,
-        str
-    ):
-
-        ai_severity = ai_severity.strip()
-
-        if ai_severity in {
-            "Critical",
-            "High",
-            "Medium",
-            "Low",
-        }:
-
-            result["severity"] = ai_severity
 
     return result

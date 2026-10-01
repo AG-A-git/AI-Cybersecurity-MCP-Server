@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ai.analysis import analyze_finding
 from ai.utils import format_ai_response
@@ -13,12 +13,12 @@ app = FastAPI(
 
 
 class VulnerabilityRequest(BaseModel):
-    file: str
-    line: int
-    vulnerability: str
-    severity: str
-    confidence: float
-    code: str
+    file: str = Field(..., min_length=1, max_length=500)
+    line: int = Field(..., ge=1)
+    vulnerability: str = Field(..., min_length=1, max_length=200)
+    severity: str = Field(..., min_length=1, max_length=50)
+    confidence: float = Field(..., ge=0, le=100)
+    code: str = Field(..., max_length=10000)
 
 
 class VulnerabilityResponse(BaseModel):
@@ -33,29 +33,13 @@ class VulnerabilityResponse(BaseModel):
     cwe: str
     ai_status: str
     explanation: str | None
-    impact: str | None
     recommendation: str | None
-
-
-@app.get("/")
-def root():
-    return {
-        "message": "AI Cybersecurity MCP Server is running"
-    }
 
 
 @app.post("/analyze", response_model=VulnerabilityResponse)
 def analyze(request: VulnerabilityRequest):
+    finding = request.model_dump()
 
-    scanner_result = {
-        "file": request.file,
-        "line": request.line,
-        "vulnerability": request.vulnerability,
-        "severity": request.severity,
-        "confidence": request.confidence,
-        "code": request.code
-    }
-
-    analysis = analyze_finding(scanner_result)
+    analysis = analyze_finding(finding)
 
     return format_ai_response(analysis)

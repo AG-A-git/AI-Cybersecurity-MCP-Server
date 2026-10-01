@@ -1,9 +1,20 @@
+
 import json
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 
 class AIAnalysis(BaseModel):
+    """
+    Validated structure for AI-generated vulnerability analysis.
+
+    AI output is treated as untrusted data.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid"
+    )
+
     explanation: str
     impact: str
     recommendation: str
@@ -13,10 +24,20 @@ class AIAnalysis(BaseModel):
 def parse_ai_response(response):
     """
     Parse and validate the structured response returned by Ollama.
+
+    AI output is untrusted and must never be treated as executable
+    instructions or authoritative risk information.
     """
 
-    if not response or not response.strip():
-        raise ValueError("AI returned an empty response.")
+    if not isinstance(response, str):
+        raise ValueError(
+            "AI response must be a string."
+        )
+
+    if not response.strip():
+        raise ValueError(
+            "AI returned an empty response."
+        )
 
     response = response.strip()
 
@@ -34,11 +55,11 @@ def parse_ai_response(response):
         data = json.loads(response)
 
     except json.JSONDecodeError as error:
-        print("\nInvalid AI JSON:")
-        print(response)
-
+        # Do not print the complete AI response.
+        # It may contain source code, secrets, prompts,
+        # or other sensitive information.
         raise ValueError(
-            f"AI returned invalid JSON: {error}"
+            "AI returned invalid JSON."
         ) from error
 
     if not isinstance(data, dict):

@@ -66,4 +66,3 @@ if __name__ == "__main__":
         print("\n", vulnerability)
 
         print(result)
-print(get_mapping("Buffer Overflow"))
