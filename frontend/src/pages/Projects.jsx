@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../services/api";
+
+import {
+    getProjects,
+    createProject,
+} from "../services/projectService";
 
 function Projects() {
     const navigate = useNavigate();
@@ -25,7 +29,7 @@ function Projects() {
             setLoadingProjects(true);
             setError("");
 
-            const response = await api.get("/projects/");
+            const response = await getProjects();
 
             console.log("Projects:", response.data);
 
@@ -63,7 +67,7 @@ function Projects() {
         setSuccess("");
 
         try {
-            const response = await api.post("/projects/", {
+            const response = await createProject({
                 name: projectName,
                 description: description,
             });

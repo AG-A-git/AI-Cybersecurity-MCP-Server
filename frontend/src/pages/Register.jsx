@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import api from "../services/api";
+import { registerUser } from "../services/authService";
 
 function Register() {
     const [username, setUsername] = useState("");
@@ -18,7 +18,7 @@ function Register() {
         setLoading(true);
 
         try {
-            await api.post("/register", {
+            await registerUser({
                 username,
                 email,
                 password,

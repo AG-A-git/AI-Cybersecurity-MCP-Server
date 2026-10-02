@@ -34,7 +34,15 @@ api.interceptors.response.use(
 
                 case 401:
                     error.userMessage = "Please login again.";
+
+                    // Remove expired/invalid token
                     localStorage.removeItem("access_token");
+
+                    // Redirect to login page
+                    if (window.location.pathname !== "/login") {
+                        window.location.href = "/login";
+                    }
+
                     break;
 
                 case 403:

@@ -1,25 +1,44 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 function Navbar() {
-  return (
-    <nav
-      style={{
-        background: "#2563eb",
-        color: "white",
-        padding: "15px",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-      }}
-    >
-      <h2>AI Cybersecurity MCP</h2>
+    const navigate = useNavigate();
 
-      <Link to="/login" style={{ color: "white", textDecoration: "none" }}>
-        Logout
-      </Link>
-    </nav>
-  );
+    const handleLogout = () => {
+        localStorage.removeItem("access_token");
+        navigate("/login");
+    };
+
+    return (
+        <nav
+            style={{
+                background: "#2563eb",
+                color: "white",
+                padding: "15px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+            }}
+        >
+            <h2>AI Cybersecurity MCP</h2>
+
+            <button
+                type="button"
+                onClick={handleLogout}
+                style={{
+                    background: "transparent",
+                    border: "1px solid white",
+                    color: "white",
+                    padding: "8px 14px",
+                    borderRadius: "5px",
+                    cursor: "pointer",
+                }}
+            >
+                Logout
+            </button>
+        </nav>
+    );
 }
 
 export default Navbar;
+

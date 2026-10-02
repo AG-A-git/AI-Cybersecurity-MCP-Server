@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../services/api";
+
+import { getProjects } from "../services/projectService";
+import { uploadAndScan } from "../services/scanService";
+
 import LoadingState from "../components/LoadingState";
 import EmptyState from "../components/EmptyState";
 
@@ -17,13 +20,16 @@ function Upload() {
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
 
-    // Fetch projects
+    // =====================================================
+    // FETCH PROJECTS
+    // =====================================================
+
     const fetchProjects = async () => {
         try {
             setLoadingProjects(true);
             setError("");
 
-            const response = await api.get("/projects/");
+            const response = await getProjects();
 
             console.log("Projects:", response.data);
 
@@ -31,7 +37,9 @@ function Upload() {
 
             // Restore previously selected project
             const selectedProjectId =
-                localStorage.getItem("selected_project_id");
+                localStorage.getItem(
+                    "selected_project_id"
+                );
 
             if (selectedProjectId) {
                 const selectedProjectExists =
@@ -65,7 +73,10 @@ function Upload() {
         fetchProjects();
     }, []);
 
-    // Project selection
+    // =====================================================
+    // PROJECT SELECTION
+    // =====================================================
+
     const handleProjectChange = (e) => {
         const selectedId = e.target.value;
 
@@ -86,7 +97,10 @@ function Upload() {
         setSuccess("");
     };
 
-    // File selection
+    // =====================================================
+    // FILE SELECTION
+    // =====================================================
+
     const handleFileChange = (e) => {
         const selectedFile = e.target.files[0];
 
@@ -95,7 +109,10 @@ function Upload() {
         setSuccess("");
     };
 
-    // Upload and scan
+    // =====================================================
+    // UPLOAD AND SCAN
+    // =====================================================
+
     const handleUpload = async (e) => {
         e.preventDefault();
 
@@ -133,16 +150,6 @@ function Upload() {
                 String(projectId)
             );
 
-            // Create multipart form data
-            const formData = new FormData();
-
-            formData.append(
-                "project_id",
-                String(projectId)
-            );
-
-            formData.append("file", file);
-
             console.log(
                 "Sending project_id:",
                 projectId
@@ -153,10 +160,10 @@ function Upload() {
                 file.name
             );
 
-            // Call backend upload API
-            const response = await api.post(
-                "/upload",
-                formData
+            // Call scan service
+            const response = await uploadAndScan(
+                projectId,
+                file
             );
 
             console.log(
@@ -204,6 +211,7 @@ function Upload() {
 
             <form onSubmit={handleUpload}>
                 {/* PROJECT SECTION */}
+
                 <div>
                     <label htmlFor="project">
                         <strong>
@@ -215,12 +223,14 @@ function Upload() {
                     <br />
 
                     {/* Loading projects */}
+
                     {loadingProjects ? (
                         <LoadingState
                             message="Loading projects..."
                         />
                     ) : projects.length === 0 ? (
                         /* No projects */
+
                         <EmptyState
                             title="No projects found"
                             message="Please create a project before uploading source code."
@@ -231,6 +241,7 @@ function Upload() {
                         />
                     ) : (
                         /* Project dropdown */
+
                         <select
                             id="project"
                             value={projectId}
@@ -259,6 +270,7 @@ function Upload() {
                 <br />
 
                 {/* SELECTED PROJECT */}
+
                 {projectId && (
                     <p>
                         <strong>
@@ -269,6 +281,7 @@ function Upload() {
                 )}
 
                 {/* FILE SECTION */}
+
                 <div>
                     <label htmlFor="file">
                         <strong>
@@ -296,6 +309,7 @@ function Upload() {
                 <br />
 
                 {/* SELECTED FILE INFORMATION */}
+
                 {file && (
                     <div>
                         <p>
@@ -320,6 +334,7 @@ function Upload() {
                 <br />
 
                 {/* ERROR */}
+
                 {error && (
                     <div
                         style={{
@@ -351,6 +366,7 @@ function Upload() {
                 )}
 
                 {/* SUCCESS */}
+
                 {success && (
                     <div
                         style={{
@@ -368,6 +384,7 @@ function Upload() {
                 )}
 
                 {/* UPLOAD BUTTON */}
+
                 <button
                     type="submit"
                     disabled={

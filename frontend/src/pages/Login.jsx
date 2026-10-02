@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import api from "../services/api";
+import { loginUser } from "../services/authService";
 
 function Login() {
     const [email, setEmail] = useState("");
@@ -17,7 +17,7 @@ function Login() {
         setLoading(true);
 
         try {
-            const response = await api.post("/login", {
+            const response = await loginUser({
                 email,
                 password,
             });

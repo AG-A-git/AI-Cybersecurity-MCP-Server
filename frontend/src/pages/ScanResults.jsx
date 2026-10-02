@@ -1,5 +1,9 @@
+import { normalizeVulnerability } from "../utils/vulnerabilityUtils";
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+
+import RiskSummary from "../components/RiskSummary";
+import FindingCard from "../components/FindingCard";
 
 function ScanResults() {
     const location = useLocation();
@@ -45,10 +49,10 @@ function ScanResults() {
     // DATA FROM BACKEND
     // =====================================================
 
-    const vulnerabilities = Array.isArray(
-        result.vulnerabilities
-    )
-        ? result.vulnerabilities
+    const vulnerabilities = Array.isArray(result.vulnerabilities)
+        ? result.vulnerabilities.map((item) =>
+              normalizeVulnerability(item, result)
+          )
         : [];
 
     const summary = result.summary || {
@@ -126,10 +130,7 @@ function ScanResults() {
     const sortedVulnerabilities = [
         ...filteredVulnerabilities,
     ].sort((a, b) => {
-        // -----------------------------------------------
-        // SEVERITY HIGH TO LOW
-        // -----------------------------------------------
-
+        // Severity high to low
         if (sortOrder === "severity-high") {
             const rankA =
                 severityRank[a.severity] || 0;
@@ -140,10 +141,7 @@ function ScanResults() {
             return rankB - rankA;
         }
 
-        // -----------------------------------------------
-        // SEVERITY LOW TO HIGH
-        // -----------------------------------------------
-
+        // Severity low to high
         if (sortOrder === "severity-low") {
             const rankA =
                 severityRank[a.severity] || 0;
@@ -154,10 +152,7 @@ function ScanResults() {
             return rankA - rankB;
         }
 
-        // -----------------------------------------------
-        // RISK HIGH TO LOW
-        // -----------------------------------------------
-
+        // Risk high to low
         if (sortOrder === "risk-high") {
             const riskA =
                 Number(a.risk_score) || 0;
@@ -168,10 +163,7 @@ function ScanResults() {
             return riskB - riskA;
         }
 
-        // -----------------------------------------------
-        // RISK LOW TO HIGH
-        // -----------------------------------------------
-
+        // Risk low to high
         if (sortOrder === "risk-low") {
             const riskA =
                 Number(a.risk_score) || 0;
@@ -182,10 +174,7 @@ function ScanResults() {
             return riskA - riskB;
         }
 
-        // -----------------------------------------------
-        // FILE NAME A-Z
-        // -----------------------------------------------
-
+        // File name A-Z
         if (sortOrder === "file-az") {
             const fileA =
                 a.file_name ||
@@ -200,10 +189,7 @@ function ScanResults() {
             return fileA.localeCompare(fileB);
         }
 
-        // -----------------------------------------------
-        // FILE NAME Z-A
-        // -----------------------------------------------
-
+        // File name Z-A
         if (sortOrder === "file-za") {
             const fileA =
                 a.file_name ||
@@ -218,10 +204,7 @@ function ScanResults() {
             return fileB.localeCompare(fileA);
         }
 
-        // -----------------------------------------------
-        // LINE NUMBER LOW TO HIGH
-        // -----------------------------------------------
-
+        // Line number low to high
         if (sortOrder === "line-low") {
             const lineA =
                 Number(a.line_number) || 0;
@@ -232,10 +215,7 @@ function ScanResults() {
             return lineA - lineB;
         }
 
-        // -----------------------------------------------
-        // LINE NUMBER HIGH TO LOW
-        // -----------------------------------------------
-
+        // Line number high to low
         if (sortOrder === "line-high") {
             const lineA =
                 Number(a.line_number) || 0;
@@ -300,9 +280,7 @@ function ScanResults() {
                 margin: "0 auto",
             }}
         >
-            {/* ================================================= */}
             {/* HEADER */}
-            {/* ================================================= */}
 
             <h1>Scan Results</h1>
 
@@ -313,9 +291,7 @@ function ScanResults() {
 
             <hr />
 
-            {/* ================================================= */}
             {/* SCAN INFORMATION */}
-            {/* ================================================= */}
 
             <section
                 style={{
@@ -362,9 +338,7 @@ function ScanResults() {
                 </p>
             </section>
 
-            {/* ================================================= */}
-            {/* SUMMARY */}
-            {/* ================================================= */}
+            {/* VULNERABILITY SUMMARY */}
 
             <section
                 style={{
@@ -381,8 +355,6 @@ function ScanResults() {
                         gap: "15px",
                     }}
                 >
-                    {/* TOTAL */}
-
                     <div
                         style={{
                             border: "1px solid #ccc",
@@ -403,8 +375,6 @@ function ScanResults() {
                         </p>
                     </div>
 
-                    {/* CRITICAL */}
-
                     <div
                         style={{
                             border: "1px solid #ccc",
@@ -423,8 +393,6 @@ function ScanResults() {
                             {summary.critical || 0}
                         </p>
                     </div>
-
-                    {/* HIGH */}
 
                     <div
                         style={{
@@ -445,8 +413,6 @@ function ScanResults() {
                         </p>
                     </div>
 
-                    {/* MEDIUM */}
-
                     <div
                         style={{
                             border: "1px solid #ccc",
@@ -465,8 +431,6 @@ function ScanResults() {
                             {summary.medium || 0}
                         </p>
                     </div>
-
-                    {/* LOW */}
 
                     <div
                         style={{
@@ -489,9 +453,15 @@ function ScanResults() {
                 </div>
             </section>
 
-            {/* ================================================= */}
+            {/* RISK SUMMARY */}
+
+            <RiskSummary
+                summary={summary}
+                riskScore={result.risk_score}
+                riskLevel={result.risk_level}
+            />
+
             {/* FILTER AND SORT */}
-            {/* ================================================= */}
 
             <section
                 style={{
@@ -511,9 +481,7 @@ function ScanResults() {
                         alignItems: "center",
                     }}
                 >
-                    {/* ================================================= */}
                     {/* SEVERITY FILTER */}
-                    {/* ================================================= */}
 
                     <div>
                         <label htmlFor="severityFilter">
@@ -557,9 +525,7 @@ function ScanResults() {
                         </select>
                     </div>
 
-                    {/* ================================================= */}
                     {/* VULNERABILITY TYPE FILTER */}
-                    {/* ================================================= */}
 
                     <div>
                         <label htmlFor="typeFilter">
@@ -598,9 +564,7 @@ function ScanResults() {
                         </select>
                     </div>
 
-                    {/* ================================================= */}
                     {/* SORT */}
-                    {/* ================================================= */}
 
                     <div>
                         <label htmlFor="sortOrder">
@@ -656,9 +620,7 @@ function ScanResults() {
                         </select>
                     </div>
 
-                    {/* ================================================= */}
                     {/* RESET */}
-                    {/* ================================================= */}
 
                     <button
                         type="button"
@@ -669,18 +631,14 @@ function ScanResults() {
                 </div>
             </section>
 
-            {/* ================================================= */}
             {/* VULNERABILITY LIST */}
-            {/* ================================================= */}
 
             <section
                 style={{
                     marginTop: "30px",
                 }}
             >
-                <h2>
-                    Detected Vulnerabilities
-                </h2>
+                <h2>Detected Vulnerabilities</h2>
 
                 <p>
                     Showing{" "}
@@ -722,158 +680,25 @@ function ScanResults() {
                     <div>
                         {sortedVulnerabilities.map(
                             (item, index) => (
-                                <div
-                                    key={`${
-                                        getVulnerabilityType(
+                                <FindingCard
+                                    key={
+                                        item.id ??
+                                        `${getVulnerabilityType(
                                             item
-                                        )
-                                    }-${index}`}
-                                    style={{
-                                        border: "1px solid #ccc",
-                                        borderRadius: "8px",
-                                        padding: "20px",
-                                        marginBottom: "15px",
-                                    }}
-                                >
-                                    {/* ================================================= */}
-                                    {/* TITLE */}
-                                    {/* ================================================= */}
-
-                                    <h3>
-                                        {getVulnerabilityType(
-                                            item
-                                        )}
-                                    </h3>
-
-                                    {/* ================================================= */}
-                                    {/* BASIC INFORMATION */}
-                                    {/* ================================================= */}
-
-                                    <p>
-                                        <strong>
-                                            Severity:
-                                        </strong>{" "}
-                                        {item.severity ||
-                                            "N/A"}
-                                    </p>
-
-                                    <p>
-                                        <strong>
-                                            Status:
-                                        </strong>{" "}
-                                        {item.status ||
-                                            "Open"}
-                                    </p>
-
-                                    {/* ================================================= */}
-                                    {/* RISK */}
-                                    {/* ================================================= */}
-
-                                    <p>
-                                        <strong>
-                                            Risk Score:
-                                        </strong>{" "}
-                                        {item.risk_score ??
-                                            "N/A"}
-                                    </p>
-
-                                    <p>
-                                        <strong>
-                                            Confidence:
-                                        </strong>{" "}
-                                        {item.confidence !==
-                                        undefined
-                                            ? `${item.confidence}%`
-                                            : "N/A"}
-                                    </p>
-
-                                    {/* ================================================= */}
-                                    {/* FILE */}
-                                    {/* ================================================= */}
-
-                                    <p>
-                                        <strong>
-                                            File:
-                                        </strong>{" "}
-                                        {item.file_name ||
-                                            item.filename ||
-                                            result.filename ||
-                                            "N/A"}
-                                    </p>
-
-                                    {/* ================================================= */}
-                                    {/* LINE */}
-                                    {/* ================================================= */}
-
-                                    <p>
-                                        <strong>
-                                            Line:
-                                        </strong>{" "}
-                                        {item.line_number ??
-                                            "N/A"}
-                                    </p>
-
-                                    {/* ================================================= */}
-                                    {/* OWASP */}
-                                    {/* ================================================= */}
-
-                                    <p>
-                                        <strong>
-                                            OWASP:
-                                        </strong>{" "}
-                                        {item.owasp ||
-                                            "N/A"}
-                                    </p>
-
-                                    {/* ================================================= */}
-                                    {/* CWE */}
-                                    {/* ================================================= */}
-
-                                    <p>
-                                        <strong>
-                                            CWE:
-                                        </strong>{" "}
-                                        {item.cwe ||
-                                            "N/A"}
-                                    </p>
-
-                                    {/* ================================================= */}
-                                    {/* DESCRIPTION */}
-                                    {/* ================================================= */}
-
-                                    <p>
-                                        <strong>
-                                            Description:
-                                        </strong>{" "}
-                                        {item.description ||
-                                            item.explanation ||
-                                            "No description available."}
-                                    </p>
-
-                                    {/* ================================================= */}
-                                    {/* VIEW DETAILS */}
-                                    {/* ================================================= */}
-
-                                    <button
-                                        type="button"
-                                        onClick={() =>
-                                            handleViewDetails(
-                                                item
-                                            )
-                                        }
-                                    >
-                                        View Details
-                                    </button>
-                                </div>
+                                        )}-${index}`
+                                    }
+                                    finding={item}
+                                    onViewDetails={
+                                        handleViewDetails
+                                    }
+                                />
                             )
                         )}
                     </div>
                 )}
             </section>
 
-            {/* ================================================= */}
             {/* ACTIONS */}
-            {/* ================================================= */}
 
             <section
                 style={{

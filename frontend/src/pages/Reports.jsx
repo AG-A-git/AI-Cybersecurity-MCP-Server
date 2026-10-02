@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../services/api";
+import { getReports } from "../services/reportService";
 
 import LoadingState from "../components/LoadingState";
 import ErrorState from "../components/ErrorState";
@@ -22,7 +22,7 @@ function Reports() {
             setLoading(true);
             setError("");
 
-            const response = await api.get("/reports");
+            const response = await getReports();
 
             console.log(
                 "Security report:",
