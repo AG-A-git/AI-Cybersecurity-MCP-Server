@@ -48,3 +48,13 @@ def test_findings_are_sorted():
     ]
 
     assert keys == sorted(keys)
+def test_central_scanner_handles_javascript_safe_file():
+    findings = scan_file("tests/false_positive_test.js")
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["vulnerability_type"] == "Cross-Site Scripting (XSS)"
+    ]
+
+    assert not xss_findings

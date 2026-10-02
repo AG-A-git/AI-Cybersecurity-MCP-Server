@@ -94,7 +94,7 @@ debug = True
     assert findings == []
 
 
-def test_variable_based_debug_is_not_detected(tmp_path):
+def test_variable_based_debug_detected_legacy_case(tmp_path):
     source = """
 debug = True
 app.run(debug=debug)
@@ -104,7 +104,8 @@ app.run(debug=debug)
 
     findings = scan_security_misconfiguration(file_path)
 
-    assert findings == []
+    assert len(findings) == 1
+    assert findings[0]["confidence"] == 95
 
 
 def test_generic_config_is_safe(tmp_path):
@@ -132,3 +133,22 @@ app.run(host="127.0.0.1", port=5000, debug=False)
     findings = scan_security_misconfiguration(file_path)
 
     assert findings == []
+def test_variable_based_debug_true_is_detected(tmp_path):
+    source = """
+from flask import Flask
+
+app = Flask(__name__)
+
+debug = True
+app.run(debug=debug)
+"""
+
+    file_path = write_test_file(tmp_path, source)
+
+    findings = scan_security_misconfiguration(file_path)
+
+    assert len(findings) == 1
+    assert findings[0]["vulnerability_type"] == "Security Misconfiguration"
+    assert findings[0]["severity"] == "Medium"
+    assert findings[0]["confidence"] == 95
+    assert findings[0]["code"] == "app.run(debug=debug)"

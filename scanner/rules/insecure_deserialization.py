@@ -1,6 +1,6 @@
 import ast
 
-from scanner.context import build_rule_context, get_source_context
+from scanner.context import build_rule_context, get_source_context, is_variable_derived_from
 from scanner.finding import create_finding
 
 
@@ -86,11 +86,12 @@ def scan_insecure_deserialization(file_path):
             "lines": code.splitlines()
         }
 
-    tainted_variables = set()
+    tainted_source_variables = set()
 
     # ---------------------------------------------------------
-    # Pass 1:
-    # Find variables containing untrusted input.
+    # Find variables containing direct untrusted input.
+    # The shared context helper follows later assignments
+    # recursively when checking the pickle sink.
     # ---------------------------------------------------------
 
     for node in ast.walk(tree):
@@ -107,7 +108,7 @@ def scan_insecure_deserialization(file_path):
         for target in node.targets:
 
             if isinstance(target, ast.Name):
-                tainted_variables.add(target.id)
+                tainted_source_variables.add(target.id)
 
     # ---------------------------------------------------------
     # Pass 2:
@@ -138,10 +139,14 @@ def scan_insecure_deserialization(file_path):
             if is_untrusted_expression(argument):
                 confidence = 90
 
-            # Tainted variable
+            # Variable derived from direct untrusted input.
             elif (
                 isinstance(argument, ast.Name)
-                and argument.id in tainted_variables
+                and is_variable_derived_from(
+                    context,
+                    argument.id,
+                    tainted_source_variables,
+                )
             ):
                 confidence = 90
 

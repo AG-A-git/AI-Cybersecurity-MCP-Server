@@ -1,6 +1,6 @@
 import re
 
-from scanner.context import build_rule_context, get_source_context
+from scanner.context import build_rule_context, get_source_context, is_variable_derived_from
 from scanner.finding import create_finding
 
 
@@ -221,22 +221,19 @@ def scan_input_validation(file_path):
 
         if assigned_variable:
 
-            for variable in list(tainted_variables):
+            if is_variable_derived_from(
+                context,
+                assigned_variable,
+                user_input_variables,
+            ):
+                tainted_variables.add(assigned_variable)
 
-                if assigned_variable == variable:
-                    continue
-
-                if _contains_variable(variable, stripped):
-
-                    tainted_variables.add(assigned_variable)
-
-                    # If the source variable was validated,
-                    # preserve that evidence for the derived
-                    # variable as well.
-                    if variable in validated_variables:
-                        validated_variables.add(
-                            assigned_variable
-                        )
+            if is_variable_derived_from(
+                context,
+                assigned_variable,
+                validated_variables,
+            ):
+                validated_variables.add(assigned_variable)
 
         # ---------------------------------------------------------
         # 3. Detect obvious validation.

@@ -142,3 +142,53 @@ def get_source_context(context, line_number, before=2, after=2):
         "end_line": end,
         "lines": lines[start - 1:end],
     }
+
+
+def is_variable_derived_from(context, variable_name, source_variables, visited=None):
+    """
+    Determine whether a variable ultimately depends on one of the
+    supplied source variables.
+
+    The lookup follows the shared context reference graph recursively.
+    """
+
+    if visited is None:
+        visited = set()
+
+    if variable_name in source_variables:
+        return True
+
+    if variable_name in visited:
+        return False
+
+    visited.add(variable_name)
+
+    references = context.get("references", {})
+
+    for referenced_variable in references.get(variable_name, []):
+        if is_variable_derived_from(
+            context,
+            referenced_variable,
+            source_variables,
+            visited,
+        ):
+            return True
+
+    return False
+
+
+def build_project_context(file_paths):
+    """
+    Build isolated rule contexts for multiple source files.
+
+    Each file keeps its own variable and reference namespace so
+    similarly named variables in different files are not mixed.
+    """
+
+    project_context = {}
+
+    for file_path in file_paths:
+        context = build_rule_context(file_path)
+        project_context[str(file_path)] = context
+
+    return project_context

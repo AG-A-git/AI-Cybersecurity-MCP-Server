@@ -1,11 +1,16 @@
 import re
 
-from scanner.context import build_rule_context, get_source_context
+from scanner.context import build_rule_context, get_source_context, is_variable_derived_from
 from scanner.finding import create_finding
 
 
+USER_INPUT_VARIABLE_NAMES = {
+    "userInput",
+    "user_input",
+}
+
 USER_INPUT_NAMES = re.compile(
-    r'\b(userInput|user_input|input|request|req|data|query|param|parameter|search|message)\b',
+    r'\b(userInput|user_input)\b',
     re.IGNORECASE
 )
 
@@ -66,7 +71,7 @@ def scan_xss(file_path):
             if match:
                 assigned_variable = match.group(1)
 
-                if USER_INPUT_NAMES.search(assigned_variable):
+                if USER_INPUT_NAMES.search(assigned_variable) or is_variable_derived_from(context, assigned_variable, USER_INPUT_VARIABLE_NAMES):
 
                     finding = create_finding(
                         file_name=file_path,

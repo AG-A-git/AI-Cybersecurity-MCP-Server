@@ -95,3 +95,81 @@ def test_invalid_confidence_is_rejected():
 
     except ValueError:
         assert True
+def test_finding_fingerprint_is_deterministic():
+    finding_one = create_finding(
+        vulnerability_type="SSRF",
+        file_name="app.py",
+        line_number=10,
+        severity="High",
+        confidence=85,
+        code="requests.get(url)",
+        owasp="A10: Server-Side Request Forgery",
+        cwe="CWE-918"
+    )
+
+    finding_two = create_finding(
+        vulnerability_type="SSRF",
+        file_name="app.py",
+        line_number=10,
+        severity="High",
+        confidence=85,
+        code="requests.get(url)",
+        owasp="A10: Server-Side Request Forgery",
+        cwe="CWE-918"
+    )
+
+    assert finding_one["fingerprint"] == finding_two["fingerprint"]
+    assert len(finding_one["fingerprint"]) == 64
+
+
+def test_finding_fingerprint_changes_for_different_line():
+    finding_one = create_finding(
+        vulnerability_type="SSRF",
+        file_name="app.py",
+        line_number=10,
+        severity="High",
+        confidence=85,
+        code="requests.get(url)",
+        owasp="A10: Server-Side Request Forgery",
+        cwe="CWE-918"
+    )
+
+    finding_two = create_finding(
+        vulnerability_type="SSRF",
+        file_name="app.py",
+        line_number=11,
+        severity="High",
+        confidence=85,
+        code="requests.get(url)",
+        owasp="A10: Server-Side Request Forgery",
+        cwe="CWE-918"
+    )
+
+    assert finding_one["fingerprint"] != finding_two["fingerprint"]
+
+
+def test_finding_fingerprint_ignores_confidence_and_evidence():
+    finding_one = create_finding(
+        vulnerability_type="SSRF",
+        file_name="app.py",
+        line_number=10,
+        severity="High",
+        confidence=85,
+        code="requests.get(url)",
+        owasp="A10: Server-Side Request Forgery",
+        cwe="CWE-918"
+    )
+
+    finding_two = create_finding(
+        vulnerability_type="SSRF",
+        file_name="app.py",
+        line_number=10,
+        severity="High",
+        confidence=60,
+        code="requests.get(url)",
+        owasp="A10: Server-Side Request Forgery",
+        cwe="CWE-918",
+        evidence={"source": "user_input"}
+    )
+
+    assert finding_one["fingerprint"] == finding_two["fingerprint"]

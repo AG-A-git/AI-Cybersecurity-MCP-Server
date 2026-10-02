@@ -212,3 +212,71 @@ debug = True
     findings = scan_authentication_access_control(file_path)
 
     assert findings == []
+def test_fastapi_router_delete_without_authorization(tmp_path):
+    source = """
+from fastapi import APIRouter
+
+router = APIRouter()
+
+@router.delete("/users/{user_id}")
+def delete_user(user_id):
+    db.delete(user_id)
+    return {"message": "deleted"}
+"""
+
+    file_path = write_test_file(tmp_path, source)
+    findings = scan_authentication_access_control(file_path)
+
+    access_findings = [
+        finding
+        for finding in findings
+        if finding["vulnerability_type"]
+        == "Potential Broken Access Control"
+    ]
+
+    assert len(access_findings) == 1
+    assert access_findings[0]["confidence"] == 65
+
+
+def test_fastapi_router_delete_with_authorization_is_safe(tmp_path):
+    source = """
+from fastapi import APIRouter, Depends
+
+router = APIRouter()
+
+@router.delete("/users/{user_id}")
+def delete_user(user_id, current_user=Depends(require_admin)):
+    db.delete(user_id)
+    return {"message": "deleted"}
+"""
+
+    file_path = write_test_file(tmp_path, source)
+    findings = scan_authentication_access_control(file_path)
+
+    assert not any(
+        finding["vulnerability_type"]
+        == "Potential Broken Access Control"
+        for finding in findings
+    )
+
+
+def test_non_framework_delete_is_safe(tmp_path):
+    source = """
+class Database:
+    def delete(self, value):
+        pass
+
+database = Database()
+
+def cleanup():
+    database.delete(old_record)
+"""
+
+    file_path = write_test_file(tmp_path, source)
+    findings = scan_authentication_access_control(file_path)
+
+    assert not any(
+        finding["vulnerability_type"]
+        == "Potential Broken Access Control"
+        for finding in findings
+    )

@@ -2,6 +2,7 @@ CONFIDENCE_VERY_HIGH = 95
 CONFIDENCE_HIGH = 90
 CONFIDENCE_MEDIUM = 75
 CONFIDENCE_LOW = 60
+CONFIDENCE_AMBIGUOUS = 70
 
 
 def calculate_confidence(
@@ -23,7 +24,7 @@ def calculate_confidence(
         confidence = CONFIDENCE_HIGH
 
     else:
-        confidence = 70
+        confidence = CONFIDENCE_AMBIGUOUS
 
     if validated:
         confidence -= 20

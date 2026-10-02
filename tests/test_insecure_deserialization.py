@@ -126,3 +126,41 @@ obj = pickle.loads(request.data)
     assert findings[0]["severity"] == "High"
     assert findings[0]["confidence"] == 90
     assert findings[0]["line_number"] == 5
+def test_pickle_loads_multi_hop_untrusted_data(tmp_path):
+    source = """
+import pickle
+from flask import request
+
+data = request.data
+payload = data
+final_payload = payload
+obj = pickle.loads(final_payload)
+"""
+
+    file_path = write_test_file(tmp_path, source)
+
+    findings = scan_insecure_deserialization(file_path)
+
+    assert len(findings) == 1
+    assert findings[0]["vulnerability_type"] == "Insecure Deserialization"
+    assert findings[0]["severity"] == "High"
+    assert findings[0]["confidence"] == 90
+    assert findings[0]["line_number"] == 8
+
+def test_pickle_loads_static_data_uses_default_confidence(tmp_path):
+    source = """
+import pickle
+
+data = "trusted local data"
+obj = pickle.loads(data)
+"""
+
+    file_path = write_test_file(tmp_path, source)
+
+    findings = scan_insecure_deserialization(file_path)
+
+    assert len(findings) == 1
+    assert findings[0]["vulnerability_type"] == "Insecure Deserialization"
+    assert findings[0]["severity"] == "High"
+    assert findings[0]["confidence"] == 75
+    assert findings[0]["line_number"] == 5

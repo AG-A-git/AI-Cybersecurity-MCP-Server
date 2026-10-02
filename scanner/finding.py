@@ -1,3 +1,6 @@
+import hashlib
+
+
 # ============================================================
 # Standard Finding Validation
 # ============================================================
@@ -18,6 +21,28 @@ VALID_SEVERITIES = {
     "Medium",
     "Low",
 }
+
+
+def create_finding_fingerprint(
+    file_name,
+    line_number,
+    vulnerability_type,
+    code
+):
+    """Create a deterministic fingerprint for a vulnerability finding."""
+
+    identity = "|".join(
+        [
+            str(file_name),
+            str(line_number),
+            str(vulnerability_type),
+            str(code),
+        ]
+    )
+
+    return hashlib.sha256(
+        identity.encode("utf-8")
+    ).hexdigest()
 
 
 def validate_finding(finding):
@@ -141,7 +166,13 @@ def create_finding(
         "confidence": confidence,
         "code": code,
         "owasp": owasp,
-        "cwe": cwe
+        "cwe": cwe,
+        "fingerprint": create_finding_fingerprint(
+            file_name,
+            line_number,
+            vulnerability_type,
+            code
+        )
     }
 
     # --------------------------------------------------------

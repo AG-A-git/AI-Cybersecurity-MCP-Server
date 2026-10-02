@@ -1,6 +1,6 @@
 import re
 
-from scanner.context import build_rule_context, get_source_context
+from scanner.context import build_rule_context, get_source_context, is_variable_derived_from
 from scanner.finding import create_finding
 from scanner.confidence import calculate_confidence
 
@@ -18,7 +18,7 @@ SUBPROCESS_PATTERN = re.compile(
 USER_INPUT_NAMES = {
     "user_input",
     "input",
-    "command",
+
     "cmd",
     "user_command",
 }
@@ -78,6 +78,14 @@ def scan_command(file_path):
                 confidence = calculate_confidence(
                     direct_source=True
                 )
+            elif is_variable_derived_from(
+                context,
+                variable_name,
+                {name.lower() for name in USER_INPUT_NAMES},
+            ):
+                confidence = calculate_confidence(
+                    tracked_source=True
+                )
             else:
                 # Variable reaches os.system(), but the scanner
                 # cannot prove where the variable came from.
@@ -129,25 +137,41 @@ def scan_command(file_path):
             flags=re.IGNORECASE
         )
 
-        # Look for obvious variable-controlled input
-        variable_found = any(
-            re.search(
-                rf'\b{re.escape(name)}\b',
-                command_arguments,
-                re.IGNORECASE
+        # Look for direct or recursively tracked user-controlled input.
+        variable_matches = re.findall(
+            r'\b[A-Za-z_][A-Za-z0-9_]*\b',
+            command_arguments,
+        )
+
+        direct_source = any(
+            variable_name.lower() in {
+                name.lower() for name in USER_INPUT_NAMES
+            }
+            for variable_name in variable_matches
+        )
+
+        tracked_source = any(
+            is_variable_derived_from(
+                context,
+                variable_name,
+                {name.lower() for name in USER_INPUT_NAMES},
             )
-            for name in USER_INPUT_NAMES
+            for variable_name in variable_matches
+            if variable_name.lower() not in {
+                name.lower() for name in USER_INPUT_NAMES
+            }
         )
 
-        if not variable_found:
+        if direct_source:
+            confidence = calculate_confidence(
+                direct_source=True
+            )
+        elif tracked_source:
+            confidence = calculate_confidence(
+                tracked_source=True
+            )
+        else:
             continue
-
-        # shell=True combined with an obvious user-controlled
-        # variable is a strong command-injection indicator.
-        confidence = calculate_confidence(
-            direct_source=True
-        )
-
         finding = create_finding(
             file_name=file_path,
             line_number=line_number,

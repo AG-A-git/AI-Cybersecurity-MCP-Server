@@ -1,8 +1,18 @@
 import re
 
-from scanner.context import build_rule_context, get_source_context
+from scanner.context import build_rule_context, get_source_context, is_variable_derived_from
 from scanner.evidence import build_evidence
 from scanner.finding import create_finding
+
+
+USER_INPUT_NAMES = {
+    "user_input",
+    "input",
+    "username",
+    "user_id",
+    "user_command",
+    "id",
+}
 
 
 SQL_PATTERNS = [
@@ -119,7 +129,7 @@ def scan_sql(file_path):
                     line_number=line_number,
                     vulnerability_type="SQL Injection",
                     severity="Critical",
-                    confidence=95,
+                    confidence=(90 if is_variable_derived_from(context, tainted_variable, USER_INPUT_NAMES) else 95),
                     code=line.strip(),
                     owasp="A03: Injection",
                     cwe="CWE-89",

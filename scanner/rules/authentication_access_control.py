@@ -41,6 +41,20 @@ AUTHORIZATION_INDICATORS = {
 }
 
 
+
+
+FRAMEWORK_ROUTE_OBJECTS = {
+    "app",
+    "router",
+    "api",
+}
+
+
+SENSITIVE_HTTP_METHODS = {
+    "DELETE",
+    "PUT",
+    "PATCH",
+}
 SENSITIVE_OPERATIONS = {
     "delete",
     "remove",
@@ -117,10 +131,12 @@ def is_sensitive_route(function_node):
     Determine whether a Flask/FastAPI route represents
     a potentially sensitive operation.
 
-    Supported examples:
-
+    Framework-aware detection supports:
         @app.delete(...)
+        @router.delete(...)
+        @api.delete(...)
         @app.route(..., methods=["DELETE"])
+        @router.route(..., methods=["PATCH"])
     """
 
     for decorator in function_node.decorator_list:
@@ -130,47 +146,42 @@ def is_sensitive_route(function_node):
 
         function = decorator.func
 
-        # -----------------------------------------------------
-        # Flask/FastAPI style:
-        #
-        # @app.delete(...)
-        # -----------------------------------------------------
+        if not isinstance(function, ast.Attribute):
+            continue
 
-        if isinstance(function, ast.Attribute):
+        route_object = function.value
+        if not isinstance(route_object, ast.Name):
+            continue
 
-            if function.attr.lower() in SENSITIVE_OPERATIONS:
-                return True
+        if route_object.id not in FRAMEWORK_ROUTE_OBJECTS:
+            continue
 
-            # -------------------------------------------------
-            # Flask:
-            #
-            # @app.route(..., methods=["DELETE"])
-            # -------------------------------------------------
+        method = function.attr.upper()
 
-            if function.attr == "route":
+        # FastAPI/Flask-style method decorators:
+        # @app.delete(...), @router.put(...), etc.
+        if method in SENSITIVE_HTTP_METHODS:
+            return True
 
-                for keyword in decorator.keywords:
+        # Flask-style @app.route(..., methods=["DELETE"]).
+        if method == "ROUTE":
+            for keyword in decorator.keywords:
+                if keyword.arg != "methods":
+                    continue
 
-                    if keyword.arg != "methods":
-                        continue
+                value = keyword.value
+                if not isinstance(value, (ast.List, ast.Tuple, ast.Set)):
+                    continue
 
-                    value = keyword.value
-
-                    if isinstance(value, (ast.List, ast.Tuple)):
-
-                        for element in value.elts:
-
-                            method = get_string_value(element)
-
-                            if (
-                                method is not None
-                                and method.upper()
-                                in {"DELETE", "PUT", "PATCH"}
-                            ):
-                                return True
+                for element in value.elts:
+                    http_method = get_string_value(element)
+                    if (
+                        http_method is not None
+                        and http_method.upper() in SENSITIVE_HTTP_METHODS
+                    ):
+                        return True
 
     return False
-
 
 # ============================================================
 # Insecure Authentication

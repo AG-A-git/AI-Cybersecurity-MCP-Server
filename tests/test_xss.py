@@ -39,3 +39,47 @@ def test_xss_safe_literals_not_detected():
 
     assert 2 not in finding_lines
     assert 4 not in finding_lines
+
+def test_xss_detects_multi_hop_user_input(tmp_path):
+    test_file = tmp_path / "xss_multi_hop.py"
+
+    test_file.write_text(
+        """user_input = request.args.get("message")
+value = user_input
+final_value = value
+
+element.innerHTML = final_value
+""",
+        encoding="utf-8",
+    )
+
+    findings = scan_xss(str(test_file))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["vulnerability_type"] == "Cross-Site Scripting (XSS)"
+    ]
+
+    assert xss_findings
+    assert xss_findings[0]["confidence"] == 80
+
+def test_xss_does_not_flag_unrelated_data_variable(tmp_path):
+    test_file = tmp_path / "xss_safe_data.py"
+
+    test_file.write_text(
+        """data = "safe content"
+element.innerHTML = data
+""",
+        encoding="utf-8",
+    )
+
+    findings = scan_xss(str(test_file))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["vulnerability_type"] == "Cross-Site Scripting (XSS)"
+    ]
+
+    assert not xss_findings

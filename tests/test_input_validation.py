@@ -122,3 +122,42 @@ def test_static_command_not_detected_as_command_injection():
 
     assert not command_findings
 
+
+
+def test_command_injection_from_multi_hop_user_input():
+    test_file = "scanner/test_files/input_validation_multi_hop_test.py"
+
+    findings = scan_input_validation(test_file)
+
+    command_findings = [
+        finding
+        for finding in findings
+        if finding["vulnerability_type"] == "Command Injection"
+    ]
+
+    assert command_findings
+
+def test_multi_hop_validation_reduces_sql_confidence(tmp_path):
+    test_file = tmp_path / "sql_multi_hop_validated.py"
+
+    test_file.write_text(
+        """user_id = request.args.get("id")
+safe_id = user_id
+
+if safe_id.isdigit():
+    query = "SELECT * FROM users WHERE id=" + safe_id
+    cursor.execute(query)
+""",
+        encoding="utf-8",
+    )
+
+    findings = scan_input_validation(str(test_file))
+
+    sql_findings = [
+        finding
+        for finding in findings
+        if finding["vulnerability_type"] == "SQL Injection"
+    ]
+
+    assert sql_findings
+    assert sql_findings[0]["confidence"] < 90
