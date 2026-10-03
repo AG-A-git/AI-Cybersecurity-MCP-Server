@@ -4,6 +4,7 @@ MCP tools for AI vulnerability analysis.
 
 from ai.input import VulnerabilityInput
 from ai.analysis import analyze_finding
+from ai.batch import analyze_findings
 
 
 # ======================================================
@@ -45,23 +46,16 @@ def analyze_scan(findings):
     """
     Analyze multiple scanner vulnerabilities.
 
+    Uses the batch AI analysis pipeline so that one failed
+    AI analysis does not stop the remaining findings.
+
     Args:
         findings (list):
             List of scanner vulnerability dictionaries.
 
     Returns:
-        list:
-            List of security analysis results.
+        dict:
+            Batch security analysis result.
     """
 
-    results = []
-
-    for scanner_result in findings:
-
-        result = run_ai_analysis(
-            scanner_result
-        )
-
-        results.append(result)
-
-    return results
+    return analyze_findings(findings)
