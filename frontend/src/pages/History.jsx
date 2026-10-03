@@ -1,88 +1,140 @@
 import { useEffect, useState } from "react";
-import { getScans } from "../services/scanService";
-import ScanStatus from "../components/ScanStatus";
+
+import {
+    getProjects,
+    getProjectFiles,
+} from "../services/projectService";
+
+import LoadingState from "../components/LoadingState";
+import ErrorState from "../components/ErrorState";
+import EmptyState from "../components/EmptyState";
 
 function History() {
-    const [scans, setScans] = useState([]);
+    const [files, setFiles] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
+    const loadHistory = async () => {
+        try {
+            setLoading(true);
+            setError("");
+
+            const projectsResponse =
+                await getProjects();
+
+            const projectList =
+                Array.isArray(
+                    projectsResponse.data
+                )
+                    ? projectsResponse.data
+                    : [];
+
+            const fileResults =
+                await Promise.all(
+                    projectList.map(
+                        async (project) => {
+                            try {
+                                const response =
+                                    await getProjectFiles(
+                                        project.id
+                                    );
+
+                                return (
+                                    response.data ||
+                                    []
+                                ).map(
+                                    (file) => ({
+                                        ...file,
+                                        project_name:
+                                            project.name,
+                                    })
+                                );
+                            } catch (err) {
+                                console.error(
+                                    `Failed to load files for project ${project.id}:`,
+                                    err
+                                );
+
+                                return [];
+                            }
+                        }
+                    )
+                );
+
+            setFiles(
+                fileResults.flat()
+            );
+        } catch (err) {
+            console.error(
+                "Upload history error:",
+                err
+            );
+
+            setError(
+                err.userMessage ||
+                    err.response?.data?.detail ||
+                    "Unable to load upload history."
+            );
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
-        const loadScans = async () => {
-            try {
-                setLoading(true);
-                setError("");
-
-                const response = await getScans();
-
-                setScans(
-                    Array.isArray(response.data)
-                        ? response.data
-                        : []
-                );
-            } catch (err) {
-                console.error(
-                    "Scan history error:",
-                    err
-                );
-
-                setError(
-                    err.userMessage ||
-                    "Unable to load scan history."
-                );
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        loadScans();
+        loadHistory();
     }, []);
 
     if (loading) {
         return (
-            <div style={{ padding: "30px" }}>
-                <h1>Scan History</h1>
-                <p>Loading scan history...</p>
+            <div
+                style={{
+                    padding: "30px",
+                }}
+            >
+                <h1>Upload History</h1>
+
+                <LoadingState
+                    message="Loading upload history..."
+                />
             </div>
         );
     }
 
     if (error) {
         return (
-            <div style={{ padding: "30px" }}>
-                <h1>Scan History</h1>
+            <div
+                style={{
+                    padding: "30px",
+                }}
+            >
+                <h1>Upload History</h1>
 
-                <p style={{ color: "red" }}>
-                    {error}
-                </p>
+                <ErrorState
+                    message={error}
+                    onRetry={loadHistory}
+                />
             </div>
         );
     }
 
     return (
-        <div style={{ padding: "30px" }}>
-            <h1>Scan History</h1>
+        <div
+            style={{
+                padding: "30px",
+            }}
+        >
+            <h1>Upload History</h1>
 
             <p>
-                View your previous security scans.
+                View source files uploaded to
+                your cybersecurity projects.
             </p>
 
-            {scans.length === 0 ? (
-                <div
-                    style={{
-                        marginTop: "25px",
-                        border: "1px solid #ccc",
-                        borderRadius: "8px",
-                        padding: "20px",
-                    }}
-                >
-                    <h2>No scans yet</h2>
-
-                    <p>
-                        Upload a source file from a project
-                        to start your first security scan.
-                    </p>
-                </div>
+            {files.length === 0 ? (
+                <EmptyState
+                    title="No uploads yet"
+                    message="Upload a source file from a project to see it here."
+                />
             ) : (
                 <div
                     style={{
@@ -91,70 +143,74 @@ function History() {
                         gap: "15px",
                     }}
                 >
-                    {scans.map((scan, index) => (
-                        <div
-                            key={
-                                scan.id ??
-                                `${scan.project_id}-${index}`
-                            }
-                            style={{
-                                border: "1px solid #ccc",
-                                borderRadius: "8px",
-                                padding: "20px",
-                            }}
-                        >
-                            <h2>
-                                {scan.project_name ||
-                                    "Unknown Project"}
-                            </h2>
-
-                            <p>
-                                <strong>
-                                    File:
-                                </strong>{" "}
-                                {scan.filename ||
-                                    "Not available"}
-                            </p>
-
-                            <p>
-                                <strong>
-                                    Project ID:
-                                </strong>{" "}
-                                {scan.project_id ??
-                                    "Not available"}
-                            </p>
-
-                            <p>
-                                <strong>
-                                    Scan ID:
-                                </strong>{" "}
-                                {scan.id ??
-                                    "Not available"}
-                            </p>
-
+                    {files.map(
+                        (file) => (
                             <div
+                                key={
+                                    file.id
+                                }
                                 style={{
-                                    marginTop: "15px",
+                                    border:
+                                        "1px solid #ccc",
+                                    borderRadius:
+                                        "8px",
+                                    padding:
+                                        "20px",
                                 }}
                             >
-                                <strong>
-                                    Status
-                                </strong>
+                                <h2>
+                                    {
+                                        file.project_name
+                                    }
+                                </h2>
 
-                                <div
-                                    style={{
-                                        marginTop: "8px",
-                                    }}
-                                >
-                                    <ScanStatus
-                                        status={
-                                            scan.status
-                                        }
-                                    />
-                                </div>
+                                <p>
+                                    <strong>
+                                        File:
+                                    </strong>{" "}
+                                    {
+                                        file.filename
+                                    }
+                                </p>
+
+                                <p>
+                                    <strong>
+                                        File ID:
+                                    </strong>{" "}
+                                    {
+                                        file.id
+                                    }
+                                </p>
+
+                                <p>
+                                    <strong>
+                                        Project ID:
+                                    </strong>{" "}
+                                    {
+                                        file.project_id
+                                    }
+                                </p>
+
+                                <p>
+                                    <strong>
+                                        Uploaded:
+                                    </strong>{" "}
+                                    {file.uploaded_at
+                                        ? new Date(
+                                            file.uploaded_at
+                                        ).toLocaleString()
+                                        : "N/A"}
+                                </p>
+
+                                <p>
+                                    <strong>
+                                        Status:
+                                    </strong>{" "}
+                                    Uploaded
+                                </p>
                             </div>
-                        </div>
-                    ))}
+                        )
+                    )}
                 </div>
             )}
         </div>

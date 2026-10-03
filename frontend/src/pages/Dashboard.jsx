@@ -1,116 +1,134 @@
 import { useEffect, useState } from "react";
-import { getDashboard } from "../services/dashboardService";
+
+import {
+    getProjects,
+    getProjectFiles,
+} from "../services/projectService";
+
+import LoadingState from "../components/LoadingState";
+import ErrorState from "../components/ErrorState";
+import EmptyState from "../components/EmptyState";
+import DashboardCard from "../components/DashboardCard";
 
 function Dashboard() {
-    const [dashboard, setDashboard] = useState(null);
+    const [projects, setProjects] = useState([]);
+    const [totalFiles, setTotalFiles] = useState(0);
+
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
-    useEffect(() => {
-        const loadDashboard = async () => {
-            try {
-                setLoading(true);
-                setError("");
+    const fetchDashboardData = async () => {
+        try {
+            setLoading(true);
+            setError("");
 
-                const response = await getDashboard();
+            const projectsResponse =
+                await getProjects();
 
-                setDashboard(response.data);
-            } catch (err) {
-                console.error("Dashboard error:", err);
+            const projectList =
+                Array.isArray(
+                    projectsResponse.data
+                )
+                    ? projectsResponse.data
+                    : [];
 
-                setError(
-                    err.userMessage ||
-                    "Unable to load dashboard."
+            setProjects(projectList);
+
+            const fileResults =
+                await Promise.all(
+                    projectList.map(
+                        async (project) => {
+                            try {
+                                const response =
+                                    await getProjectFiles(
+                                        project.id
+                                    );
+
+                                return Array.isArray(
+                                    response.data
+                                )
+                                    ? response.data
+                                    : [];
+                            } catch (err) {
+                                console.error(
+                                    `Failed to load files for project ${project.id}:`,
+                                    err
+                                );
+
+                                return [];
+                            }
+                        }
+                    )
                 );
-            } finally {
-                setLoading(false);
-            }
-        };
 
-        loadDashboard();
+            const fileCount =
+                fileResults.reduce(
+                    (
+                        total,
+                        files
+                    ) =>
+                        total +
+                        files.length,
+                    0
+                );
+
+            setTotalFiles(
+                fileCount
+            );
+        } catch (error) {
+            console.error(
+                "Dashboard error:",
+                error
+            );
+
+            setError(
+                error.userMessage ||
+                    error.response?.data?.detail ||
+                    "Unable to load dashboard."
+            );
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchDashboardData();
     }, []);
 
     if (loading) {
         return (
-            <div style={{ padding: "30px" }}>
+            <div
+                style={{
+                    padding: "30px",
+                }}
+            >
                 <h1>Dashboard</h1>
-                <p>Loading dashboard...</p>
+
+                <LoadingState
+                    message="Loading dashboard..."
+                />
             </div>
         );
     }
 
     if (error) {
         return (
-            <div style={{ padding: "30px" }}>
+            <div
+                style={{
+                    padding: "30px",
+                }}
+            >
                 <h1>Dashboard</h1>
 
-                <p style={{ color: "red" }}>
-                    {error}
-                </p>
+                <ErrorState
+                    message={error}
+                    onRetry={
+                        fetchDashboardData
+                    }
+                />
             </div>
         );
     }
-
-    if (!dashboard) {
-        return (
-            <div style={{ padding: "30px" }}>
-                <h1>Dashboard</h1>
-                <p>No dashboard data available.</p>
-            </div>
-        );
-    }
-
-    // =====================================================
-    // PROJECTS AND SCANS
-    // =====================================================
-
-    const totalProjects =
-        dashboard.total_projects ?? 0;
-
-    const totalScans =
-        dashboard.total_scans ?? 0;
-
-    // =====================================================
-    // VULNERABILITY COUNTS
-    // =====================================================
-
-    const critical =
-        dashboard.critical_vulnerabilities;
-
-    const high =
-        dashboard.high_vulnerabilities;
-
-    const medium =
-        dashboard.medium_vulnerabilities;
-
-    const low =
-        dashboard.low_vulnerabilities;
-
-    // =====================================================
-    // CHECK WHETHER VULNERABILITY DATA EXISTS
-    // =====================================================
-
-    const vulnerabilityDataAvailable =
-        critical !== null &&
-        high !== null &&
-        medium !== null &&
-        low !== null;
-
-    // =====================================================
-    // TOTAL VULNERABILITIES
-    // =====================================================
-
-    const totalVulnerabilities =
-        vulnerabilityDataAvailable
-            ? critical + high + medium + low
-            : null;
-
-    // =====================================================
-    // RECENT SCANS
-    // =====================================================
-
-    const recentScans =
-        dashboard.recent_scans ?? [];
 
     return (
         <div
@@ -122,166 +140,63 @@ function Dashboard() {
 
             <p>
                 Overview of your cybersecurity
-                projects and scans.
+                projects.
             </p>
 
-            {/* =================================================
-                MAIN STATISTICS
-            ================================================= */}
-
             <section
+                className="row g-3"
                 style={{
-                    display: "grid",
-                    gridTemplateColumns:
-                        "repeat(auto-fit, minmax(180px, 1fr))",
-                    gap: "15px",
                     marginTop: "25px",
                 }}
             >
-                {/* TOTAL PROJECTS */}
-
-                <div
-                    style={{
-                        border: "1px solid #ccc",
-                        borderRadius: "8px",
-                        padding: "20px",
-                    }}
-                >
-                    <h3>Total Projects</h3>
-
-                    <p
-                        style={{
-                            fontSize: "28px",
-                            fontWeight: "bold",
-                        }}
-                    >
-                        {totalProjects}
-                    </p>
+                <div className="col-md-6">
+                    <DashboardCard
+                        title="Total Projects"
+                        value={
+                            projects.length
+                        }
+                        icon="📁"
+                    />
                 </div>
 
-                {/* TOTAL SCANS */}
-
-                <div
-                    style={{
-                        border: "1px solid #ccc",
-                        borderRadius: "8px",
-                        padding: "20px",
-                    }}
-                >
-                    <h3>Total Scans</h3>
-
-                    <p
-                        style={{
-                            fontSize: "28px",
-                            fontWeight: "bold",
-                        }}
-                    >
-                        {totalScans}
-                    </p>
-                </div>
-
-                {/* TOTAL VULNERABILITIES */}
-
-                <div
-                    style={{
-                        border: "1px solid #ccc",
-                        borderRadius: "8px",
-                        padding: "20px",
-                    }}
-                >
-                    <h3>Total Vulnerabilities</h3>
-
-                    <p
-                        style={{
-                            fontSize: "28px",
-                            fontWeight: "bold",
-                        }}
-                    >
-                        {totalVulnerabilities ??
-                            "Not available"}
-                    </p>
+                <div className="col-md-6">
+                    <DashboardCard
+                        title="Uploaded Files"
+                        value={
+                            totalFiles
+                        }
+                        icon="📄"
+                    />
                 </div>
             </section>
-
-            {/* =================================================
-                VULNERABILITY SUMMARY
-            ================================================= */}
 
             <section
                 style={{
                     marginTop: "30px",
-                    border: "1px solid #ccc",
-                    borderRadius: "8px",
+                    border:
+                        "1px solid #ccc",
+                    borderRadius:
+                        "8px",
                     padding: "20px",
                 }}
             >
-                <h2>Vulnerability Summary</h2>
+                <h2>
+                    Your Projects
+                </h2>
 
-                {!vulnerabilityDataAvailable ? (
-                    <p>
-                        Vulnerability statistics are not
-                        available yet because scan findings
-                        are not currently stored in the
-                        backend database.
-                    </p>
-                ) : (
-                    <div
-                        style={{
-                            display: "grid",
-                            gridTemplateColumns:
-                                "repeat(auto-fit, minmax(150px, 1fr))",
-                            gap: "15px",
-                        }}
-                    >
-                        <div>
-                            <strong>Critical</strong>
-                            <p>{critical}</p>
-                        </div>
-
-                        <div>
-                            <strong>High</strong>
-                            <p>{high}</p>
-                        </div>
-
-                        <div>
-                            <strong>Medium</strong>
-                            <p>{medium}</p>
-                        </div>
-
-                        <div>
-                            <strong>Low</strong>
-                            <p>{low}</p>
-                        </div>
-                    </div>
-                )}
-            </section>
-
-            {/* =================================================
-                RECENT SCANS
-            ================================================= */}
-
-            <section
-                style={{
-                    marginTop: "30px",
-                    border: "1px solid #ccc",
-                    borderRadius: "8px",
-                    padding: "20px",
-                }}
-            >
-                <h2>Recent Scans</h2>
-
-                {recentScans.length === 0 ? (
-                    <p>
-                        No scans available yet.
-                    </p>
+                {projects.length ===
+                0 ? (
+                    <EmptyState
+                        title="No projects yet"
+                        message="Create your first project to start uploading source code."
+                    />
                 ) : (
                     <div>
-                        {recentScans.map(
-                            (scan, index) => (
+                        {projects.map(
+                            (project) => (
                                 <div
                                     key={
-                                        scan.id ??
-                                        `${scan.project}-${index}`
+                                        project.id
                                     }
                                     style={{
                                         borderBottom:
@@ -291,32 +206,25 @@ function Dashboard() {
                                     }}
                                 >
                                     <h3>
-                                        {scan.project ||
-                                            "Unknown Project"}
+                                        {
+                                            project.name
+                                        }
                                     </h3>
 
                                     <p>
-                                        <strong>
-                                            Date:
-                                        </strong>{" "}
-                                        {scan.date ||
-                                            "Not available"}
+                                        {
+                                            project.description ||
+                                            "No description provided."
+                                        }
                                     </p>
 
                                     <p>
                                         <strong>
-                                            Issues Found:
+                                            Project ID:
                                         </strong>{" "}
-                                        {scan.issues_found ??
-                                            "Not available"}
-                                    </p>
-
-                                    <p>
-                                        <strong>
-                                            Status:
-                                        </strong>{" "}
-                                        {scan.status ||
-                                            "Not available"}
+                                        {
+                                            project.id
+                                        }
                                     </p>
                                 </div>
                             )
@@ -324,6 +232,43 @@ function Dashboard() {
                     </div>
                 )}
             </section>
+
+            <section
+                style={{
+                    marginTop: "30px",
+                    border:
+                        "1px solid #ccc",
+                    borderRadius:
+                        "8px",
+                    padding: "20px",
+                }}
+            >
+                <h2>
+                    Scan Information
+                </h2>
+
+                <p>
+                    Scan and vulnerability
+                    statistics will appear
+                    here once the backend
+                    scanner APIs are available.
+                </p>
+            </section>
+
+            <div
+                style={{
+                    marginTop: "25px",
+                }}
+            >
+                <button
+                    type="button"
+                    onClick={
+                        fetchDashboardData
+                    }
+                >
+                    Refresh Dashboard
+                </button>
+            </div>
         </div>
     );
 }

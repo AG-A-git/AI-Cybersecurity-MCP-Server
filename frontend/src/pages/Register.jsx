@@ -30,7 +30,9 @@ function Register() {
         } catch (error) {
             console.error("Registration error:", error);
 
-            if (error.response?.data?.detail) {
+            if (error.userMessage) {
+                setError(error.userMessage);
+            } else if (error.response?.data?.detail) {
                 setError(error.response.data.detail);
             } else {
                 setError("Registration failed. Please try again.");

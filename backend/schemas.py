@@ -1,5 +1,8 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
+from datetime import datetime
+
+
 class UserRegister(BaseModel):
 
     email: EmailStr
@@ -13,11 +16,15 @@ class UserRegister(BaseModel):
         min_length=3,
         max_length=50
     )
+
+
 class UserLogin(BaseModel):
 
     email: EmailStr
 
     password: str
+
+
 class UserResponse(BaseModel):
 
     id: int
@@ -26,10 +33,42 @@ class UserResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
 class Token(BaseModel):
 
     access_token: str
     token_type: str
+
+
 class TokenData(BaseModel):
 
     email: Optional[str] = None
+
+
+class ProjectCreate(BaseModel):
+
+    name: str
+    description: Optional[str] = None
+
+
+class ProjectResponse(BaseModel):
+
+    id: int
+    name: str
+    description: Optional[str] = None
+    owner_id: int
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+class UploadedFileResponse(BaseModel):
+
+    id: int
+    filename: str
+    file_path: str
+    project_id: int
+    uploaded_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

@@ -6,23 +6,23 @@ import {
     createProject,
 } from "../services/projectService";
 
+import LoadingState from "../components/LoadingState";
+import ErrorState from "../components/ErrorState";
+import EmptyState from "../components/EmptyState";
+
 function Projects() {
     const navigate = useNavigate();
 
     const [projectName, setProjectName] = useState("");
     const [description, setDescription] = useState("");
-
     const [projects, setProjects] = useState([]);
 
     const [loading, setLoading] = useState(false);
-    const [loadingProjects, setLoadingProjects] = useState(true);
+    const [loadingProjects, setLoadingProjects] =
+        useState(true);
 
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
-
-    // =====================================================
-    // GET PROJECTS
-    // =====================================================
 
     const fetchProjects = async () => {
         try {
@@ -31,33 +31,35 @@ function Projects() {
 
             const response = await getProjects();
 
-            console.log("Projects:", response.data);
+            console.log(
+                "Projects:",
+                response.data
+            );
 
-            setProjects(response.data);
+            setProjects(
+                Array.isArray(response.data)
+                    ? response.data
+                    : []
+            );
         } catch (error) {
-            console.error("Failed to fetch projects:", error);
+            console.error(
+                "Failed to fetch projects:",
+                error
+            );
 
             setError(
                 error.userMessage ||
-                error.response?.data?.detail ||
-                "Failed to load projects."
+                    error.response?.data?.detail ||
+                    "Failed to load projects."
             );
         } finally {
             setLoadingProjects(false);
         }
     };
 
-    // =====================================================
-    // LOAD PROJECTS WHEN PAGE OPENS
-    // =====================================================
-
     useEffect(() => {
         fetchProjects();
     }, []);
-
-    // =====================================================
-    // CREATE PROJECT
-    // =====================================================
 
     const handleCreate = async (e) => {
         e.preventDefault();
@@ -67,282 +69,262 @@ function Projects() {
         setSuccess("");
 
         try {
-            const response = await createProject({
-                name: projectName,
-                description: description,
-            });
+            const response =
+                await createProject({
+                    name: projectName,
+                    description: description,
+                });
 
-            console.log("Project created:", response.data);
+            console.log(
+                "Project created:",
+                response.data
+            );
 
-            setSuccess("Project created successfully!");
+            setSuccess(
+                "Project created successfully!"
+            );
 
-            // Clear form
             setProjectName("");
             setDescription("");
 
-            // Reload project list
             await fetchProjects();
         } catch (error) {
-            console.error("Project creation failed:", error);
+            console.error(
+                "Project creation failed:",
+                error
+            );
 
             setError(
                 error.userMessage ||
-                error.response?.data?.detail ||
-                "Failed to create project."
+                    error.response?.data?.detail ||
+                    "Failed to create project."
             );
         } finally {
             setLoading(false);
         }
     };
 
-    // =====================================================
-    // OPEN PROJECT
-    // =====================================================
-
-    const handleOpenProject = (projectId) => {
-        // Store selected project
+    const handleOpenProject = (
+        projectId
+    ) => {
         localStorage.setItem(
             "selected_project_id",
             String(projectId)
         );
 
-        // Open existing upload page
         navigate("/upload");
     };
 
-    // =====================================================
-    // START SCAN
-    // =====================================================
-
     const handleScan = (projectId) => {
-        // Store selected project
         localStorage.setItem(
             "selected_project_id",
             String(projectId)
         );
 
-        // Go to upload page where user can select
-        // source code and start the security scan
         navigate("/upload");
     };
 
     return (
-        <div style={{ padding: "30px" }}>
-
-            {/* =================================================
-                PAGE TITLE
-            ================================================= */}
-
+        <div
+            style={{
+                padding: "30px",
+            }}
+        >
             <h1>Projects</h1>
 
-            {/* =================================================
-                CREATE PROJECT
-            ================================================= */}
+            <section>
+                <h2>Create Project</h2>
 
-            <h2>Create Project</h2>
-
-            <form onSubmit={handleCreate}>
-
-                {/* PROJECT NAME */}
-
-                <div>
-                    <label htmlFor="projectName">
-                        Project Name
-                    </label>
-
-                    <br />
-
-                    <input
-                        id="projectName"
-                        type="text"
-                        value={projectName}
-                        onChange={(e) =>
-                            setProjectName(e.target.value)
-                        }
-                        placeholder="Enter project name"
-                        required
-                    />
-                </div>
-
-                <br />
-
-                {/* DESCRIPTION */}
-
-                <div>
-                    <label htmlFor="description">
-                        Description
-                    </label>
-
-                    <br />
-
-                    <textarea
-                        id="description"
-                        value={description}
-                        onChange={(e) =>
-                            setDescription(e.target.value)
-                        }
-                        placeholder="Enter project description"
-                        rows="5"
-                    />
-                </div>
-
-                <br />
-
-                {/* CREATE BUTTON */}
-
-                <button
-                    type="submit"
-                    disabled={loading}
+                <form
+                    onSubmit={handleCreate}
                 >
-                    {loading
-                        ? "Creating..."
-                        : "Create Project"}
-                </button>
+                    <div>
+                        <label htmlFor="projectName">
+                            Project Name
+                        </label>
 
-            </form>
+                        <br />
 
-            {/* =================================================
-                SUCCESS MESSAGE
-            ================================================= */}
+                        <input
+                            id="projectName"
+                            type="text"
+                            value={projectName}
+                            onChange={(e) =>
+                                setProjectName(
+                                    e.target.value
+                                )
+                            }
+                            placeholder="Enter project name"
+                            required
+                        />
+                    </div>
 
-            {success && (
-                <p style={{ color: "green" }}>
-                    {success}
-                </p>
-            )}
+                    <br />
 
-            {/* =================================================
-                ERROR MESSAGE
-            ================================================= */}
+                    <div>
+                        <label htmlFor="description">
+                            Description
+                        </label>
+
+                        <br />
+
+                        <textarea
+                            id="description"
+                            value={description}
+                            onChange={(e) =>
+                                setDescription(
+                                    e.target.value
+                                )
+                            }
+                            placeholder="Enter project description"
+                            rows="5"
+                        />
+                    </div>
+
+                    <br />
+
+                    <button
+                        type="submit"
+                        disabled={loading}
+                    >
+                        {loading
+                            ? "Creating..."
+                            : "Create Project"}
+                    </button>
+                </form>
+
+                {success && (
+                    <p
+                        style={{
+                            color: "green",
+                        }}
+                    >
+                        {success}
+                    </p>
+                )}
+            </section>
 
             {error && (
-                <p style={{ color: "red" }}>
-                    {error}
-                </p>
+                <ErrorState
+                    message={error}
+                    onRetry={fetchProjects}
+                />
             )}
 
             <hr />
 
-            {/* =================================================
-                PROJECT LIST
-            ================================================= */}
+            <section>
+                <h2>My Projects</h2>
 
-            <h2>My Projects</h2>
-
-            {loadingProjects ? (
-                <p>Loading projects...</p>
-            ) : projects.length === 0 ? (
-                <div>
-                    <p>No projects found.</p>
-
-                    <p>
-                        Create your first project to start
-                        scanning.
-                    </p>
-                </div>
-            ) : (
-                <div>
-
-                    {projects.map((project) => (
-                        <div
-                            key={project.id}
-                            style={{
-                                border: "1px solid #ccc",
-                                padding: "20px",
-                                marginBottom: "15px",
-                                borderRadius: "8px",
-                            }}
-                        >
-
-                            {/* PROJECT NAME */}
-
-                            <h3>
-                                {project.name}
-                            </h3>
-
-                            {/* DESCRIPTION */}
-
-                            <p>
-                                <strong>
-                                    Description:
-                                </strong>{" "}
-                                {project.description ||
-                                    "No description"}
-                            </p>
-
-                            {/* PROJECT ID */}
-
-                            <p>
-                                <strong>
-                                    Project ID:
-                                </strong>{" "}
-                                {project.id}
-                            </p>
-
-                            {/* OWNER */}
-
-                            <p>
-                                <strong>
-                                    Owner ID:
-                                </strong>{" "}
-                                {project.owner_id}
-                            </p>
-
-                            {/* CREATED DATE */}
-
-                            <p>
-                                <strong>
-                                    Created:
-                                </strong>{" "}
-                                {project.created_at
-                                    ? new Date(
-                                        project.created_at
-                                    ).toLocaleString()
-                                    : "N/A"}
-                            </p>
-
-                            {/* ACTION BUTTONS */}
-
-                            <div
-                                style={{
-                                    display: "flex",
-                                    gap: "10px",
-                                    marginTop: "15px",
-                                }}
-                            >
-
-                                {/* OPEN PROJECT */}
-
-                                <button
-                                    onClick={() =>
-                                        handleOpenProject(
-                                            project.id
-                                        )
+                {loadingProjects ? (
+                    <LoadingState
+                        message="Loading projects..."
+                    />
+                ) : projects.length === 0 ? (
+                    <EmptyState
+                        title="No projects found"
+                        message="Create your first project to start uploading source code."
+                    />
+                ) : (
+                    <div>
+                        {projects.map(
+                            (project) => (
+                                <div
+                                    key={
+                                        project.id
                                     }
+                                    style={{
+                                        border:
+                                            "1px solid #ccc",
+                                        padding:
+                                            "20px",
+                                        marginBottom:
+                                            "15px",
+                                        borderRadius:
+                                            "8px",
+                                    }}
                                 >
-                                    Open Project
-                                </button>
+                                    <h3>
+                                        {
+                                            project.name
+                                        }
+                                    </h3>
 
-                                {/* SCAN */}
+                                    <p>
+                                        <strong>
+                                            Description:
+                                        </strong>{" "}
+                                        {project.description ||
+                                            "No description"}
+                                    </p>
 
-                                <button
-                                    onClick={() =>
-                                        handleScan(
+                                    <p>
+                                        <strong>
+                                            Project ID:
+                                        </strong>{" "}
+                                        {
                                             project.id
-                                        )
-                                    }
-                                >
-                                    Scan
-                                </button>
+                                        }
+                                    </p>
 
-                            </div>
+                                    <p>
+                                        <strong>
+                                            Owner ID:
+                                        </strong>{" "}
+                                        {
+                                            project.owner_id
+                                        }
+                                    </p>
 
-                        </div>
-                    ))}
+                                    <p>
+                                        <strong>
+                                            Created:
+                                        </strong>{" "}
+                                        {project.created_at
+                                            ? new Date(
+                                                project.created_at
+                                            ).toLocaleString()
+                                            : "N/A"}
+                                    </p>
 
-                </div>
-            )}
+                                    <div
+                                        style={{
+                                            display:
+                                                "flex",
+                                            gap:
+                                                "10px",
+                                            marginTop:
+                                                "15px",
+                                        }}
+                                    >
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                handleOpenProject(
+                                                    project.id
+                                                )
+                                            }
+                                        >
+                                            Open Project
+                                        </button>
 
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                handleScan(
+                                                    project.id
+                                                )
+                                            }
+                                        >
+                                            Upload File
+                                        </button>
+                                    </div>
+                                </div>
+                            )
+                        )}
+                    </div>
+                )}
+            </section>
         </div>
     );
 }

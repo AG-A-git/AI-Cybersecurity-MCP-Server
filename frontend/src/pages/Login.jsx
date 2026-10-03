@@ -37,7 +37,9 @@ function Login() {
         } catch (error) {
             console.error("Login error:", error);
 
-            if (error.response?.data?.detail) {
+            if (error.userMessage) {
+                setError(error.userMessage);
+            } else if (error.response?.data?.detail) {
                 setError(error.response.data.detail);
             } else if (error.message) {
                 setError(error.message);
@@ -123,3 +125,4 @@ function Login() {
 }
 
 export default Login;
+
