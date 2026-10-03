@@ -1,4 +1,3 @@
-
 """
 Prompt templates for AI vulnerability analysis.
 """
@@ -153,32 +152,32 @@ def build_prompt(scanner_result):
 
     vulnerability = scanner_result.get(
         "vulnerability",
-        "Unknown"
+        "Unknown",
     )
 
     file_name = scanner_result.get(
         "file",
-        "Unknown"
+        "Unknown",
     )
 
     line = scanner_result.get(
         "line",
-        "Unknown"
+        "Unknown",
     )
 
     severity = scanner_result.get(
         "severity",
-        "Unknown"
+        "Unknown",
     )
 
     confidence = scanner_result.get(
         "confidence",
-        "Unknown"
+        "Unknown",
     )
 
     code = scanner_result.get(
         "code",
-        "Not provided"
+        "Not provided",
     )
 
     details = f"""
@@ -195,7 +194,7 @@ Vulnerable Code:
     prompt_template = get_prompt(vulnerability)
 
     return prompt_template.format(
-        details=details
+        details=details,
     )
 
 
@@ -336,10 +335,10 @@ Do not include any text before or after the JSON.
 Return exactly these fields:
 
 {{
+    "severity": "{severity}",
     "explanation": "Explain why the provided code is vulnerable.",
     "impact": "Explain the potential security impact.",
-    "recommendation": "Explain how the vulnerability should be fixed.",
-    "secure_practice": "Give the most relevant secure coding practice."
+    "recommendation": "Explain how the vulnerability should be fixed."
 }}
 
 Rules:
@@ -350,9 +349,10 @@ Rules:
 4. Keep the explanation technically accurate.
 5. Keep the impact specific to the vulnerability.
 6. Give practical remediation advice.
-7. Do not calculate or invent a risk score.
-8. Do not invent an OWASP category or CWE.
-9. Return valid JSON only.
+7. Keep the severity exactly equal to the supplied severity.
+8. Do not calculate or invent a risk score.
+9. Do not invent an OWASP category or CWE.
+10. Return valid JSON only.
 """
 
 
@@ -371,27 +371,27 @@ def build_ai_input(scanner_result):
     return {
         "vulnerability": scanner_result.get(
             "vulnerability",
-            "Unknown"
+            "Unknown",
         ),
         "severity": scanner_result.get(
             "severity",
-            "Unknown"
+            "Unknown",
         ),
         "confidence": scanner_result.get(
             "confidence",
-            "Unknown"
+            "Unknown",
         ),
         "file": scanner_result.get(
             "file",
-            "Unknown"
+            "Unknown",
         ),
         "line": scanner_result.get(
             "line",
-            "Unknown"
+            "Unknown",
         ),
         "code": scanner_result.get(
             "code",
-            "Not provided"
+            "Not provided",
         ),
     }
 
@@ -407,26 +407,26 @@ def build_structured_analysis_prompt(scanner_result):
     return STRUCTURED_ANALYSIS_PROMPT.format(
         vulnerability=scanner_result.get(
             "vulnerability",
-            "Unknown"
+            "Unknown",
         ),
         severity=scanner_result.get(
             "severity",
-            "Unknown"
+            "Unknown",
         ),
         confidence=scanner_result.get(
             "confidence",
-            "Unknown"
+            "Unknown",
         ),
         file=scanner_result.get(
             "file",
-            "Unknown"
+            "Unknown",
         ),
         line=scanner_result.get(
             "line",
-            "Unknown"
+            "Unknown",
         ),
         code=scanner_result.get(
             "code",
-            "Not provided"
-        )
+            "Not provided",
+        ),
     )

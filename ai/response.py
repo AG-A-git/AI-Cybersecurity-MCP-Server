@@ -1,32 +1,20 @@
-
 import json
+import re
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import ValidationError
+
+from .models import AIAnalysisResponse
 
 
-class AIAnalysis(BaseModel):
+def extract_json_response(response: str) -> dict:
     """
-    Validated structure for AI-generated vulnerability analysis.
+    Extract a JSON object from an AI response.
 
-    AI output is treated as untrusted data.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid"
-    )
-
-    explanation: str
-    impact: str
-    recommendation: str
-    secure_practice: str
-
-
-def parse_ai_response(response):
-    """
-    Parse and validate the structured response returned by Ollama.
-
-    AI output is untrusted and must never be treated as executable
-    instructions or authoritative risk information.
+    Handles:
+    - plain JSON
+    - Markdown JSON code fences
+    - explanatory text around JSON
+    - truncated responses where the final } is missing
     """
 
     if not isinstance(response, str):
@@ -41,7 +29,10 @@ def parse_ai_response(response):
 
     response = response.strip()
 
-    # Remove Markdown code fences if the model adds them.
+    # --------------------------------------------------------
+    # Remove Markdown code fences
+    # --------------------------------------------------------
+
     if response.startswith("```json"):
         response = response[len("```json"):].strip()
 
@@ -51,24 +42,90 @@ def parse_ai_response(response):
     if response.endswith("```"):
         response = response[:-3].strip()
 
+    # --------------------------------------------------------
+    # Try complete response first
+    # --------------------------------------------------------
+
     try:
         data = json.loads(response)
 
-    except json.JSONDecodeError as error:
-        # Do not print the complete AI response.
-        # It may contain source code, secrets, prompts,
-        # or other sensitive information.
-        raise ValueError(
-            "AI returned invalid JSON."
-        ) from error
+        if isinstance(data, dict):
+            return data
 
-    if not isinstance(data, dict):
+    except json.JSONDecodeError:
+        pass
+
+    # --------------------------------------------------------
+    # Find JSON object inside surrounding text
+    # --------------------------------------------------------
+
+    start = response.find("{")
+
+    if start == -1:
         raise ValueError(
-            "AI response must be a JSON object."
+            "No JSON object found in AI response."
         )
 
+    candidate = response[start:].strip()
+
+    # Remove trailing Markdown fence if present.
+    candidate = re.sub(
+        r"```\s*$",
+        "",
+        candidate,
+    ).strip()
+
+    # --------------------------------------------------------
+    # Try extracted JSON
+    # --------------------------------------------------------
+
     try:
-        return AIAnalysis(**data)
+        data = json.loads(candidate)
+
+        if isinstance(data, dict):
+            return data
+
+    except json.JSONDecodeError:
+        pass
+
+    # --------------------------------------------------------
+    # Handle truncated JSON.
+    #
+    # Llama may occasionally return the complete fields but
+    # omit the final closing }.
+    # --------------------------------------------------------
+
+    if not candidate.endswith("}"):
+        candidate += "}"
+
+        try:
+            data = json.loads(candidate)
+
+            if isinstance(data, dict):
+                return data
+
+        except json.JSONDecodeError as error:
+            raise ValueError(
+                "AI returned incomplete JSON."
+            ) from error
+
+    raise ValueError(
+        "AI returned invalid JSON."
+    )
+
+
+def parse_ai_response(response):
+    """
+    Parse and validate the structured response returned by Ollama.
+
+    AI output is untrusted and must never be treated as
+    executable instructions or authoritative risk information.
+    """
+
+    data = extract_json_response(response)
+
+    try:
+        return AIAnalysisResponse(**data)
 
     except ValidationError as error:
         raise ValueError(
