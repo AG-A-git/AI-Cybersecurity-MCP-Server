@@ -115,7 +115,7 @@ function Projects() {
         navigate("/upload");
     };
 
-    const handleScan = (projectId) => {
+    const handleUploadFile = (projectId) => {
         localStorage.setItem(
             "selected_project_id",
             String(projectId)
@@ -311,7 +311,7 @@ function Projects() {
                                         <button
                                             type="button"
                                             onClick={() =>
-                                                handleScan(
+                                                handleUploadFile(
                                                     project.id
                                                 )
                                             }

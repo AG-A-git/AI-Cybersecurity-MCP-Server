@@ -106,7 +106,7 @@ function Reports() {
                 <h1>Reports</h1>
 
                 <LoadingState
-                    message="Loading security report..."
+                    message="Loading project report..."
                 />
             </div>
         );
@@ -143,7 +143,7 @@ function Reports() {
                 <h1>Reports</h1>
 
                 <EmptyState
-                    title="No report data"
+                    title="No project data"
                     message="Create a project and upload a file to generate report data."
                     buttonText="Go to Projects"
                     onButtonClick={() =>
@@ -162,7 +162,7 @@ function Reports() {
                 margin: "0 auto",
             }}
         >
-            <h1>Security Reports</h1>
+            <h1>Project & Upload Summary</h1>
 
             <p>
                 View a summary of your projects
@@ -420,7 +420,7 @@ function Reports() {
                     type="button"
                     onClick={fetchReport}
                 >
-                    Refresh Report
+                    Refresh Data
                 </button>
 
                 <button
