@@ -71,11 +71,23 @@ app.dependency_overrides[get_db] = override_get_db
 
 client = TestClient(app)
 
+
+# ==================================================
+# HOME
+# ==================================================
+
 def test_home_endpoint():
     response = client.get("/")
 
     assert response.status_code == 200
-    assert response.json()["message"] == "Welcome to AI Cybersecurity MCP Server!"
+    assert response.json()["message"] == (
+        "Welcome to AI Cybersecurity MCP Server!"
+    )
+
+
+# ==================================================
+# AUTHENTICATION
+# ==================================================
 
 def test_user_registration():
     response = client.post(
@@ -94,6 +106,7 @@ def test_user_registration():
     assert data["username"] == "integration_test_user"
     assert data["email"] == "integration_test@example.com"
 
+
 def test_user_login():
     response = client.post(
         "/login",
@@ -110,6 +123,7 @@ def test_user_login():
     assert "access_token" in data
     assert data["token_type"] == "bearer"
     assert data["access_token"]
+
 
 def test_authenticated_profile():
     login_response = client.post(
@@ -137,10 +151,16 @@ def test_authenticated_profile():
 
     assert data["email"] == "integration_test@example.com"
 
+
 def test_profile_requires_authentication():
     response = client.get("/profile")
 
     assert response.status_code in (401, 403)
+
+
+# ==================================================
+# PROJECTS
+# ==================================================
 
 def test_project_creation():
     login_response = client.post(
@@ -159,7 +179,9 @@ def test_project_creation():
         "/projects/",
         params={
             "project_name": "Integration Test Project",
-            "description": "Project created during backend integration testing"
+            "description": (
+                "Project created during backend integration testing"
+            )
         },
         headers={
             "Authorization": f"Bearer {token}"
@@ -174,10 +196,12 @@ def test_project_creation():
     assert data["data"]["project_name"] == "Integration Test Project"
     assert data["data"]["owner_id"]
 
+
 def test_project_ownership_isolation():
     # ----------------------------------------------
     # Create second user
     # ----------------------------------------------
+
     register_response = client.post(
         "/register",
         json={
@@ -192,6 +216,7 @@ def test_project_ownership_isolation():
     # ----------------------------------------------
     # Login as second user
     # ----------------------------------------------
+
     second_login = client.post(
         "/login",
         json={
@@ -207,6 +232,7 @@ def test_project_ownership_isolation():
     # ----------------------------------------------
     # Create project as second user
     # ----------------------------------------------
+
     project_response = client.post(
         "/projects/",
         params={
@@ -225,6 +251,7 @@ def test_project_ownership_isolation():
     # ----------------------------------------------
     # Login as first user
     # ----------------------------------------------
+
     first_login = client.post(
         "/login",
         json={
@@ -240,6 +267,7 @@ def test_project_ownership_isolation():
     # ----------------------------------------------
     # First user attempts unauthorized access
     # ----------------------------------------------
+
     response = client.get(
         f"/projects/{project_id}",
         headers={
@@ -248,6 +276,7 @@ def test_project_ownership_isolation():
     )
 
     assert response.status_code == 403
+
 
 def test_project_listing():
     login_response = client.post(
@@ -282,6 +311,11 @@ def test_project_listing():
     ]
 
     assert "Integration Test Project" in project_names
+
+
+# ==================================================
+# FILE UPLOAD
+# ==================================================
 
 def test_file_upload():
     login_response = client.post(
@@ -337,8 +371,12 @@ def test_file_upload():
     assert data["data"]["filename"] == "sample_upload.py"
     assert data["data"]["project_id"] == project_id
 
+
 def test_upload_ownership_isolation():
+    # ----------------------------------------------
     # Login as first user
+    # ----------------------------------------------
+
     first_login = client.post(
         "/login",
         json={
@@ -348,9 +386,13 @@ def test_upload_ownership_isolation():
     )
 
     assert first_login.status_code == 200
+
     first_token = first_login.json()["access_token"]
 
+    # ----------------------------------------------
     # Create project owned by first user
+    # ----------------------------------------------
+
     project_response = client.post(
         "/projects/",
         params={
@@ -363,9 +405,13 @@ def test_upload_ownership_isolation():
     )
 
     assert project_response.status_code == 200
+
     project_id = project_response.json()["data"]["id"]
 
+    # ----------------------------------------------
     # Login as second user
+    # ----------------------------------------------
+
     second_login = client.post(
         "/login",
         json={
@@ -375,9 +421,13 @@ def test_upload_ownership_isolation():
     )
 
     assert second_login.status_code == 200
+
     second_token = second_login.json()["access_token"]
 
-    # Second user attempts to upload to first user's project
+    # ----------------------------------------------
+    # Second user attempts unauthorized upload
+    # ----------------------------------------------
+
     with open("tests/sample_upload.py", "rb") as test_file:
         response = client.post(
             "/upload/",
@@ -398,6 +448,11 @@ def test_upload_ownership_isolation():
 
     assert response.status_code == 403
 
+
+# ==================================================
+# SCAN INTEGRATION
+# ==================================================
+
 def test_scan_endpoint_integration(monkeypatch):
     login_response = client.post(
         "/login",
@@ -408,6 +463,7 @@ def test_scan_endpoint_integration(monkeypatch):
     )
 
     assert login_response.status_code == 200
+
     token = login_response.json()["access_token"]
 
     project_response = client.post(
@@ -422,6 +478,7 @@ def test_scan_endpoint_integration(monkeypatch):
     )
 
     assert project_response.status_code == 200
+
     project_id = project_response.json()["data"]["id"]
 
     with open("tests/sample_upload.py", "rb") as test_file:
@@ -444,8 +501,10 @@ def test_scan_endpoint_integration(monkeypatch):
 
     assert upload_response.status_code == 200
 
-    # Replace the external AI dependency with a deterministic
-    # integration-test response.
+    # ----------------------------------------------
+    # Deterministic AI response
+    # ----------------------------------------------
+
     def fake_ai_analysis(findings):
         results = []
 
@@ -487,6 +546,7 @@ def test_scan_endpoint_integration(monkeypatch):
     assert data["data"]["status"] == "completed"
     assert "results" in data["data"]
 
+
 def test_scan_lifecycle():
     login_response = client.post(
         "/login",
@@ -497,6 +557,7 @@ def test_scan_lifecycle():
     )
 
     assert login_response.status_code == 200
+
     token = login_response.json()["access_token"]
 
     project_response = client.post(
@@ -511,6 +572,7 @@ def test_scan_lifecycle():
     )
 
     assert project_response.status_code == 200
+
     project_id = project_response.json()["data"]["id"]
 
     with open("tests/sample_upload.py", "rb") as test_file:
@@ -547,9 +609,6 @@ def test_scan_lifecycle():
             for finding in findings
         ]
 
-    monkeypatch = None
-
-    # Import the service so we can temporarily replace its AI function.
     import services.scan_service as scan_service
 
     original_ai = scan_service.analyze_vulnerabilities
@@ -589,6 +648,7 @@ def test_scan_lifecycle():
     assert result["started_at"] is not None
     assert result["completed_at"] is not None
 
+
 def test_scan_results_and_risk_score():
     login_response = client.post(
         "/login",
@@ -599,6 +659,7 @@ def test_scan_results_and_risk_score():
     )
 
     assert login_response.status_code == 200
+
     token = login_response.json()["access_token"]
 
     project_response = client.post(
@@ -613,6 +674,7 @@ def test_scan_results_and_risk_score():
     )
 
     assert project_response.status_code == 200
+
     project_id = project_response.json()["data"]["id"]
 
     with open("tests/sample_upload.py", "rb") as test_file:
@@ -645,7 +707,10 @@ def test_scan_results_and_risk_score():
                 "vulnerability": "SQL Injection",
                 "severity": "High",
                 "confidence": 95,
-                "code": "query = 'SELECT * FROM users WHERE id=' + user_id"
+                "code": (
+                    "query = "
+                    "'SELECT * FROM users WHERE id=' + user_id"
+                )
             }
         ]
 
@@ -707,8 +772,13 @@ def test_scan_results_and_risk_score():
     assert vulnerability["risk_score"] == 75
     assert vulnerability["owasp_category"] == "A03:2021"
     assert vulnerability["cwe_id"] == "CWE-89"
-    assert vulnerability["explanation"] == "Test vulnerability explanation"
-    assert vulnerability["recommendation"] == "Use parameterized queries"
+    assert vulnerability["explanation"] == (
+        "Test vulnerability explanation"
+    )
+    assert vulnerability["recommendation"] == (
+        "Use parameterized queries"
+    )
+
 
 def test_scan_history():
     login_response = client.post(
@@ -720,6 +790,7 @@ def test_scan_history():
     )
 
     assert login_response.status_code == 200
+
     token = login_response.json()["access_token"]
 
     response = client.get(
@@ -748,35 +819,68 @@ def test_scan_history():
     assert "risk_score" in scan
     assert "created_at" in scan
 
+
+# ==================================================
+# SCAN RESULT OWNERSHIP ISOLATION
+# ==================================================
+
 def test_scan_result_ownership_isolation():
+    # --------------------------------------------------
+    # Create first user specifically for this test
+    # --------------------------------------------------
+
+    first_register = client.post(
+        "/register",
+        json={
+            "username": "scan_owner_test_user",
+            "email": "scan_owner_test@example.com",
+            "password": "ScanOwnerPassword123!"
+        }
+    )
+
+    assert first_register.status_code in (200, 400)
+
+    # --------------------------------------------------
     # Login as first user
+    # --------------------------------------------------
+
     first_login = client.post(
         "/login",
         json={
-            "email": "integration_test@example.com",
-            "password": "TestPassword123!"
+            "email": "scan_owner_test@example.com",
+            "password": "ScanOwnerPassword123!"
         }
     )
 
     assert first_login.status_code == 200
+
     first_token = first_login.json()["access_token"]
 
+    first_headers = {
+        "Authorization": f"Bearer {first_token}"
+    }
+
+    # --------------------------------------------------
     # Create project as first user
+    # --------------------------------------------------
+
     project_response = client.post(
         "/projects/",
         params={
             "project_name": "Private Scan Project",
             "description": "Scan ownership isolation test"
         },
-        headers={
-            "Authorization": f"Bearer {first_token}"
-        }
+        headers=first_headers
     )
 
     assert project_response.status_code == 200
+
     project_id = project_response.json()["data"]["id"]
 
+    # --------------------------------------------------
     # Upload file
+    # --------------------------------------------------
+
     with open("tests/sample_upload.py", "rb") as test_file:
         upload_response = client.post(
             "/upload/",
@@ -790,14 +894,15 @@ def test_scan_result_ownership_isolation():
                     "text/x-python"
                 )
             },
-            headers={
-                "Authorization": f"Bearer {first_token}"
-            }
+            headers=first_headers
         )
 
     assert upload_response.status_code == 200
 
-    # Mock scanner + AI so this test is deterministic
+    # --------------------------------------------------
+    # Mock scanner + AI
+    # --------------------------------------------------
+
     import services.scan_service as scan_service
 
     def fake_scanner(file_path):
@@ -833,14 +938,16 @@ def test_scan_result_ownership_isolation():
     scan_service.analyze_vulnerabilities = fake_ai_analysis
 
     try:
+        # --------------------------------------------------
+        # Create scan as first user
+        # --------------------------------------------------
+
         scan_response = client.post(
             "/scans/",
             json={
                 "project_id": project_id
             },
-            headers={
-                "Authorization": f"Bearer {first_token}"
-            }
+            headers=first_headers
         )
     finally:
         scan_service.run_scanner = original_scanner
@@ -850,24 +957,52 @@ def test_scan_result_ownership_isolation():
 
     scan_id = scan_response.json()["data"]["scan_id"]
 
+    # --------------------------------------------------
+    # Create second user specifically for this test
+    # --------------------------------------------------
+
+    second_register = client.post(
+        "/register",
+        json={
+            "username": "scan_attacker_test_user",
+            "email": "scan_attacker_test@example.com",
+            "password": "ScanAttackerPassword123!"
+        }
+    )
+
+    assert second_register.status_code in (200, 400)
+
+    # --------------------------------------------------
     # Login as second user
+    # --------------------------------------------------
+
     second_login = client.post(
         "/login",
         json={
-            "email": "second_test@example.com",
-            "password": "SecondPassword123!"
+            "email": "scan_attacker_test@example.com",
+            "password": "ScanAttackerPassword123!"
         }
     )
 
     assert second_login.status_code == 200
+
     second_token = second_login.json()["access_token"]
 
+    second_headers = {
+        "Authorization": f"Bearer {second_token}"
+    }
+
+    # --------------------------------------------------
     # Second user attempts to access first user's scan
+    # --------------------------------------------------
+
     response = client.get(
         f"/scans/{scan_id}",
-        headers={
-            "Authorization": f"Bearer {second_token}"
-        }
+        headers=second_headers
     )
+
+    # --------------------------------------------------
+    # Existing scan owned by another user must return 403
+    # --------------------------------------------------
 
     assert response.status_code == 403

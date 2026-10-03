@@ -287,3 +287,12 @@ class Vulnerability(Base):
         back_populates="vulnerabilities"
     )
     
+from sqlalchemy import Index
+
+Index(
+    "uq_active_scan_per_project",
+    Scan.__table__.c.project_id,
+    unique=True,
+    sqlite_where=Scan.__table__.c.status.in_(["pending", "running"]),
+)
+    

@@ -4,19 +4,55 @@ from sqlalchemy.orm import Session
 from models import Project, Scan
 
 
+def get_owned_project(
+    db: Session,
+    project_id: int,
+    user_id: int
+) -> Project:
+    """
+    Retrieve a project only when it belongs to the authenticated user.
+    """
+
+    project = (
+        db.query(Project)
+        .filter(
+            Project.id == project_id
+        )
+        .first()
+    )
+
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found"
+        )
+
+    if project.owner_id != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to access this project"
+        )
+
+    return project
+
+
 def get_owned_scan(
     db: Session,
     scan_id: int,
     user_id: int
 ):
     """
-    Retrieve a scan only if it belongs to a project
-    owned by the authenticated user.
+    Retrieve a scan and enforce project ownership.
+
+    A missing scan returns 404.
+    An existing scan belonging to another user returns 403.
     """
 
     scan = (
         db.query(Scan)
-        .filter(Scan.id == scan_id)
+        .filter(
+            Scan.id == scan_id
+        )
         .first()
     )
 
@@ -28,7 +64,9 @@ def get_owned_scan(
 
     project = (
         db.query(Project)
-        .filter(Project.id == scan.project_id)
+        .filter(
+            Project.id == scan.project_id
+        )
         .first()
     )
 
@@ -47,10 +85,17 @@ def get_owned_scan(
     return scan, project
 
 
-def calculate_scan_risk_score(scan: Scan) -> int:
+def calculate_scan_risk_score(
+    scan: Scan
+) -> int:
     """
-    Return the highest vulnerability risk score
-    for the scan.
+    Calculate the overall risk score for a scan.
+
+    The highest vulnerability risk score is used as the
+    scan-level risk score.
+
+    Returns:
+        Integer between 0 and 100.
     """
 
     risk_scores = [
@@ -62,13 +107,17 @@ def calculate_scan_risk_score(scan: Scan) -> int:
     if not risk_scores:
         return 0
 
-    return max(risk_scores)
+    return max(
+        risk_scores
+    )
 
 
-def serialize_vulnerability(vulnerability):
+def serialize_vulnerability(
+    vulnerability
+) -> dict:
     """
-    Convert a Vulnerability model into the standard
-    API representation.
+    Convert a Vulnerability ORM object into the
+    public API response contract.
     """
 
     return {
@@ -88,10 +137,21 @@ def serialize_vulnerability(vulnerability):
     }
 
 
-def serialize_scan(scan, project):
+def serialize_scan(
+    scan: Scan,
+    project: Project
+) -> dict:
     """
-    Convert a Scan model into the standard API response.
+    Convert a Scan ORM object into the standardized
+    scan-result response contract.
     """
+
+    vulnerabilities = [
+        serialize_vulnerability(
+            vulnerability
+        )
+        for vulnerability in scan.vulnerabilities
+    ]
 
     return {
         "id": scan.id,
@@ -102,21 +162,21 @@ def serialize_scan(scan, project):
         "started_at": scan.started_at,
         "completed_at": scan.completed_at,
         "error_message": scan.error_message,
-        "vulnerability_count": len(scan.vulnerabilities),
-        "risk_score": calculate_scan_risk_score(scan),
-        "vulnerabilities": [
-            serialize_vulnerability(vulnerability)
-            for vulnerability in scan.vulnerabilities
-        ]
+        "vulnerability_count": len(vulnerabilities),
+        "risk_score": calculate_scan_risk_score(
+            scan
+        ),
+        "vulnerabilities": vulnerabilities
     }
+
 
 def get_scan_result(
     db: Session,
     scan_id: int,
     user_id: int
-):
+) -> dict:
     """
-    Get complete details for one owned scan.
+    Return the complete result of a scan owned by the user.
     """
 
     scan, project = get_owned_scan(
@@ -125,7 +185,10 @@ def get_scan_result(
         user_id=user_id
     )
 
-    return serialize_scan(scan, project)
+    return serialize_scan(
+        scan,
+        project
+    )
 
 
 def get_scan_history(
@@ -133,15 +196,40 @@ def get_scan_history(
     user_id: int,
     skip: int = 0,
     limit: int = 10
-):
+) -> list[dict]:
     """
-    Get scan history belonging only to the authenticated user.
+    Return paginated scan history belonging only to the
+    authenticated user.
     """
+
+    if skip < 0:
+        raise ValueError(
+            "skip must be greater than or equal to 0"
+        )
+
+    if limit < 1:
+        raise ValueError(
+            "limit must be greater than 0"
+        )
+
+    limit = min(
+        limit,
+        100
+    )
 
     scans = (
         db.query(Scan)
-        .join(Project, Scan.project_id == Project.id)
-        .filter(Project.owner_id == user_id)
+        .join(
+            Project,
+            Scan.project_id == Project.id
+        )
+        .filter(
+            Project.owner_id == user_id
+        )
+        .order_by(
+            Scan.created_at.desc(),
+            Scan.id.desc()
+        )
         .offset(skip)
         .limit(limit)
         .all()
@@ -150,6 +238,7 @@ def get_scan_history(
     results = []
 
     for scan in scans:
+
         results.append({
             "id": scan.id,
             "project_id": scan.project_id,
@@ -159,8 +248,12 @@ def get_scan_history(
             "completed_at": scan.completed_at,
             "created_at": scan.created_at,
             "error_message": scan.error_message,
-            "vulnerability_count": len(scan.vulnerabilities),
-            "risk_score": calculate_scan_risk_score(scan)
+            "vulnerability_count": len(
+                scan.vulnerabilities
+            ),
+            "risk_score": calculate_scan_risk_score(
+                scan
+            )
         })
 
     return results
