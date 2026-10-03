@@ -6,7 +6,7 @@ The vulnerability scanner analyzes source-code projects and produces standardize
 
 The scanner currently supports Python and JavaScript source files and uses a central scanning pipeline containing 12 vulnerability detection rules.
 
-The scanner is designed as a lightweight static-analysis component.
+The scanner is designed as a lightweight static-analysis component with context-aware analysis, basic taint/data-flow tracking, evidence generation, confidence calibration, and finding deduplication.
 
 ## 2. Supported File Types
 
@@ -43,6 +43,17 @@ Each detected vulnerability uses the following core structure:
 }
 ```
 
+The required public finding fields are:
+
+* `file_name`
+* `line_number`
+* `vulnerability_type`
+* `severity`
+* `confidence`
+* `code`
+
+Additional fields such as `evidence` may be present without changing the core finding contract.
+
 ## 4. Vulnerability Detection Rules
 
 The scanner currently contains 12 vulnerability detection rules:
@@ -62,13 +73,39 @@ The scanner currently contains 12 vulnerability detection rules:
 
 Each rule is implemented as a separate scanner module and is executed by the central scanning pipeline.
 
-## 5. Scanner Pipeline
+## 5. Scanner Architecture
 
-The central scanner loads all available detection rules and executes them against the target source file.
+The scanner processing architecture is:
 
-The general flow is:
-
-Source File → Context Builder → Detection Rules → Findings → Backend / MCP → AI Analysis
+```text
+Source
+  ↓
+Language Detection
+  ↓
+AST / Context Extraction
+  ↓
+Symbol / Variable Tracking
+  ↓
+Source Classification
+  ↓
+Sink Classification
+  ↓
+Taint / Data Flow
+  ↓
+Sanitization Awareness
+  ↓
+Rule Correlation
+  ↓
+Contextual Evidence
+  ↓
+Confidence Calibration
+  ↓
+Fingerprint / Deduplication
+  ↓
+Findings
+  ↓
+Backend / MCP Integration
+```
 
 The scanner context layer collects information such as:
 
@@ -76,13 +113,21 @@ The scanner context layer collects information such as:
 * Programming language
 * Imports
 * Functions
+* Classes
 * Variables
+* Variable assignments
 * Variable references
 * Variable line numbers
+* Assignment history
+* Source context windows
+* Function and class context
+* Source classification
+* Sink classification
+* Vulnerability-specific context
 
-This context helps detection rules provide more useful evidence.
+This information allows detection rules to reason about how potentially unsafe data moves through source code instead of relying only on isolated syntax patterns.
 
-## 6. Context-Aware Analysis
+## 6. AST and Context-Aware Analysis
 
 Python files are parsed using Python's Abstract Syntax Tree (AST).
 
@@ -90,17 +135,198 @@ The context layer identifies:
 
 * Imported modules
 * Function definitions
+* Async functions
+* Class definitions
 * Variable assignments
-* Referenced variables
+* Variable references
+* Function calls
+* Return statements
+* Conditional and loop context
 * Source-code line numbers
 
-A small amount of surrounding source code is also attached to findings using source context.
+The scanner also maintains assignment history so that reassignment can replace stale taint information.
 
-For JavaScript files, the scanner recognizes the language and builds the basic source context. Most current detection rules remain primarily Python-oriented.
+For example:
 
-## 7. Evidence-Based Findings
+```python
+username = request.args.get("username")
+query = username
 
-Findings can contain an evidence object with information such as:
+query = "SELECT * FROM users"
+
+cursor.execute(query)
+```
+
+The final constant assignment is treated as the current value of `query`, preventing stale taint from being carried forward.
+
+The context layer also tracks simple multi-hop flows such as:
+
+```text
+username → user → query → SQL sink
+```
+
+This is intentionally lightweight and does not attempt full symbolic execution or complete interprocedural analysis.
+
+## 7. Source Classification
+
+Potential input sources are classified internally to improve contextual analysis.
+
+Current source categories include:
+
+* `HTTP_INPUT`
+* `FILE_INPUT`
+* `ENV_INPUT`
+* `CLI_INPUT`
+* `USER_INPUT`
+* `UNKNOWN`
+
+Examples include:
+
+```python
+request.args.get("name")
+request.form.get("name")
+request.json
+request.data
+os.environ.get("URL")
+open(path).read()
+input()
+```
+
+Function arguments are not automatically treated as user-controlled input.
+
+## 8. Sink Classification
+
+Potential security-sensitive operations are classified internally.
+
+Current sink categories include:
+
+* `SQL_SINK`
+* `HTML_SINK`
+* `COMMAND_SINK`
+* `NETWORK_SINK`
+* `DESERIALIZATION_SINK`
+* `AUTHORIZATION_SINK`
+
+Examples include:
+
+```python
+cursor.execute(query)
+os.system(command)
+requests.get(url)
+pickle.loads(data)
+```
+
+Sink classification is combined with source and propagation information to improve contextual detection.
+
+## 9. Taint and Data-Flow Analysis
+
+The scanner performs lightweight taint tracking.
+
+The general reasoning model is:
+
+```text
+Source
+  ↓
+Propagation / Assignment
+  ↓
+Vulnerability-Relevant Construction
+  ↓
+Sensitive Sink
+```
+
+The scanner can detect simple multi-hop propagation and recognizes certain sanitization or safe-use patterns.
+
+Unknown sources are not automatically considered tainted.
+
+Reassignment is tracked so that stale taint does not remain attached to a variable after it receives a safe value.
+
+## 10. Vulnerability Contextual Analysis
+
+### SQL Injection
+
+SQL Injection analysis considers the relationship between:
+
+```text
+HTTP source
+  ↓
+Tainted variable
+  ↓
+SQL construction
+  ↓
+SQL execution
+```
+
+Examples involving concatenation or f-strings with tainted input can be detected.
+
+Parameterized SQL and constant SQL statements should not be reported solely because `execute()` is present.
+
+### Cross-Site Scripting
+
+XSS analysis considers:
+
+```text
+HTTP source
+  ↓
+Tainted value
+  ↓
+HTML construction
+  ↓
+HTML output
+```
+
+Known escaping such as `html.escape()` is considered during contextual analysis.
+
+### Command Injection
+
+Command Injection analysis distinguishes between:
+
+* Tainted command construction
+* Constant commands
+* Argument-array execution
+* `shell=True` execution involving tainted data
+
+For example, tainted request data reaching `os.system()` can produce a finding, while a constant command is not reported merely because `os.system()` is present.
+
+### SSRF
+
+SSRF analysis considers whether a network request destination originates from potentially attacker-controlled input.
+
+For example:
+
+```text
+HTTP source
+  ↓
+URL variable
+  ↓
+requests.get(url)
+```
+
+Constant URLs and unrelated tainted variables should not automatically produce SSRF findings.
+
+## 11. Authentication and Authorization Context
+
+The scanner includes contextual checks for authentication and authorization patterns.
+
+Examples of recognized security evidence include:
+
+* Authentication decorators
+* Authorization decorators
+* `current_user`
+* FastAPI `Depends()`
+* Role checks
+* Permission checks
+* `abort(403)`
+* Administrative route protection
+
+The scanner distinguishes protected administrative routes from routes where sensitive functionality is exposed without an appropriate authorization check.
+
+A health or public informational endpoint is not considered vulnerable merely because it does not require authentication.
+
+## 12. Evidence and Explainability
+
+Findings may include structured evidence describing why a vulnerability was detected.
+
+Evidence can capture information such as:
 
 * Source
 * Source line
@@ -108,43 +334,38 @@ Findings can contain an evidence object with information such as:
 * Sink
 * Sink line
 * Detection reason
+* Propagation path
+* Sanitization information
+* Function context
+* Class context
 
-Example:
+The internal explainability model can represent information such as:
 
-```json
-{
-  "source": "username",
-  "source_line": 5,
-  "tainted_variable": "username",
-  "sink": "SQL statement construction",
-  "sink_line": 5,
-  "reason": "SQL statement contains string concatenation with a variable or expression."
-}
+```text
+source_type
+source_line
+sink_type
+sink_line
+function_name
+taint_path
+sanitizer_applied
+evidence_reason
 ```
 
-Evidence is intended to help the AI analysis layer explain why a vulnerability was detected.
+Example reasoning:
 
-## 8. SQL Injection Detection
-
-The SQL Injection rule detects suspicious SQL statement construction involving variable concatenation.
-
-Example pattern:
-
-```python
-query = "SELECT * FROM users WHERE name = '" + username
+```text
+Source type: HTTP_INPUT
+Source line: 4
+Sink type: SQL_SINK
+Sink line: 7
+Taint path: username → query
+Reason: User-controlled HTTP input reaches SQL execution without parameterization.
 ```
 
-The scanner reports:
+These details are intended to improve scanner transparency and help the AI analysis layer explain why a finding was generated.
 
-* Vulnerability type: SQL Injection
-* OWASP: A03: Injection
-* CWE: CWE-89
-* Severity: Critical
-* Confidence: 95
-
-Safe parameterized SQL should not be reported by this rule.
-
-## 9. Finding Validation
+## 13. Finding Validation
 
 All findings are validated before being returned.
 
@@ -166,68 +387,99 @@ Severity values currently supported are:
 
 Confidence values must be between 0 and 100.
 
-## 10. Deduplication
+## 14. Confidence and Deduplication
 
-The scanner provides finding deduplication.
+The scanner uses confidence values to represent detection certainty.
 
-Findings are compared using:
+Findings are fingerprinted using:
 
 * Vulnerability type
 * File name
 * Line number
 * Code
 
-When duplicate findings are detected, the finding with the higher confidence is retained.
+The fingerprint does not depend on confidence or evidence.
 
-## 11. Testing
+When duplicate findings are detected, the higher-confidence finding is retained.
+
+This allows additional contextual evidence to improve a finding without creating duplicate results.
+
+## 15. Testing
 
 The scanner is tested using the Python `pytest` framework.
 
 The regression suite covers:
 
 * Context analysis
-* Evidence generation
+* AST analysis
+* Function and class context
+* Variable tracking
+* Variable reassignment
+* Source classification
+* Sink classification
+* Taint propagation
+* Sanitization awareness
 * SQL detection accuracy
+* XSS detection
+* Command Injection detection
+* SSRF detection
+* LDAP detection
+* Authentication and authorization analysis
+* Evidence generation
+* Explainability
 * Central scanner execution
 * Multi-language handling
 * Large-project scanning
-* Performance
 * Finding validation
+* Deduplication
+* Confidence handling
 * Integration behavior
 
-The current regression suite contains 96 passing tests.
+Current regression result:
 
-## 12. Performance
+```text
+172 passed
+```
 
-The scanner has been tested against larger temporary projects to verify that scanning remains practical.
+## 16. Performance
 
-A temporary project containing multiple Python files was successfully scanned during regression testing.
+The full regression suite was measured using:
 
-Performance testing is intended to detect unexpected slowdowns as additional rules and analysis features are added.
+```powershell
+Measure-Command { pytest -q }
+```
 
-## 13. Integration
+Observed runtime:
+
+```text
+TotalSeconds : 1.6603695
+```
+
+The scanner is also tested against larger temporary projects to verify that project scanning remains practical as additional rules and context analysis are introduced.
+
+Performance testing is intended to detect unexpected slowdowns as scanner functionality grows.
+
+## 17. Integration
 
 The scanner exposes standardized findings to the rest of the project.
 
-The central pipeline is:
+The central integration flow is:
 
 ```text
-run_all_rules(file_path)
-        ↓
-Detection Rules
-        ↓
+Scanner
+  ↓
 Standardized Findings
-        ↓
+  ↓
 Backend / MCP Integration
-        ↓
+  ↓
 AI Explanation and Risk Analysis
 ```
 
-The scanner itself focuses on detection and evidence generation.
+The scanner focuses on source-code detection, contextual analysis, evidence generation, confidence handling, and finding normalization.
 
-The AI layer is responsible for providing deeper explanations, OWASP/CWE enrichment, and risk analysis.
+The AI layer can provide deeper explanations, OWASP/CWE enrichment, and risk analysis.
 
-## 14. Limitations and Future Improvements
+## 18. Limitations and Future Improvements
 
 The scanner is a lightweight static-analysis system and is not intended to replace mature security-analysis platforms.
 
@@ -235,16 +487,18 @@ Current limitations include:
 
 * Most detection rules are primarily Python-oriented.
 * JavaScript support is currently focused on language recognition and context handling.
-* Taint tracking is basic rather than full interprocedural analysis.
-* Detection relies on rule-based patterns and AST context.
+* Taint tracking is lightweight rather than full interprocedural analysis.
+* Detection relies on rule-based patterns and AST/context information.
 * Complex framework-specific behavior may not be detected.
+* Advanced symbolic execution is outside the current scope.
 
 Future improvements may include:
 
 * Expanded JavaScript vulnerability rules
-* Stronger taint tracking
-* More precise data-flow analysis
+* Stronger interprocedural taint tracking
+* More precise project-level data-flow analysis
 * Additional security rules
 * Better framework awareness
 * Improved false-positive reduction
-* Deeper project-level analysis
+* Deeper cross-file analysis
+* More advanced vulnerability correlation
