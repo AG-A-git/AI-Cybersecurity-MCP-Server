@@ -10,7 +10,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from scanner.engine import scan_project
 
 
-def run_scanner(project_path):
+def run_scanner(project_path: str | Path) -> list[dict]:
     """
     Run the vulnerability scanner.
 

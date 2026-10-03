@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from models import Scan, Project
 
 from logging_config import get_logger
+from services.scan_result_service import get_scan_result
 
 
 logger = get_logger(__name__)
@@ -14,10 +15,10 @@ def get_report_data(
     user_id: int
 ):
     """
-    Prepare normalized data for report generation.
+    Prepare normalized, report-ready data for a scan.
 
-    Report generation remains separate from
-    scan execution and database ownership logic.
+    Ownership and scan serialization are delegated to the
+    standardized scan-result service.
     """
 
     logger.info(
@@ -26,29 +27,11 @@ def get_report_data(
         user_id
     )
 
-    scan = (
-        db.query(Scan)
-        .join(Project, Scan.project_id == Project.id)
-        .filter(
-            Scan.id == scan_id,
-            Project.owner_id == user_id
-        )
-        .first()
+    return get_scan_result(
+        db=db,
+        scan_id=scan_id,
+        user_id=user_id
     )
-
-    if not scan:
-        logger.warning(
-            "Report data not found or unauthorized | scan_id=%s | user_id=%s",
-            scan_id,
-            user_id
-        )
-        return None
-
-    return {
-        "scan": scan,
-        "project": scan.project,
-        "vulnerabilities": scan.vulnerabilities
-    }
 
 
 def generate_json_report(
@@ -57,7 +40,7 @@ def generate_json_report(
     user_id: int
 ):
     """
-    Generate report data intended for JSON export.
+    Generate normalized data intended for JSON export.
     """
 
     logger.info(
@@ -66,16 +49,11 @@ def generate_json_report(
         user_id
     )
 
-    report_data = get_report_data(
+    return get_report_data(
         db=db,
         scan_id=scan_id,
         user_id=user_id
     )
-
-    if report_data is None:
-        return None
-
-    return report_data
 
 
 def generate_html_report(
@@ -84,7 +62,9 @@ def generate_html_report(
     user_id: int
 ):
     """
-    Placeholder interface for HTML report generation.
+    Prepare normalized data for HTML report generation.
+
+    Actual HTML rendering remains separate.
     """
 
     logger.info(
@@ -93,16 +73,11 @@ def generate_html_report(
         user_id
     )
 
-    report_data = get_report_data(
+    return get_report_data(
         db=db,
         scan_id=scan_id,
         user_id=user_id
     )
-
-    if report_data is None:
-        return None
-
-    return report_data
 
 
 def generate_pdf_report(
@@ -111,9 +86,9 @@ def generate_pdf_report(
     user_id: int
 ):
     """
-    Placeholder interface for PDF report generation.
+    Prepare normalized data for PDF report generation.
 
-    Actual PDF rendering will be implemented later.
+    Actual PDF rendering remains separate.
     """
 
     logger.info(
@@ -122,13 +97,8 @@ def generate_pdf_report(
         user_id
     )
 
-    report_data = get_report_data(
+    return get_report_data(
         db=db,
         scan_id=scan_id,
         user_id=user_id
     )
-
-    if report_data is None:
-        return None
-
-    return report_data

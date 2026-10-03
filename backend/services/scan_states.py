@@ -18,19 +18,22 @@ ALLOWED_TRANSITIONS = {
         ScanStatus.FAILED,
     },
     ScanStatus.COMPLETED: set(),
-    ScanStatus.FAILED: set(),
+    ScanStatus.FAILED: {
+        ScanStatus.PENDING,
+    },
 }
 
 
 def can_transition(current: str, target: str) -> bool:
     """
-    Check whether a scan is allowed to move from current state to target state.
+    Check whether a scan is allowed to move
+    from the current state to the target state.
     """
 
     try:
         current_status = ScanStatus(current)
         target_status = ScanStatus(target)
-    except ValueError:
+    except (ValueError, TypeError):
         return False
 
     return target_status in ALLOWED_TRANSITIONS[current_status]

@@ -112,6 +112,61 @@ def calculate_scan_risk_score(
     )
 
 
+def calculate_severity_counts(
+    vulnerabilities: list
+) -> dict:
+    """
+    Calculate the number of findings for each supported
+    vulnerability severity.
+
+    Expects Vulnerability ORM objects.
+    """
+
+    severity_counts = {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0
+    }
+
+    for vulnerability in vulnerabilities:
+
+        if not vulnerability.severity:
+            continue
+
+        severity = (
+            vulnerability.severity
+            .strip()
+            .lower()
+        )
+
+        if severity in severity_counts:
+            severity_counts[severity] += 1
+
+    return severity_counts
+
+
+def validate_scan_summary(
+    total_findings: int,
+    severity_counts: dict
+) -> None:
+    """
+    Ensure severity counts always match the total
+    number of persisted vulnerability findings.
+    """
+
+    severity_total = sum(
+        severity_counts.values()
+    )
+
+    if severity_total != total_findings:
+        raise ValueError(
+            "Scan summary severity counts do not "
+            "match total findings"
+        )
+
+
 def serialize_vulnerability(
     vulnerability
 ) -> dict:
@@ -146,6 +201,24 @@ def serialize_scan(
     scan-result response contract.
     """
 
+    # IMPORTANT:
+    # Calculate severity counts while vulnerabilities
+    # are still ORM objects.
+    severity_counts = calculate_severity_counts(
+        scan.vulnerabilities
+    )
+
+    total_findings = len(
+        scan.vulnerabilities
+    )
+
+    validate_scan_summary(
+        total_findings=total_findings,
+        severity_counts=severity_counts
+    )
+
+    # Serialize only after all ORM-level calculations
+    # have been completed.
     vulnerabilities = [
         serialize_vulnerability(
             vulnerability
@@ -162,10 +235,18 @@ def serialize_scan(
         "started_at": scan.started_at,
         "completed_at": scan.completed_at,
         "error_message": scan.error_message,
-        "vulnerability_count": len(vulnerabilities),
+
+        "total_findings": total_findings,
+
+        # Keep the existing field for backward compatibility.
+        "vulnerability_count": total_findings,
+
+        "severity_counts": severity_counts,
+
         "risk_score": calculate_scan_risk_score(
             scan
         ),
+
         "vulnerabilities": vulnerabilities
     }
 
@@ -239,6 +320,21 @@ def get_scan_history(
 
     for scan in scans:
 
+        vulnerabilities = scan.vulnerabilities
+
+        total_findings = len(
+            vulnerabilities
+        )
+
+        severity_counts = calculate_severity_counts(
+            vulnerabilities
+        )
+
+        validate_scan_summary(
+            total_findings=total_findings,
+            severity_counts=severity_counts
+        )
+
         results.append({
             "id": scan.id,
             "project_id": scan.project_id,
@@ -248,9 +344,14 @@ def get_scan_history(
             "completed_at": scan.completed_at,
             "created_at": scan.created_at,
             "error_message": scan.error_message,
-            "vulnerability_count": len(
-                scan.vulnerabilities
-            ),
+
+            "total_findings": total_findings,
+
+            # Keep the old field for existing frontend code.
+            "vulnerability_count": total_findings,
+
+            "severity_counts": severity_counts,
+
             "risk_score": calculate_scan_risk_score(
                 scan
             )

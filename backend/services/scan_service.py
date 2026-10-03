@@ -10,38 +10,41 @@ from services.scan_states import ScanStatus
 from services.scan_lifecycle_service import (
     mark_scan_running,
     mark_scan_completed,
-    mark_scan_failed
+    mark_scan_failed,
 )
 
 logger = get_logger(__name__)
 
 
-def execute_scanner(
-    filepath: str,
-    scan_id: int
-):
+def execute_scanner(filepath: str, scan_id: int):
     """
-    Execute the scanner for a single uploaded file.
+    Execute the scanner and enforce the scanner/backend contract.
     """
 
     try:
-        return run_scanner(filepath)
+        results = run_scanner(filepath)
+
+        if results is None:
+            return []
+
+        if not isinstance(results, list):
+            raise ValueError(
+                "Scanner returned an invalid result format"
+            )
+
+        return results
 
     except Exception:
         logger.exception(
-            "Scanner execution failed | scan_id=%s | filepath=%s",
+            "Scanner execution failed | scan_id=%s",
             scan_id,
-            filepath
         )
         raise
 
 
-def normalize_scanner_finding(
-    finding: dict
-) -> dict:
+def normalize_scanner_finding(finding: dict) -> dict:
     """
-    Normalize a raw scanner finding into the backend
-    finding contract.
+    Normalize a raw scanner finding into the backend finding contract.
     """
 
     if not isinstance(finding, dict):
@@ -82,11 +85,9 @@ def normalize_scanner_finding(
     }
 
 
-def validate_finding(
-    finding: dict
-) -> None:
+def validate_finding(finding: dict) -> None:
     """
-    Validate the normalized scanner finding contract.
+    Validate the normalized/enriched finding contract.
     """
 
     required_fields = {
@@ -96,7 +97,6 @@ def validate_finding(
     }
 
     for field, message in required_fields.items():
-
         value = finding.get(field)
 
         if value is None:
@@ -106,7 +106,6 @@ def validate_finding(
             raise ValueError(message)
 
     if finding.get("line") is not None:
-
         if (
             isinstance(finding["line"], bool)
             or not isinstance(finding["line"], int)
@@ -117,7 +116,6 @@ def validate_finding(
             )
 
     if finding.get("confidence") is not None:
-
         if (
             isinstance(finding["confidence"], bool)
             or not isinstance(finding["confidence"], int)
@@ -132,13 +130,15 @@ def validate_finding(
             )
 
     if finding.get("risk_score") is not None:
-
         if (
             isinstance(finding["risk_score"], bool)
-            or not isinstance(finding["risk_score"], int)
+            or not isinstance(
+                finding["risk_score"],
+                (int, float)
+            )
         ):
             raise ValueError(
-                "Finding risk score must be an integer"
+                "Finding risk score must be numeric"
             )
 
         if not 0 <= finding["risk_score"] <= 100:
@@ -159,22 +159,82 @@ def validate_finding(
         )
 
 
+def finding_identity(finding: dict) -> tuple:
+    """
+    Return the identity used to detect duplicate findings.
+
+    A finding is considered the same when it has the same:
+    - file
+    - line
+    - vulnerability type
+    """
+
+    return (
+        finding.get("file"),
+        finding.get("line"),
+        finding.get("vulnerability"),
+    )
+
+
+def deduplicate_findings(findings: list[dict]) -> list[dict]:
+    """
+    Remove duplicate findings while preserving their original order.
+
+    The first occurrence of a finding is retained.
+    """
+
+    seen = set()
+    unique_findings = []
+
+    for finding in findings:
+        identity = finding_identity(finding)
+
+        if identity in seen:
+            continue
+
+        seen.add(identity)
+        unique_findings.append(finding)
+
+    return unique_findings
+
+
 def persist_findings(
     db: Session,
     scan_id: int,
-    findings: list[dict]
+    findings: list[dict],
 ) -> int:
     """
-    Persist normalized and validated findings for a scan.
+    Persist validated vulnerability findings
+    within the caller's existing transaction.
     """
+
+    if (
+        isinstance(scan_id, bool)
+        or not isinstance(scan_id, int)
+        or scan_id <= 0
+    ):
+        raise ValueError("Invalid scan ID")
+
+    if not isinstance(findings, list):
+        raise ValueError(
+            "Findings must be provided as a list"
+        )
+
+    scan_exists = (
+        db.query(Scan.id)
+        .filter(Scan.id == scan_id)
+        .first()
+    )
+
+    if not scan_exists:
+        raise ValueError(
+            "Cannot persist findings for a missing scan"
+        )
 
     persisted_count = 0
 
     for finding in findings:
-
-        validate_finding(
-            finding
-        )
+        validate_finding(finding)
 
         vulnerability = Vulnerability(
             scan_id=scan_id,
@@ -192,10 +252,7 @@ def persist_findings(
             recommendation=finding.get("recommendation"),
         )
 
-        db.add(
-            vulnerability
-        )
-
+        db.add(vulnerability)
         persisted_count += 1
 
     db.flush()
@@ -206,42 +263,37 @@ def persist_findings(
 def fail_scan_safely(
     db: Session,
     scan_id: int,
-    error_message: str
+    error_message: str,
 ) -> None:
     """
-    Safely transition an existing scan to FAILED.
+    Safely transition a scan into FAILED state after
+    rolling back the failed transaction.
     """
 
     try:
-
         db.rollback()
 
         failed_scan = (
             db.query(Scan)
-            .filter(
-                Scan.id == scan_id
-            )
+            .filter(Scan.id == scan_id)
             .first()
         )
 
         if not failed_scan:
-
             logger.error(
                 "Unable to mark scan failed because scan "
                 "was not found | scan_id=%s",
-                scan_id
+                scan_id,
             )
-
             return
 
         if failed_scan.status in {
             ScanStatus.PENDING.value,
-            ScanStatus.RUNNING.value
+            ScanStatus.RUNNING.value,
         }:
-
             mark_scan_failed(
                 failed_scan,
-                error_message
+                error_message,
             )
 
             db.commit()
@@ -249,26 +301,27 @@ def fail_scan_safely(
             logger.info(
                 "Scan marked failed | scan_id=%s | error=%s",
                 scan_id,
-                error_message
+                error_message,
             )
 
     except Exception:
-
         db.rollback()
 
         logger.exception(
-            "Failed to persist scan failure state | scan_id=%s",
-            scan_id
+            "CRITICAL: Failed to persist scan failure state "
+            "| scan_id=%s",
+            scan_id,
         )
 
 
 def run_scan_pipeline(
     db: Session,
     scan: Scan,
-    uploaded_files: list[UploadedFile]
+    uploaded_files: list[UploadedFile],
 ) -> list[dict]:
     """
-    Execute the complete scanner -> AI -> persistence pipeline.
+    Execute the complete scanner → normalization → validation
+    → deduplication → AI → persistence pipeline.
     """
 
     results = []
@@ -276,7 +329,7 @@ def run_scan_pipeline(
     logger.info(
         "Scan pipeline started | scan_id=%s | files=%s",
         scan.id,
-        len(uploaded_files)
+        len(uploaded_files),
     )
 
     # ---------------------------------------------------------
@@ -284,21 +337,17 @@ def run_scan_pipeline(
     # ---------------------------------------------------------
 
     for uploaded_file in uploaded_files:
-
         file_results = execute_scanner(
             uploaded_file.filepath,
-            scan.id
+            scan.id,
         )
 
         if not file_results:
             continue
 
         for finding in file_results:
-
-            normalized_finding = (
-                normalize_scanner_finding(
-                    finding
-                )
+            normalized_finding = normalize_scanner_finding(
+                finding
             )
 
             validate_finding(
@@ -309,10 +358,28 @@ def run_scan_pipeline(
                 normalized_finding
             )
 
+    raw_finding_count = len(results)
+
     logger.info(
         "Scanner stage completed | scan_id=%s | findings=%s",
         scan.id,
-        len(results)
+        raw_finding_count,
+    )
+
+    # ---------------------------------------------------------
+    # Deduplication stage
+    # ---------------------------------------------------------
+
+    results = deduplicate_findings(results)
+
+    unique_finding_count = len(results)
+
+    logger.info(
+        "Finding deduplication completed | "
+        "scan_id=%s | raw=%s | unique=%s",
+        scan.id,
+        raw_finding_count,
+        unique_finding_count,
     )
 
     # ---------------------------------------------------------
@@ -320,15 +387,12 @@ def run_scan_pipeline(
     # ---------------------------------------------------------
 
     if results:
-
-        results = analyze_vulnerabilities(
-            results
-        )
+        results = analyze_vulnerabilities(results)
 
         logger.info(
             "AI stage completed | scan_id=%s | findings=%s",
             scan.id,
-            len(results)
+            len(results),
         )
 
     # ---------------------------------------------------------
@@ -336,26 +400,26 @@ def run_scan_pipeline(
     # ---------------------------------------------------------
 
     for finding in results:
-
-        validate_finding(
-            finding
-        )
+        validate_finding(finding)
 
     # ---------------------------------------------------------
     # Persistence stage
     # ---------------------------------------------------------
 
+    # Findings are added to the current database transaction.
+    # The scan is committed only after the complete pipeline
+    # succeeds.
+
     persisted_count = persist_findings(
         db,
         scan.id,
-        results
+        results,
     )
 
     logger.info(
-        "Persistence stage completed | "
-        "scan_id=%s | findings=%s",
+        "Persistence stage completed | scan_id=%s | findings=%s",
         scan.id,
-        persisted_count
+        persisted_count,
     )
 
     return results
@@ -364,35 +428,28 @@ def run_scan_pipeline(
 def create_scan(
     db: Session,
     project_id: int,
-    user_id: int
+    user_id: int,
 ):
     """
-    Create and execute a new scan.
+    Create and execute a new scan for a user's project.
     """
 
     project = (
         db.query(Project)
-        .filter(
-            Project.id == project_id
-        )
+        .filter(Project.id == project_id)
         .first()
     )
 
     if not project:
-
         raise HTTPException(
             status_code=404,
-            detail="Project not found"
+            detail="Project not found",
         )
 
     if project.owner_id != user_id:
-
         raise HTTPException(
             status_code=403,
-            detail=(
-                "You do not have permission "
-                "to scan this project"
-            )
+            detail="You do not have permission to scan this project",
         )
 
     uploaded_files = (
@@ -404,13 +461,9 @@ def create_scan(
     )
 
     if not uploaded_files:
-
         raise HTTPException(
             status_code=400,
-            detail=(
-                "No uploaded files found "
-                "for this project"
-            )
+            detail="No uploaded files found for this project",
         )
 
     active_scan = (
@@ -419,180 +472,128 @@ def create_scan(
             Scan.project_id == project_id,
             Scan.status.in_([
                 ScanStatus.PENDING.value,
-                ScanStatus.RUNNING.value
-            ])
+                ScanStatus.RUNNING.value,
+            ]),
         )
         .first()
     )
 
     if active_scan:
-
         raise HTTPException(
             status_code=409,
-            detail=(
-                "A scan is already in progress "
-                "for this project"
-            )
+            detail="A scan is already in progress for this project",
         )
 
     scan = Scan(
         project_id=project_id,
-        status=ScanStatus.PENDING.value
+        status=ScanStatus.PENDING.value,
     )
 
-    db.add(
-        scan
-    )
-
+    db.add(scan)
     db.commit()
-
-    db.refresh(
-        scan
-    )
+    db.refresh(scan)
 
     try:
-
-        mark_scan_running(
-            scan
-        )
+        mark_scan_running(scan)
 
         db.commit()
-
-        db.refresh(
-            scan
-        )
+        db.refresh(scan)
 
         logger.info(
-            "Scan started | scan_id=%s | "
-            "project_id=%s | user_id=%s",
+            "Scan started | scan_id=%s | project_id=%s | user_id=%s",
             scan.id,
             project_id,
-            user_id
+            user_id,
         )
 
         results = run_scan_pipeline(
             db=db,
             scan=scan,
-            uploaded_files=uploaded_files
+            uploaded_files=uploaded_files,
         )
 
-        mark_scan_completed(
-            scan
-        )
+        mark_scan_completed(scan)
 
         db.commit()
-
-        db.refresh(
-            scan
-        )
+        db.refresh(scan)
 
         logger.info(
             "Scan completed successfully | "
             "scan_id=%s | project_id=%s",
             scan.id,
-            project_id
+            project_id,
         )
 
         return scan, results
 
-    except Exception as exc:
-
+    except Exception:
         logger.exception(
-            "Scan failed | scan_id=%s | "
-            "project_id=%s | user_id=%s",
+            "Scan failed | scan_id=%s | project_id=%s | user_id=%s",
             scan.id,
             project_id,
-            user_id
+            user_id,
         )
 
         fail_scan_safely(
             db,
             scan.id,
-            f"Scan execution failed: {type(exc).__name__}"
+            "Scan execution failed",
         )
 
         raise HTTPException(
             status_code=500,
             detail=(
-                "Scan failed. Please check the "
-                "scan details for more information."
-            )
+                "Scan failed. Please check the scan details "
+                "for more information."
+            ),
         )
 
 
 def retry_failed_scan(
     db: Session,
     scan_id: int,
-    user_id: int
+    user_id: int,
 ):
     """
-    Retry a failed scan.
-
-    Only FAILED scans can be retried.
-
-    The retry reuses the existing scan record and project
-    files instead of creating an uncontrolled duplicate scan.
+    Retry a previously failed scan.
     """
-
-    # ---------------------------------------------------------
-    # 1. Load scan with ownership validation
-    # ---------------------------------------------------------
 
     scan = (
         db.query(Scan)
         .join(
             Project,
-            Scan.project_id == Project.id
+            Scan.project_id == Project.id,
         )
         .filter(
             Scan.id == scan_id,
-            Project.owner_id == user_id
+            Project.owner_id == user_id,
         )
         .first()
     )
 
     if not scan:
-
         raise HTTPException(
             status_code=404,
-            detail="Scan not found"
+            detail="Scan not found",
         )
-
-    # ---------------------------------------------------------
-    # 2. Only FAILED scans can be retried
-    # ---------------------------------------------------------
 
     if scan.status != ScanStatus.FAILED.value:
-
         raise HTTPException(
             status_code=409,
-            detail=(
-                "Only failed scans can be retried"
-            )
+            detail="Only failed scans can be retried",
         )
-
-    # ---------------------------------------------------------
-    # 3. Get project
-    # ---------------------------------------------------------
 
     project = (
         db.query(Project)
-        .filter(
-            Project.id == scan.project_id
-        )
+        .filter(Project.id == scan.project_id)
         .first()
     )
 
     if not project:
-
         raise HTTPException(
             status_code=404,
-            detail="Project not found"
+            detail="Project not found",
         )
-
-    # ---------------------------------------------------------
-    # 4. Get project files
-    # ---------------------------------------------------------
 
     uploaded_files = (
         db.query(UploadedFile)
@@ -603,122 +604,92 @@ def retry_failed_scan(
     )
 
     if not uploaded_files:
-
         raise HTTPException(
             status_code=400,
-            detail=(
-                "No uploaded files found "
-                "for this project"
-            )
+            detail="No uploaded files found for this project",
         )
 
-    # ---------------------------------------------------------
-    # 5. Reset failed scan safely
-    # ---------------------------------------------------------
-
     try:
-
         scan.status = ScanStatus.PENDING.value
         scan.started_at = None
         scan.completed_at = None
         scan.error_message = None
 
         db.commit()
-
-        db.refresh(
-            scan
-        )
+        db.refresh(scan)
 
         logger.info(
             "Failed scan reset for retry | "
             "scan_id=%s | user_id=%s",
             scan.id,
-            user_id
+            user_id,
         )
 
     except Exception:
-
         db.rollback()
 
         logger.exception(
-            "Failed to reset scan for retry | "
-            "scan_id=%s",
-            scan.id
+            "Failed to reset scan for retry | scan_id=%s",
+            scan.id,
         )
 
         raise HTTPException(
             status_code=500,
-            detail="Unable to retry scan"
+            detail="Unable to retry scan",
         )
-
-    # ---------------------------------------------------------
-    # 6. Execute retry
-    # ---------------------------------------------------------
 
     try:
-
-        mark_scan_running(
-            scan
-        )
+        mark_scan_running(scan)
 
         db.commit()
-
-        db.refresh(
-            scan
-        )
+        db.refresh(scan)
 
         logger.info(
             "Scan retry started | "
             "scan_id=%s | project_id=%s | user_id=%s",
             scan.id,
             scan.project_id,
-            user_id
+            user_id,
         )
 
         results = run_scan_pipeline(
             db=db,
             scan=scan,
-            uploaded_files=uploaded_files
+            uploaded_files=uploaded_files,
         )
 
-        mark_scan_completed(
-            scan
-        )
+        mark_scan_completed(scan)
 
         db.commit()
-
-        db.refresh(
-            scan
-        )
+        db.refresh(scan)
 
         logger.info(
             "Scan retry completed | "
             "scan_id=%s | project_id=%s",
             scan.id,
-            scan.project_id
+            scan.project_id,
         )
 
         return scan, results
 
-    except Exception as exc:
-
+    except Exception:
         logger.exception(
             "Scan retry failed | "
             "scan_id=%s | project_id=%s",
             scan.id,
-            scan.project_id
+            scan.project_id,
         )
 
         fail_scan_safely(
             db,
             scan.id,
-            f"Scan retry failed: {type(exc).__name__}"
+            "Scan retry failed",
         )
 
         raise HTTPException(
             status_code=500,
             detail=(
-                "Scan retry failed. Please check "
-                "the scan details for more information."
-            )
+                "Scan retry failed. Please check the scan details "
+                "for more information."
+            ),
         )
