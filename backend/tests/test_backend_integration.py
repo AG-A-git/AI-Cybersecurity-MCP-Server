@@ -535,17 +535,36 @@ def test_scan_endpoint_integration(monkeypatch):
             "Authorization": f"Bearer {token}"
         }
     )
-
-    assert response.status_code == 200
+    assert response.status_code == 202
 
     data = response.json()
 
     assert data["success"] is True
+    assert data["message"] == "Scan accepted for processing"
     assert data["data"]["scan_id"]
     assert data["data"]["project_id"] == project_id
-    assert data["data"]["status"] == "completed"
-    assert "results" in data["data"]
+    assert data["data"]["status"] == "pending"
+    assert "results" not in data["data"]
+    assert "vulnerabilities" not in data["data"]
 
+    # TestClient waits for registered background tasks to finish.
+    scan_id = data["data"]["scan_id"]
+
+    result_response = client.get(
+        f"/scans/{scan_id}",
+        headers={
+            "Authorization": f"Bearer {token}"
+        }
+    )
+
+    assert result_response.status_code == 200
+
+    result = result_response.json()["data"]
+    assert result["id"] == scan_id
+    assert result["project_id"] == project_id
+    assert result["status"] == "completed"
+    assert result["started_at"] is not None
+    assert result["completed_at"] is not None
 
 def test_scan_lifecycle():
     login_response = client.post(
@@ -627,7 +646,7 @@ def test_scan_lifecycle():
     finally:
         scan_service.analyze_vulnerabilities = original_ai
 
-    assert scan_response.status_code == 200
+    assert scan_response.status_code == 202
 
     scan_id = scan_response.json()["data"]["scan_id"]
 
@@ -748,7 +767,7 @@ def test_scan_results_and_risk_score():
         scan_service.run_scanner = original_scanner
         scan_service.analyze_vulnerabilities = original_ai
 
-    assert scan_response.status_code == 200
+    assert scan_response.status_code == 202
 
     scan_id = scan_response.json()["data"]["scan_id"]
 
@@ -953,7 +972,7 @@ def test_scan_result_ownership_isolation():
         scan_service.run_scanner = original_scanner
         scan_service.analyze_vulnerabilities = original_ai
 
-    assert scan_response.status_code == 200
+    assert scan_response.status_code == 202
 
     scan_id = scan_response.json()["data"]["scan_id"]
 

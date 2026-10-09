@@ -1,3 +1,4 @@
+from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
@@ -425,14 +426,13 @@ def run_scan_pipeline(
     return results
 
 
+
 def create_scan(
     db: Session,
     project_id: int,
     user_id: int,
 ):
-    """
-    Create and execute a new scan for a user's project.
-    """
+    """Validate and create a pending scan without executing it."""
 
     project = (
         db.query(Project)
@@ -454,9 +454,7 @@ def create_scan(
 
     uploaded_files = (
         db.query(UploadedFile)
-        .filter(
-            UploadedFile.project_id == project_id
-        )
+        .filter(UploadedFile.project_id == project_id)
         .all()
     )
 
@@ -489,65 +487,31 @@ def create_scan(
         status=ScanStatus.PENDING.value,
     )
 
-    db.add(scan)
-    db.commit()
-    db.refresh(scan)
-
     try:
-        mark_scan_running(scan)
-
+        db.add(scan)
         db.commit()
         db.refresh(scan)
 
-        logger.info(
-            "Scan started | scan_id=%s | project_id=%s | user_id=%s",
-            scan.id,
+    except IntegrityError as exc:
+        db.rollback()
+        logger.warning(
+            "Concurrent scan creation rejected | project_id=%s | user_id=%s",
             project_id,
             user_id,
         )
-
-        results = run_scan_pipeline(
-            db=db,
-            scan=scan,
-            uploaded_files=uploaded_files,
-        )
-
-        mark_scan_completed(scan)
-
-        db.commit()
-        db.refresh(scan)
-
-        logger.info(
-            "Scan completed successfully | "
-            "scan_id=%s | project_id=%s",
-            scan.id,
-            project_id,
-        )
-
-        return scan, results
-
-    except Exception:
-        logger.exception(
-            "Scan failed | scan_id=%s | project_id=%s | user_id=%s",
-            scan.id,
-            project_id,
-            user_id,
-        )
-
-        fail_scan_safely(
-            db,
-            scan.id,
-            "Scan execution failed",
-        )
-
         raise HTTPException(
-            status_code=500,
-            detail=(
-                "Scan failed. Please check the scan details "
-                "for more information."
-            ),
-        )
+            status_code=409,
+            detail="A scan is already in progress for this project",
+        ) from exc
 
+    logger.info(
+        "Scan queued | scan_id=%s | project_id=%s | user_id=%s",
+        scan.id,
+        project_id,
+        user_id,
+    )
+
+    return scan
 
 def retry_failed_scan(
     db: Session,

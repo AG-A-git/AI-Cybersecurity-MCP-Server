@@ -1,10 +1,16 @@
 from response_utils import success_response
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+)
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
-
+from sqlalchemy.orm import Session, sessionmaker
+from services.scan_worker import execute_scan_in_background
 from database import get_db
 from models import Project, Scan, UploadedFile, Vulnerability, User
 from schemas import (
@@ -61,28 +67,43 @@ def get_authenticated_user(
 
     return current_user
 
-@router.post("/")
+
+@router.post("/", status_code=202)
 def create_scan_endpoint(
     scan_data: ScanCreate,
-    credentials=Depends(security),
-    db=Depends(get_db)
+    background_tasks: BackgroundTasks,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db),
 ):
     current_user = get_authenticated_user(credentials, db)
 
-    scan, results = create_scan(
+    scan = create_scan(
         db=db,
         project_id=scan_data.project_id,
-        user_id=current_user.id
+        user_id=current_user.id,
+    )
+
+    # Use the request's database engine, but create a separate
+    # session for background execution.
+    worker_session_factory = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=db.get_bind(),
+    )
+
+    background_tasks.add_task(
+        execute_scan_in_background,
+        scan.id,
+        worker_session_factory,
     )
 
     return success_response(
-        "Scan completed successfully",
+        "Scan accepted for processing",
         {
             "scan_id": scan.id,
             "project_id": scan.project_id,
             "status": scan.status,
-            "results": results
-        }
+        },
     )
 
 @router.get("/")
