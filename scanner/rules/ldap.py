@@ -13,42 +13,38 @@ USER_INPUT_METHODS = {
 
 
 def is_user_input(node):
-    """
-    Check whether an AST node represents a supported
-    user-controlled input source.
-    """
+    """Check whether an AST node represents supported user input."""
+
+    if not isinstance(node, ast.Call):
+        return False
 
     # input(...)
-    if isinstance(node, ast.Call):
-        if isinstance(node.func, ast.Name):
-            if node.func.id == "input":
-                return True
+    if isinstance(node.func, ast.Name):
+        return node.func.id == "input"
 
-        # request.args.get(...)
-        if isinstance(node.func, ast.Attribute):
-            if node.func.attr != "get":
-                return False
+    # request.args.get(...), request.form.get(...), etc.
+    if not isinstance(node.func, ast.Attribute):
+        return False
 
-            if isinstance(node.func.value, ast.Attribute):
-                request_obj = node.func.value
+    if node.func.attr != "get":
+        return False
 
-                if (
-                    isinstance(request_obj.value, ast.Name)
-                    and request_obj.value.id == "request"
-                ):
-                    source = f"{request_obj.attr}.get"
+    request_obj = node.func.value
 
-                    if source in USER_INPUT_METHODS:
-                        return True
+    if not isinstance(request_obj, ast.Attribute):
+        return False
 
-    return False
+    if not isinstance(request_obj.value, ast.Name):
+        return False
+
+    if request_obj.value.id != "request":
+        return False
+
+    return f"{request_obj.attr}.get" in USER_INPUT_METHODS
 
 
 def contains_untrusted(node, tainted_variables):
-    """
-    Check whether an AST expression contains user-controlled
-    data either directly or through a tainted variable.
-    """
+    """Check whether an expression contains user-controlled data."""
 
     if is_user_input(node):
         return True
@@ -56,50 +52,55 @@ def contains_untrusted(node, tainted_variables):
     if isinstance(node, ast.Name):
         return node.id in tainted_variables
 
-    if isinstance(node, ast.BinOp):
-        return (
-            contains_untrusted(node.left, tainted_variables)
-            or contains_untrusted(node.right, tainted_variables)
-        )
-
-    if isinstance(node, ast.JoinedStr):
-        for value in node.values:
-            if isinstance(value, ast.FormattedValue):
-                if contains_untrusted(
-                    value.value,
-                    tainted_variables
-                ):
-                    return True
-
-    for child in ast.iter_child_nodes(node):
-        if contains_untrusted(child, tainted_variables):
-            return True
-
-    return False
+    # Handles f-strings, concatenation, percent formatting,
+    # .format(), and expressions containing nested variables.
+    return any(
+        contains_untrusted(child, tainted_variables)
+        for child in ast.iter_child_nodes(node)
+    )
 
 
 def is_ldap_search(node):
-    """
-    Check for ldap.search(...)
-    """
-
-    if not isinstance(node, ast.Call):
-        return False
-
-    if not isinstance(node.func, ast.Attribute):
-        return False
+    """Check for calls such as ldap.search(query)."""
 
     return (
-        isinstance(node.func.value, ast.Name)
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
         and node.func.value.id == "ldap"
         and node.func.attr == "search"
     )
 
 
+def get_assignment_target_names(node):
+    """Return simple variable names assigned by an assignment."""
+
+    if isinstance(node, ast.Assign):
+        targets = node.targets
+    elif isinstance(node, (ast.AnnAssign, ast.NamedExpr)):
+        targets = [node.target]
+    else:
+        return []
+
+    names = []
+
+    for target in targets:
+        if isinstance(target, ast.Name):
+            names.append(target.id)
+        elif isinstance(target, (ast.Tuple, ast.List)):
+            names.extend(
+                element.id
+                for element in target.elts
+                if isinstance(element, ast.Name)
+            )
+
+    return names
+
+
 def scan_ldap(file_path):
     """
-    Detect potential LDAP injection using conservative
-    user-input -> LDAP query -> ldap.search() analysis.
+    Detect potential LDAP injection when user-controlled input
+    reaches a query passed to ldap.search().
     """
 
     results = []
@@ -109,10 +110,9 @@ def scan_ldap(file_path):
             file_path,
             "r",
             encoding="utf-8",
-            errors="ignore"
+            errors="ignore",
         ) as file:
             code = file.read()
-
     except (FileNotFoundError, OSError):
         return results
 
@@ -123,105 +123,120 @@ def scan_ldap(file_path):
 
     try:
         context = build_rule_context(file_path)
+    except (SyntaxError, ValueError, OSError, UnicodeError):
+        context = {"lines": code.splitlines()}
 
-    except (
-        SyntaxError,
-        ValueError,
-        OSError,
-        UnicodeError
-    ):
-        context = {
-            "lines": code.splitlines()
-        }
-
+    lines = code.splitlines()
     tainted_variables = set()
     tainted_queries = {}
 
-    lines = code.splitlines()
+    # Process assignments in source order, then repeat until
+    # taint propagation stabilizes. This handles intermediate
+    # variables even when the source appears several assignments
+    # before the final LDAP query.
+    assignments = sorted(
+        (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.Assign, ast.AnnAssign, ast.NamedExpr))
+        ),
+        key=lambda node: (node.lineno, node.col_offset),
+    )
 
-    # ---------------------------------------------------------
-    # Pass 1:
-    # Find variables containing user-controlled input
-    # and LDAP query construction.
-    # ---------------------------------------------------------
+    changed = True
+
+    while changed:
+        changed = False
+
+        for node in assignments:
+            if isinstance(node, ast.Assign):
+                value = node.value
+            elif isinstance(node, ast.AnnAssign):
+                value = node.value
+            else:
+                value = node.value
+
+            if value is None:
+                continue
+
+            targets = get_assignment_target_names(node)
+
+            if not targets:
+                continue
+
+            if not contains_untrusted(value, tainted_variables):
+                continue
+
+            for variable_name in targets:
+                if variable_name not in tainted_variables:
+                    tainted_variables.add(variable_name)
+                    changed = True
+
+                # Keep the first source-ordered assignment that
+                # constructs a tainted value for this variable.
+                tainted_queries.setdefault(variable_name, node.lineno)
+
+    # Find LDAP searches receiving tainted arguments.
+    seen = set()
 
     for node in ast.walk(tree):
-
-        if not isinstance(node, ast.Assign):
-            continue
-
-        if not node.targets:
-            continue
-
-        target = node.targets[0]
-
-        if not isinstance(target, ast.Name):
-            continue
-
-        variable_name = target.id
-
-        # Direct user input:
-        #
-        # username = request.args.get("username")
-        #
-        # username = input(...)
-        if is_user_input(node.value):
-            tainted_variables.add(variable_name)
-            continue
-
-        # Query containing tainted input:
-        #
-        # query = "(uid=" + username + ")"
-        #
-        # query = f"(uid={username})"
-        if contains_untrusted(
-            node.value,
-            tainted_variables
-        ):
-            tainted_queries[variable_name] = node.lineno
-
-    # ---------------------------------------------------------
-    # Pass 2:
-    # Find ldap.search(query) where query is tainted.
-    # ---------------------------------------------------------
-
-    for node in ast.walk(tree):
-
         if not is_ldap_search(node):
             continue
 
-        # Inspect positional arguments
-        for argument in node.args:
+        arguments = list(node.args)
+        arguments.extend(keyword.value for keyword in node.keywords)
 
-            if (
-                isinstance(argument, ast.Name)
-                and argument.id in tainted_queries
-            ):
-                line_number = tainted_queries[argument.id]
+        tainted_argument = next(
+            (
+                argument
+                for argument in arguments
+                if contains_untrusted(argument, tainted_variables)
+            ),
+            None,
+        )
 
-                if 1 <= line_number <= len(lines):
-                    code_line = lines[line_number - 1].strip()
-                else:
-                    code_line = ""
+        if tainted_argument is None:
+            continue
 
-                finding = create_finding(
-                    file_name=file_path,
-                    line_number=line_number,
-                    vulnerability_type="LDAP Injection",
-                    severity="High",
-                    confidence=85,
-                    code=code_line,
-                    owasp="A03: Injection",
-                    cwe="CWE-90"
-                )
+        # Prefer the query-construction line for a named query.
+        if isinstance(tainted_argument, ast.Name):
+            line_number = tainted_queries.get(
+                tainted_argument.id,
+                node.lineno,
+            )
+        else:
+            line_number = node.lineno
 
-                finding["source_context"] = get_source_context(
-                    context,
-                    line_number
-                )
+        line_number = max(1, min(line_number, len(lines))) if lines else 1
+        code_line = lines[line_number - 1].strip() if lines else ""
 
-                results.append(finding)
+        fingerprint_key = (
+            file_path,
+            line_number,
+            "LDAP Injection",
+        )
 
-                break
+        if fingerprint_key in seen:
+            continue
+
+        seen.add(fingerprint_key)
+
+        finding = create_finding(
+            file_name=file_path,
+            line_number=line_number,
+            vulnerability_type="LDAP Injection",
+            severity="High",
+            confidence=85,
+            code=code_line,
+            owasp="A03: Injection",
+            cwe="CWE-90",
+        )
+
+        finding["source_context"] = get_source_context(
+            context,
+            line_number,
+        )
+
+        results.append(finding)
 
     return results

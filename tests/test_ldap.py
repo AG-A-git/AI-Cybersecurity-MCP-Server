@@ -1,5 +1,4 @@
-
-from scanner.rules.ldap import scan_ldap
+﻿from scanner.rules.ldap import scan_ldap
 
 
 def write_test_file(tmp_path, source):
@@ -16,9 +15,7 @@ username = request.args.get("username")
 query = "(uid=" + username + ")"
 ldap.search(query)
 """
-
     file_path = write_test_file(tmp_path, source)
-
     findings = scan_ldap(file_path)
 
     assert len(findings) == 1
@@ -36,9 +33,7 @@ username = request.args.get("username")
 query = f"(uid={username})"
 ldap.search(query)
 """
-
     file_path = write_test_file(tmp_path, source)
-
     findings = scan_ldap(file_path)
 
     assert len(findings) == 1
@@ -50,9 +45,7 @@ def test_static_ldap_query_is_safe(tmp_path):
 query = "(uid=admin)"
 ldap.search(query)
 """
-
     file_path = write_test_file(tmp_path, source)
-
     findings = scan_ldap(file_path)
 
     assert findings == []
@@ -64,9 +57,7 @@ import ldap
 
 connection = ldap.initialize("ldap://localhost")
 """
-
     file_path = write_test_file(tmp_path, source)
-
     findings = scan_ldap(file_path)
 
     assert findings == []
@@ -80,9 +71,7 @@ username = request.args.get("username")
 query = "(uid=%s)" % username
 ldap.search(query)
 """
-
     file_path = write_test_file(tmp_path, source)
-
     findings = scan_ldap(file_path)
 
     assert len(findings) == 1
@@ -95,9 +84,23 @@ def test_ldap_search_without_tainted_query_is_safe(tmp_path):
     source = """
 ldap.search(query)
 """
-
     file_path = write_test_file(tmp_path, source)
-
     findings = scan_ldap(file_path)
 
     assert findings == []
+
+
+def test_ldap_multi_variable_taint_detected(tmp_path):
+    source = """
+from flask import request
+username = request.args.get("username")
+intermediate = username
+query = "(uid=" + intermediate + ")"
+ldap.search(query)
+"""
+    file_path = tmp_path / "sample_ldap.py"
+    file_path.write_text(source, encoding="utf-8")
+
+    findings = scan_ldap(str(file_path))
+
+    assert findings, "Expected LDAP injection to be detected"
