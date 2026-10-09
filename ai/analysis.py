@@ -300,3 +300,7 @@ def analyze_vulnerability(
     return analyze_finding(
         vulnerability
     )
+
+def analyze_vulnerabilities(findings):
+    """Analyze a list of scanner findings."""
+    return analyze_findings(findings)

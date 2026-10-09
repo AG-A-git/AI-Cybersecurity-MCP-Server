@@ -19,9 +19,8 @@ def analyze_vulnerability(vulnerability):
     )
 
     # Risk score
-    risk_score = calculate_risk(severity)
-
-    # OWASP and CWE
+    confidence = 95
+    risk_score = calculate_risk(severity, confidence)    # OWASP and CWE
     mapping = get_mapping(vulnerability)
 
     # AI explanation

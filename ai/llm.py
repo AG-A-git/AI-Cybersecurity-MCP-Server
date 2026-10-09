@@ -32,13 +32,15 @@ class OllamaClient:
 
     def __init__(
         self,
-        url: str = OLLAMA_URL,
-        model: str = OLLAMA_MODEL,
-        timeout: int = OLLAMA_TIMEOUT,
+        url: str | None = None,
+        model: str | None = None,
+        timeout: int | None = None,
     ):
-        self.url = url
-        self.model = model
-        self.timeout = timeout
+        self.url = url if url is not None else OLLAMA_URL
+        self.model = model if model is not None else OLLAMA_MODEL
+        self.timeout = (
+            timeout if timeout is not None else OLLAMA_TIMEOUT
+        )
 
     def generate(self, prompt: str) -> str:
         """
@@ -386,14 +388,18 @@ def limit_code_context(code: str) -> str:
         + "\n\n"
         + "[CODE TRUNCATED FOR AI CONTEXT SAFETY]"
     )
-
-
 def normalize_vulnerability(
-    vulnerability: VulnerabilityInput,
+    vulnerability: VulnerabilityInput | dict[str, Any],
 ) -> VulnerabilityInput:
-    """
-    Normalize scanner vulnerability data and bound source-code size.
-    """
+    """Normalize a scanner finding supplied as a model or dictionary."""
+
+    if isinstance(vulnerability, dict):
+        vulnerability = VulnerabilityInput(**vulnerability)
+
+    if not isinstance(vulnerability, VulnerabilityInput):
+        raise TypeError(
+            "vulnerability must be a VulnerabilityInput or dictionary"
+        )
 
     return VulnerabilityInput(
         file=vulnerability.file.strip(),
@@ -401,11 +407,8 @@ def normalize_vulnerability(
         vulnerability=vulnerability.vulnerability.strip(),
         severity=vulnerability.severity.strip(),
         confidence=float(vulnerability.confidence),
-        code=limit_code_context(
-            vulnerability.code.strip()
-        ),
+        code=limit_code_context(vulnerability.code.strip()),
     )
-
 
 def normalize_ai_response(
     data: dict[str, Any],
@@ -559,7 +562,7 @@ def analyze_vulnerability(
             "cwe": cwe,
             "ai_status": "completed",
             "ai_error_type": None,
-            "ai_analysis": ai_response,
+            "ai_analysis": ai_response.model_dump(),
             "recommendation": ai_response.recommendation,
         }
 
@@ -618,3 +621,12 @@ def analyze_vulnerability(
             "recommendation": recommendation,
             "error": str(exc),
         }
+
+def generate_response(prompt: str) -> str:
+    """Generate a response using the configured Ollama client."""
+    try:
+        return OllamaClient().generate(prompt)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Ollama request failed: {exc}"
+        ) from exc

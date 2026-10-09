@@ -3,26 +3,33 @@ Utilities for formatting AI vulnerability analysis responses.
 """
 
 
-def format_ai_response(analysis):
+def format_ai_response(analysis=None, **kwargs):
     """
-    Return the standardized security analysis response.
+    Return a standardized security analysis response.
 
-    The risk score, risk level, OWASP mapping, and CWE mapping
-    come from the centralized analysis pipeline.
+    Supports either a dictionary or keyword arguments.
     """
+
+    if analysis is None:
+        analysis = kwargs
+    elif kwargs:
+        analysis = {**analysis, **kwargs}
+
+    if not isinstance(analysis, dict):
+        raise TypeError("analysis must be a dictionary or keyword arguments")
 
     return {
-        "file": analysis["file"],
-        "line": analysis["line"],
-        "vulnerability": analysis["vulnerability"],
-        "severity": analysis["severity"],
-        "confidence": analysis["confidence"],
-        "risk_score": analysis["risk_score"],
-        "risk_level": analysis["risk_level"],
-        "owasp": analysis["owasp"],
-        "cwe": analysis["cwe"],
-        "ai_status": analysis["ai_status"],
-        "explanation": analysis["explanation"],
-        "impact": analysis["impact"],
-        "recommendation": analysis["recommendation"]
+        "file": analysis.get("file"),
+        "line": analysis.get("line"),
+        "vulnerability": analysis.get("vulnerability"),
+        "severity": analysis.get("severity"),
+        "confidence": analysis.get("confidence"),
+        "risk_score": analysis.get("risk_score"),
+        "risk_level": analysis.get("risk_level"),
+        "owasp": analysis.get("owasp"),
+        "cwe": analysis.get("cwe"),
+        "ai_status": analysis.get("ai_status"),
+        "explanation": analysis.get("explanation"),
+        "impact": analysis.get("impact"),
+        "recommendation": analysis.get("recommendation"),
     }

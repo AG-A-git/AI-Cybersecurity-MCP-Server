@@ -3,7 +3,7 @@ import re
 
 from pydantic import ValidationError
 
-from .models import AIAnalysisResponse
+from .models import AIAnalysis
 
 
 def extract_json_response(response: str) -> dict:
@@ -125,7 +125,7 @@ def parse_ai_response(response):
     data = extract_json_response(response)
 
     try:
-        return AIAnalysisResponse(**data)
+        return AIAnalysis(**data)
 
     except ValidationError as error:
         raise ValueError(
