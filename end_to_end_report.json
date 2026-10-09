@@ -8,18 +8,20 @@
       "vulnerability": "SQL Injection",
       "severity": "Critical",
       "confidence": 95.0,
-      "risk_score": 98.32,
+      "risk_score": 95.0,
       "risk_level": "Critical",
       "owasp": "A03:2021 Injection",
       "cwe": "CWE-89",
-      "ai_status": "success",
+      "ai_status": "completed",
+      "ai_error_type": null,
       "ai_analysis": {
-        "severity": "Critical",
-        "explanation": "The provided code snippet is vulnerable to SQL injection attacks. The issue lies in the way the 'username' parameter is being concatenated into the SQL query. The parameter is not properly sanitized, allowing an attacker to inject malicious SQL code. This could potentially allow an attacker to access or modify sensitive data, or even take control of the underlying database. The vulnerability is critical because it could lead to significant data breaches or system compromise.",
-        "recommendation": "To fix this vulnerability, the code should be rewritten to use parameterized queries or prepared statements. This would ensure that the 'username' parameter is properly sanitized and cannot be used to inject malicious SQL code. For example, the code could be rewritten as follows: query = 'SELECT * FROM users WHERE username=?'; cursor.execute(query, (username,))"
+        "explanation": "The provided source code is vulnerable to SQL Injection due to the concatenation of user input into a SQL query. This allows an attacker to inject malicious SQL code, potentially leading to unauthorized data access or modification.",
+        "impact": "",
+        "recommendation": "To fix this vulnerability, the code should be rewritten to use parameterized queries or prepared statements, which separate the SQL code from the user input. This ensures that user input is treated as literal data and not as executable code.",
+        "owasp": "A03:2021 Injection",
+        "cwe": "CWE-89"
       },
-      "explanation": "The provided code snippet is vulnerable to SQL injection attacks. The issue lies in the way the 'username' parameter is being concatenated into the SQL query. The parameter is not properly sanitized, allowing an attacker to inject malicious SQL code. This could potentially allow an attacker to access or modify sensitive data, or even take control of the underlying database. The vulnerability is critical because it could lead to significant data breaches or system compromise.",
-      "recommendation": "To fix this vulnerability, the code should be rewritten to use parameterized queries or prepared statements. This would ensure that the 'username' parameter is properly sanitized and cannot be used to inject malicious SQL code. For example, the code could be rewritten as follows: query = 'SELECT * FROM users WHERE username=?'; cursor.execute(query, (username,))"
+      "recommendation": "To fix this vulnerability, the code should be rewritten to use parameterized queries or prepared statements, which separate the SQL code from the user input. This ensures that user input is treated as literal data and not as executable code."
     }
   ]
 }
