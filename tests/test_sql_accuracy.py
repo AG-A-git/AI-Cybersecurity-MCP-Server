@@ -114,3 +114,62 @@ query = "SELECT * FROM users WHERE name='" + user
 
     assert sql_findings
     assert sql_findings[0]["confidence"] == 90
+
+
+def test_sql_detects_f_string_with_user_input(tmp_path):
+    test_file = tmp_path / "sql_fstring.py"
+    test_file.write_text(
+        '''username = request.args.get("username")
+query = f"SELECT * FROM users WHERE name='{username}'"
+cursor.execute(query)
+''',
+        encoding="utf-8",
+    )
+
+    findings = scan_sql(str(test_file))
+    sql_findings = [
+        finding for finding in findings
+        if finding["vulnerability_type"] == "SQL Injection"
+    ]
+
+    assert sql_findings
+
+
+def test_sql_detects_format_query_with_user_input(tmp_path):
+    test_file = tmp_path / "sql_format.py"
+    test_file.write_text(
+        '''username = request.args.get("username")
+query = "SELECT * FROM users WHERE name='{}'".format(username)
+cursor.execute(query)
+''',
+        encoding="utf-8",
+    )
+
+    findings = scan_sql(str(test_file))
+    sql_findings = [
+        finding for finding in findings
+        if finding["vulnerability_type"] == "SQL Injection"
+    ]
+
+    assert sql_findings
+
+
+def test_sql_parameterized_query_is_not_flagged(tmp_path):
+    test_file = tmp_path / "sql_parameterized.py"
+    test_file.write_text(
+        '''username = request.args.get("username")
+cursor.execute(
+    "SELECT * FROM users WHERE name = %s",
+    (username,),
+)
+''',
+        encoding="utf-8",
+    )
+
+    findings = scan_sql(str(test_file))
+    sql_findings = [
+        finding for finding in findings
+        if finding["vulnerability_type"] == "SQL Injection"
+    ]
+
+    assert not sql_findings

@@ -6,7 +6,7 @@ from scanner.confidence import calculate_confidence
 
 
 OS_SYSTEM_PATTERN = re.compile(
-    r'\bos\.system\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)',
+    r'\bos\.(?:system|popen)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)',
     re.IGNORECASE
 )
 

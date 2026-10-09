@@ -155,3 +155,20 @@ requests.get(name)
     findings = detect_ssrf(code, "app.py")
 
     assert findings == []
+
+
+def test_request_args_multi_hop_to_get_detected():
+    code = '''
+from flask import request
+import requests
+
+url = request.args.get("url")
+target = url
+final_target = target
+requests.get(final_target)
+'''
+
+    findings = detect_ssrf(code, "app.py")
+
+    assert len(findings) == 1
+    assert findings[0]["vulnerability_type"] == "SSRF"

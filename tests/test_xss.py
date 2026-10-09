@@ -83,3 +83,22 @@ element.innerHTML = data
     ]
 
     assert not xss_findings
+
+
+def test_xss_detects_request_input_with_generic_variable_name(tmp_path):
+    test_file = tmp_path / "xss_generic_variable.py"
+    test_file.write_text(
+        '''data = request.args.get("message")
+element.innerHTML = data
+''',
+        encoding="utf-8",
+    )
+
+    findings = scan_xss(str(test_file))
+
+    xss_findings = [
+        finding for finding in findings
+        if finding["vulnerability_type"] == "Cross-Site Scripting (XSS)"
+    ]
+
+    assert xss_findings

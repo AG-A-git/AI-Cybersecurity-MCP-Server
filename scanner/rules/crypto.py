@@ -1,3 +1,4 @@
+
 import re
 
 from scanner.context import build_rule_context, get_source_context
@@ -6,45 +7,38 @@ from scanner.finding import create_finding
 
 CRYPTO_PATTERNS = [
     (
-        re.compile(
-            r'\bhashlib\.md5\s*\(',
-            re.IGNORECASE
-        ),
+        re.compile(r"\bhashlib\.md5\s*\(", re.IGNORECASE),
         "High",
-        95
+        95,
+    ),
+    (
+        re.compile(r"\bhashlib\.sha1\s*\(", re.IGNORECASE),
+        "High",
+        95,
     ),
     (
         re.compile(
-            r'\bhashlib\.sha1\s*\(',
-            re.IGNORECASE
+            r"\bhashlib\.new\s*\(\s*['\"](?:md5|sha1)['\"]",
+            re.IGNORECASE,
         ),
         "High",
-        95
+        95,
     ),
     (
-        re.compile(
-            r'\bDES(?:\.new)?\s*\(',
-            re.IGNORECASE
-        ),
+        re.compile(r"\bDES(?:\.new)?\s*\(", re.IGNORECASE),
         "High",
-        95
+        95,
     ),
     (
-        re.compile(
-            r'\b(?:ARC4|RC4)(?:\.new)?\s*\(',
-            re.IGNORECASE
-        ),
+        re.compile(r"\b(?:ARC4|RC4)(?:\.new)?\s*\(", re.IGNORECASE),
         "High",
-        95
+        95,
     ),
 ]
 
 
 def scan_crypto(file_path):
-    """
-    Detect weak or deprecated cryptographic algorithms.
-    """
-
+    """Detect weak or deprecated cryptographic algorithms."""
     results = []
 
     try:
@@ -52,53 +46,46 @@ def scan_crypto(file_path):
             file_path,
             "r",
             encoding="utf-8",
-            errors="ignore"
+            errors="ignore",
         ) as file:
             lines = file.readlines()
-
     except (FileNotFoundError, OSError):
         return results
 
     try:
         context = build_rule_context(file_path)
-
     except (
         SyntaxError,
         ValueError,
         OSError,
-        UnicodeError
+        UnicodeError,
     ):
         context = {
-            "lines": [
-                line.rstrip("\n")
-                for line in lines
-            ]
+            "lines": [line.rstrip("\n") for line in lines]
         }
 
     for line_number, line in enumerate(lines, start=1):
-
         for pattern, severity, confidence in CRYPTO_PATTERNS:
+            if not pattern.search(line):
+                continue
 
-            if pattern.search(line):
+            finding = create_finding(
+                file_name=file_path,
+                line_number=line_number,
+                vulnerability_type="Weak Cryptography",
+                severity=severity,
+                confidence=confidence,
+                code=line.strip(),
+                owasp="A02: Cryptographic Failures",
+                cwe="CWE-327",
+            )
 
-                finding = create_finding(
-                    file_name=file_path,
-                    line_number=line_number,
-                    vulnerability_type="Weak Cryptography",
-                    severity=severity,
-                    confidence=confidence,
-                    code=line.strip(),
-                    owasp="A02: Cryptographic Failures",
-                    cwe="CWE-327"
-                )
+            finding["source_context"] = get_source_context(
+                context,
+                line_number,
+            )
 
-                finding["source_context"] = get_source_context(
-                    context,
-                    line_number
-                )
-
-                results.append(finding)
-
-                break
+            results.append(finding)
+            break
 
     return results

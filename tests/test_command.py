@@ -124,3 +124,28 @@ os.system(command)
 
     assert command_findings
     assert command_findings[0]["confidence"] == 70
+
+
+def test_os_popen_command_injection_from_user_input(tmp_path):
+    test_file = tmp_path / "command_popen.py"
+    test_file.write_text(
+        """import os
+from flask import request
+
+user_command = request.args.get("command")
+os.popen(user_command)
+""",
+        encoding="utf-8",
+    )
+
+    findings = scan_command(str(test_file))
+    command_findings = [
+        finding for finding in findings
+        if finding["vulnerability_type"] == "Command Injection"
+    ]
+
+    assert command_findings
+    assert command_findings[0]["severity"] in {"High", "Critical"}
+    assert 0 <= command_findings[0]["confidence"] <= 100
+    assert command_findings[0]["line_number"] == 5
+    assert command_findings[0]["source_context"]
