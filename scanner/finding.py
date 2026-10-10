@@ -1,4 +1,6 @@
+
 import hashlib
+import math
 
 
 # ============================================================
@@ -27,7 +29,7 @@ def create_finding_fingerprint(
     file_name,
     line_number,
     vulnerability_type,
-    code
+    code,
 ):
     """Create a deterministic fingerprint for a vulnerability finding."""
 
@@ -59,8 +61,11 @@ def validate_finding(finding):
     """
 
     # --------------------------------------------------------
-    # Check required fields
+    # Validate finding structure
     # --------------------------------------------------------
+
+    if not isinstance(finding, dict):
+        raise ValueError("finding must be a dictionary")
 
     missing = REQUIRED_FIELDS - finding.keys()
 
@@ -70,41 +75,54 @@ def validate_finding(finding):
         )
 
     # --------------------------------------------------------
-    # Check line number
+    # Validate file name
     # --------------------------------------------------------
 
-    if not isinstance(
-        finding["line_number"],
-        int
+    if not isinstance(finding["file_name"], str):
+        raise ValueError("file_name must be a string")
+
+    if not finding["file_name"].strip():
+        raise ValueError("file_name must not be empty")
+
+    # --------------------------------------------------------
+    # Validate line number
+    # --------------------------------------------------------
+
+    line_number = finding["line_number"]
+
+    # bool is a subclass of int in Python, so reject it explicitly.
+    if (
+        not isinstance(line_number, int)
+        or isinstance(line_number, bool)
     ):
         raise ValueError(
             "line_number must be an integer"
         )
 
-    if finding["line_number"] < 1:
+    if line_number < 1:
         raise ValueError(
             "line_number must be greater than 0"
         )
 
     # --------------------------------------------------------
-    # Check confidence
+    # Validate vulnerability type
     # --------------------------------------------------------
 
     if not isinstance(
-        finding["confidence"],
-        (int, float)
+        finding["vulnerability_type"],
+        str,
     ):
         raise ValueError(
-            "confidence must be numeric"
+            "vulnerability_type must be a string"
         )
 
-    if not 0 <= finding["confidence"] <= 100:
+    if not finding["vulnerability_type"].strip():
         raise ValueError(
-            "confidence must be between 0 and 100"
+            "vulnerability_type must not be empty"
         )
 
     # --------------------------------------------------------
-    # Check severity
+    # Validate severity
     # --------------------------------------------------------
 
     if finding["severity"] not in VALID_SEVERITIES:
@@ -113,15 +131,42 @@ def validate_finding(finding):
         )
 
     # --------------------------------------------------------
+    # Validate confidence
+    # --------------------------------------------------------
+
+    confidence = finding["confidence"]
+
+    if (
+        isinstance(confidence, bool)
+        or not isinstance(confidence, (int, float))
+    ):
+        raise ValueError(
+            "confidence must be numeric"
+        )
+
+    if not math.isfinite(confidence):
+        raise ValueError(
+            "confidence must be a finite number"
+        )
+
+    if not 0 <= confidence <= 100:
+        raise ValueError(
+            "confidence must be between 0 and 100"
+        )
+
+    # --------------------------------------------------------
+    # Validate code
+    # --------------------------------------------------------
+
+    if not isinstance(finding["code"], str):
+        raise ValueError("code must be a string")
+
+    # --------------------------------------------------------
     # Validate optional evidence
     # --------------------------------------------------------
 
     if "evidence" in finding:
-
-        if not isinstance(
-            finding["evidence"],
-            dict
-        ):
+        if not isinstance(finding["evidence"], dict):
             raise ValueError(
                 "evidence must be a dictionary"
             )
@@ -142,7 +187,7 @@ def create_finding(
     code,
     owasp,
     cwe,
-    evidence=None
+    evidence=None,
 ):
     """
     Create a standardized vulnerability finding.
@@ -171,8 +216,8 @@ def create_finding(
             file_name,
             line_number,
             vulnerability_type,
-            code
-        )
+            code,
+        ),
     }
 
     # --------------------------------------------------------
@@ -184,3 +229,4 @@ def create_finding(
 
     # Validate before returning the finding.
     return validate_finding(finding)
+
