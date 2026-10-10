@@ -1,9 +1,8 @@
-
+﻿
 import zipfile
 
 from scanner.scan import scan_project
-
-
+from scanner.engine import find_source_files
 PROJECT_FILES = {
     "app.py": """password = "admin"
 print(password)
@@ -194,3 +193,17 @@ def test_zip_rejects_oversized_uncompressed_content(tmp_path):
         archive.writestr("large.py", oversized_content)
 
     assert scan_project(str(zip_path)) == []
+
+def test_engine_scans_project_inside_ancestor_named_venv(tmp_path):
+    project_path = tmp_path / "venv" / "project"
+    project_path.mkdir(parents=True)
+
+    source_file = project_path / "app.py"
+    source_file.write_text(
+        'password = "admin"\nprint(password)\n',
+        encoding="utf-8",
+    )
+
+    source_files = find_source_files(project_path)
+
+    assert source_file in source_files

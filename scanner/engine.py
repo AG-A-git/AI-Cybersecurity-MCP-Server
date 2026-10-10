@@ -21,17 +21,16 @@ def find_source_files(path):
     """
     Find supported source files in a file or project directory.
 
-    Supported:
+    Supported extensions:
         .py
         .js
 
-    Ignored directories:
+    Ignored directories inside the selected project:
         venv/
         node_modules/
         .git/
         __pycache__/
     """
-
     path = Path(path)
 
     # If the input is a single file
@@ -46,15 +45,17 @@ def find_source_files(path):
         source_files = []
 
         for file in path.rglob("*"):
-
-            # Skip files that are not files
+            # Skip entries that are not files
             if not file.is_file():
                 continue
 
-            # Skip files inside ignored directories
+            # Check only directories relative to the selected project root.
+            # Ancestors outside the project must not cause files to be skipped.
+            relative_path = file.relative_to(path)
+
             if any(
                 directory in IGNORED_DIRECTORIES
-                for directory in file.parts
+                for directory in relative_path.parts[:-1]
             ):
                 continue
 
@@ -76,9 +77,8 @@ def scan_project(project_path):
                       or ZIP project.
 
     Returns:
-        list: JSON-compatible vulnerability findings.
+        list: Security findings.
     """
-
     # Support ZIP projects for the MCP backend
     if str(project_path).lower().endswith(".zip"):
         return scan_zip(project_path)
