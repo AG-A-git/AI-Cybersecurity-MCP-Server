@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -11,6 +12,16 @@ import { uploadFile } from "../services/uploadService";
 import LoadingState from "../components/LoadingState";
 import EmptyState from "../components/EmptyState";
 
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
+
+const ALLOWED_EXTENSIONS = [
+    ".py",
+    ".js",
+    ".java",
+    ".html",
+    ".zip",
+];
+
 function Upload() {
     const navigate = useNavigate();
 
@@ -20,10 +31,39 @@ function Upload() {
     const [uploadedFiles, setUploadedFiles] = useState([]);
 
     const [loadingProjects, setLoadingProjects] = useState(true);
+    const [loadingFiles, setLoadingFiles] = useState(false);
     const [loadingUpload, setLoadingUpload] = useState(false);
 
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
+
+    const fetchProjectFiles = async (selectedProjectId) => {
+        try {
+            setLoadingFiles(true);
+
+            const response = await getProjectFiles(
+                selectedProjectId
+            );
+
+            setUploadedFiles(
+                Array.isArray(response.data)
+                    ? response.data
+                    : []
+            );
+        } catch (err) {
+            console.error("Failed to load project files:", err);
+
+            setUploadedFiles([]);
+
+            setError(
+                err.userMessage ||
+                    err.response?.data?.detail ||
+                    "Failed to load uploaded files."
+            );
+        } finally {
+            setLoadingFiles(false);
+        }
+    };
 
     const fetchProjects = async () => {
         try {
@@ -32,71 +72,39 @@ function Upload() {
 
             const response = await getProjects();
 
-            console.log("Projects:", response.data);
+            const projectList = Array.isArray(response.data)
+                ? response.data
+                : [];
 
-            setProjects(response.data);
+            setProjects(projectList);
 
-            const selectedProjectId =
-                localStorage.getItem(
-                    "selected_project_id"
-                );
-
-            if (selectedProjectId) {
-                const selectedProjectExists =
-                    response.data.some(
-                        (project) =>
-                            String(project.id) ===
-                            String(selectedProjectId)
-                    );
-
-                if (selectedProjectExists) {
-                    setProjectId(selectedProjectId);
-
-                    await fetchProjectFiles(
-                        selectedProjectId
-                    );
-                }
-            }
-        } catch (error) {
-            console.error(
-                "Failed to load projects:",
-                error
+            const savedProjectId = localStorage.getItem(
+                "selected_project_id"
             );
 
+            const savedProjectExists = projectList.some(
+                (project) =>
+                    String(project.id) === String(savedProjectId)
+            );
+
+            if (savedProjectExists) {
+                setProjectId(String(savedProjectId));
+                await fetchProjectFiles(String(savedProjectId));
+            } else {
+                setProjectId("");
+                setUploadedFiles([]);
+                localStorage.removeItem("selected_project_id");
+            }
+        } catch (err) {
+            console.error("Failed to load projects:", err);
+
             setError(
-                error.userMessage ||
-                    error.response?.data?.detail ||
+                err.userMessage ||
+                    err.response?.data?.detail ||
                     "Failed to load projects."
             );
         } finally {
             setLoadingProjects(false);
-        }
-    };
-
-    const fetchProjectFiles = async (
-        selectedProjectId
-    ) => {
-        try {
-            const response =
-                await getProjectFiles(
-                    selectedProjectId
-                );
-
-            console.log(
-                "Uploaded files:",
-                response.data
-            );
-
-            setUploadedFiles(
-                response.data
-            );
-        } catch (error) {
-            console.error(
-                "Failed to load project files:",
-                error
-            );
-
-            setUploadedFiles([]);
         }
     };
 
@@ -112,34 +120,61 @@ function Upload() {
         setError("");
         setSuccess("");
 
+        const fileInput = document.getElementById("file");
+
+        if (fileInput) {
+            fileInput.value = "";
+        }
+
         if (selectedId) {
             localStorage.setItem(
                 "selected_project_id",
                 selectedId
             );
 
-            await fetchProjectFiles(
-                selectedId
-            );
+            await fetchProjectFiles(selectedId);
         } else {
-            localStorage.removeItem(
-                "selected_project_id"
-            );
-
+            localStorage.removeItem("selected_project_id");
             setUploadedFiles([]);
         }
     };
 
     const handleFileChange = (e) => {
-        const selectedFile =
-            e.target.files[0];
+        const selectedFile = e.target.files?.[0];
 
-        setFile(
-            selectedFile || null
-        );
-
+        setFile(null);
         setError("");
         setSuccess("");
+
+        if (!selectedFile) {
+            return;
+        }
+
+        const fileName = selectedFile.name.toLowerCase();
+
+        const isAllowed = ALLOWED_EXTENSIONS.some(
+            (extension) => fileName.endsWith(extension)
+        );
+
+        if (!isAllowed) {
+            setError(
+                "Unsupported file type. Please select a .py, .js, .java, .html, or .zip file."
+            );
+
+            e.target.value = "";
+            return;
+        }
+
+        if (selectedFile.size > MAX_FILE_SIZE) {
+            setError(
+                "File is too large. Maximum size is 5 MB."
+            );
+
+            e.target.value = "";
+            return;
+        }
+
+        setFile(selectedFile);
     };
 
     const handleUpload = async (e) => {
@@ -149,26 +184,18 @@ function Upload() {
         setSuccess("");
 
         if (!projectId) {
-            setError(
-                "Please select a project."
-            );
+            setError("Please select a project.");
             return;
         }
 
         if (!file) {
-            setError(
-                "Please select a file."
-            );
+            setError("Please select a valid source file.");
             return;
         }
 
-        const maxSize =
-            5 * 1024 * 1024;
-
-        if (file.size > maxSize) {
-            setError(
-                "File is too large. Maximum size is 5 MB."
-            );
+        // Recheck the size before sending the request.
+        if (file.size > MAX_FILE_SIZE) {
+            setError("File is too large. Maximum size is 5 MB.");
             return;
         }
 
@@ -180,45 +207,33 @@ function Upload() {
                 String(projectId)
             );
 
-            console.log(
-                "Sending project_id:",
-                projectId
-            );
+            console.log("Sending project_id:", projectId);
+            console.log("Sending file:", file.name);
 
-            console.log(
-                "Sending file:",
-                file.name
-            );
+            const response = await uploadFile(projectId, file);
 
-            const response =
-                await uploadFile(
-                    projectId,
-                    file
-                );
-
-            console.log(
-                "Upload response:",
-                response.data
-            );
+            console.log("Upload response:", response.data);
 
             setSuccess(
-                "File uploaded successfully!"
-            );
-
-            await fetchProjectFiles(
-                projectId
+                response.data?.message ||
+                    "File uploaded successfully!"
             );
 
             setFile(null);
-        } catch (error) {
-            console.error(
-                "Upload failed:",
-                error
-            );
+
+            const fileInput = document.getElementById("file");
+
+            if (fileInput) {
+                fileInput.value = "";
+            }
+
+            await fetchProjectFiles(projectId);
+        } catch (err) {
+            console.error("Upload failed:", err);
 
             setError(
-                error.userMessage ||
-                    error.response?.data?.detail ||
+                err.userMessage ||
+                    err.response?.data?.detail ||
                     "Upload failed. Please try again."
             );
         } finally {
@@ -227,292 +242,246 @@ function Upload() {
     };
 
     return (
-        <div
+        <main
             style={{
-                padding: "30px",
+                width: "100%",
+                maxWidth: "1000px",
+                margin: "0 auto",
+                padding: "24px",
+                boxSizing: "border-box",
             }}
         >
-            <h1>
-                Upload Source Code
-            </h1>
+            <header style={{ marginBottom: "24px" }}>
+                <h1>Upload Source Code</h1>
 
-            <p>
-                Select a project and upload
-                source code for security
-                scanning.
-            </p>
+                <p>
+                    Select a project and upload source code for
+                    security scanning.
+                </p>
+            </header>
 
-            <hr />
-
-            <form
-                onSubmit={handleUpload}
+            <section
+                style={{
+                    border: "1px solid #d1d5db",
+                    borderRadius: "12px",
+                    padding: "24px",
+                    marginBottom: "32px",
+                }}
             >
-                <div>
-                    <label htmlFor="project">
-                        <strong>
-                            Select Project
-                        </strong>
-                    </label>
+                <form onSubmit={handleUpload}>
+                    <div style={{ marginBottom: "24px" }}>
+                        <label htmlFor="project">
+                            <strong>Select Project</strong>
+                        </label>
 
-                    <br />
-                    <br />
-
-                    {loadingProjects ? (
-                        <LoadingState
-                            message="Loading projects..."
-                        />
-                    ) : projects.length === 0 ? (
-                        <EmptyState
-                            title="No projects found"
-                            message="Please create a project before uploading source code."
-                            buttonText="Go to Projects"
-                            onButtonClick={() =>
-                                navigate(
-                                    "/projects"
-                                )
-                            }
-                        />
-                    ) : (
-                        <select
-                            id="project"
-                            value={projectId}
-                            onChange={
-                                handleProjectChange
-                            }
-                        >
-                            <option value="">
-                                -- Select Project --
-                            </option>
-
-                            {projects.map(
-                                (project) => (
-                                    <option
-                                        key={
-                                            project.id
-                                        }
-                                        value={
-                                            project.id
-                                        }
-                                    >
-                                        {
-                                            project.name
-                                        }
+                        <div style={{ marginTop: "10px" }}>
+                            {loadingProjects ? (
+                                <LoadingState message="Loading projects..." />
+                            ) : projects.length === 0 ? (
+                                <EmptyState
+                                    title="No projects found"
+                                    message="Create a project before uploading source code."
+                                    buttonText="Go to Projects"
+                                    onButtonClick={() =>
+                                        navigate("/projects")
+                                    }
+                                />
+                            ) : (
+                                <select
+                                    id="project"
+                                    value={projectId}
+                                    onChange={handleProjectChange}
+                                    disabled={loadingUpload}
+                                    style={{
+                                        width: "100%",
+                                        maxWidth: "500px",
+                                        padding: "12px",
+                                        borderRadius: "6px",
+                                        border: "1px solid #9ca3af",
+                                    }}
+                                >
+                                    <option value="">
+                                        -- Select Project --
                                     </option>
-                                )
+
+                                    {projects.map((project) => (
+                                        <option
+                                            key={project.id}
+                                            value={project.id}
+                                        >
+                                            {project.name}
+                                        </option>
+                                    ))}
+                                </select>
                             )}
-                        </select>
+                        </div>
+                    </div>
+
+                    {projectId && (
+                        <p>
+                            <strong>Selected Project ID:</strong>{" "}
+                            {projectId}
+                        </p>
                     )}
-                </div>
 
-                <br />
+                    <div style={{ marginBottom: "24px" }}>
+                        <label htmlFor="file">
+                            <strong>Select Source File</strong>
+                        </label>
 
-                {projectId && (
-                    <p>
-                        <strong>
-                            Selected Project ID:
-                        </strong>{" "}
-                        {projectId}
-                    </p>
-                )}
+                        <p style={{ fontSize: "14px", color: "#6b7280" }}>
+                            Allowed extensions: .py, .js, .java, .html,
+                            .zip. Maximum size: 5 MB.
+                        </p>
 
-                <div>
-                    <label htmlFor="file">
-                        <strong>
-                            Select Source File
-                        </strong>
-                    </label>
+                        <input
+                            id="file"
+                            type="file"
+                            accept=".py,.js,.java,.html,.zip"
+                            onChange={handleFileChange}
+                            disabled={
+                                loadingUpload ||
+                                loadingProjects ||
+                                projects.length === 0 ||
+                                !projectId
+                            }
+                        />
+                    </div>
 
-                    <br />
-                    <br />
+                    {file && (
+                        <div
+                            style={{
+                                background: "#f3f4f6",
+                                padding: "14px",
+                                borderRadius: "8px",
+                                marginBottom: "20px",
+                                overflowWrap: "anywhere",
+                            }}
+                        >
+                            <p>
+                                <strong>Selected file:</strong>{" "}
+                                {file.name}
+                            </p>
 
-                    <input
-                        id="file"
-                        type="file"
-                        onChange={
-                            handleFileChange
-                        }
+                            <p>
+                                <strong>Size:</strong>{" "}
+                                {(file.size / 1024).toFixed(2)} KB
+                            </p>
+                        </div>
+                    )}
+
+                    {error && (
+                        <div
+                            role="alert"
+                            style={{
+                                padding: "12px",
+                                marginBottom: "16px",
+                                border: "1px solid #f5c2c7",
+                                borderRadius: "6px",
+                                backgroundColor: "#f8d7da",
+                                color: "#842029",
+                            }}
+                        >
+                            <strong>Error:</strong> {error}
+
+                            <div style={{ marginTop: "12px" }}>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setError("");
+                                        fetchProjects();
+                                    }}
+                                    disabled={loadingUpload}
+                                >
+                                    Retry
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {success && (
+                        <div
+                            role="status"
+                            style={{
+                                padding: "12px",
+                                marginBottom: "16px",
+                                border: "1px solid #badbcc",
+                                borderRadius: "6px",
+                                backgroundColor: "#d1e7dd",
+                                color: "#0f5132",
+                            }}
+                        >
+                            {success}
+                        </div>
+                    )}
+
+                    <button
+                        type="submit"
                         disabled={
                             loadingUpload ||
                             loadingProjects ||
-                            projects.length ===
-                                0
+                            projects.length === 0 ||
+                            !projectId ||
+                            !file
                         }
-                    />
-                </div>
-
-                <br />
-
-                {file && (
-                    <div>
-                        <p>
-                            <strong>
-                                Selected file:
-                            </strong>{" "}
-                            {file.name}
-                        </p>
-
-                        <p>
-                            <strong>
-                                Size:
-                            </strong>{" "}
-                            {(
-                                file.size /
-                                1024
-                            ).toFixed(2)}{" "}
-                            KB
-                        </p>
-                    </div>
-                )}
-
-                <br />
-
-                {error && (
-                    <div
                         style={{
-                            padding: "12px",
-                            marginBottom:
-                                "15px",
-                            border:
-                                "1px solid #f5c2c7",
-                            borderRadius:
-                                "6px",
-                            backgroundColor:
-                                "#f8d7da",
-                            color:
-                                "#842029",
+                            padding: "12px 22px",
+                            borderRadius: "6px",
+                            border: "none",
+                            cursor: loadingUpload ? "wait" : "pointer",
                         }}
                     >
-                        <strong>
-                            Error:
-                        </strong>{" "}
-                        {error}
-
-                        <br />
-                        <br />
-
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setError(
-                                    ""
-                                );
-
-                                fetchProjects();
-                            }}
-                        >
-                            Retry
-                        </button>
-                    </div>
-                )}
-
-                {success && (
-                    <div
-                        style={{
-                            padding: "12px",
-                            marginBottom:
-                                "15px",
-                            border:
-                                "1px solid #badbcc",
-                            borderRadius:
-                                "6px",
-                            backgroundColor:
-                                "#d1e7dd",
-                            color:
-                                "#0f5132",
-                        }}
-                    >
-                        {success}
-                    </div>
-                )}
-
-                <button
-                    type="submit"
-                    disabled={
-                        loadingUpload ||
-                        loadingProjects ||
-                        projects.length ===
-                            0
-                    }
-                >
-                    {loadingUpload
-                        ? "Uploading..."
-                        : "Upload File"}
-                </button>
-            </form>
+                        {loadingUpload ? "Uploading..." : "Upload File"}
+                    </button>
+                </form>
+            </section>
 
             {projectId && (
-                <section
-                    style={{
-                        marginTop: "40px",
-                    }}
-                >
-                    <hr />
+                <section>
+                    <h2>Uploaded Files</h2>
 
-                    <h2>
-                        Uploaded Files
-                    </h2>
-
-                    {uploadedFiles.length ===
-                    0 ? (
-                        <p>
-                            No files uploaded
-                            for this project yet.
-                        </p>
+                    {loadingFiles ? (
+                        <LoadingState message="Loading uploaded files..." />
+                    ) : uploadedFiles.length === 0 ? (
+                        <p>No files uploaded for this project yet.</p>
                     ) : (
                         <div>
-                            {uploadedFiles.map(
-                                (uploadedFile) => (
-                                    <div
-                                        key={
-                                            uploadedFile.id
-                                        }
-                                        style={{
-                                            border:
-                                                "1px solid #ccc",
-                                            borderRadius:
-                                                "8px",
-                                            padding:
-                                                "15px",
-                                            marginBottom:
-                                                "10px",
-                                        }}
-                                    >
-                                        <p>
-                                            <strong>
-                                                File:
-                                            </strong>{" "}
-                                            {
-                                                uploadedFile.filename
-                                            }
-                                        </p>
+                            {uploadedFiles.map((uploadedFile) => (
+                                <article
+                                    key={uploadedFile.id}
+                                    style={{
+                                        border: "1px solid #d1d5db",
+                                        borderRadius: "8px",
+                                        padding: "16px",
+                                        marginBottom: "12px",
+                                        overflowWrap: "anywhere",
+                                    }}
+                                >
+                                    <p>
+                                        <strong>File:</strong>{" "}
+                                        {uploadedFile.filename}
+                                    </p>
 
-                                        <p>
-                                            <strong>
-                                                File ID:
-                                            </strong>{" "}
-                                            {
-                                                uploadedFile.id
-                                            }
-                                        </p>
+                                    <p>
+                                        <strong>File ID:</strong>{" "}
+                                        {uploadedFile.id}
+                                    </p>
 
-                                        <p>
-                                            <strong>
-                                                Uploaded:
-                                            </strong>{" "}
-                                            {uploadedFile.uploaded_at
-                                                ? new Date(
-                                                    uploadedFile.uploaded_at
-                                                ).toLocaleString()
-                                                : "N/A"}
-                                        </p>
-                                    </div>
-                                )
-                            )}
+                                    <p>
+                                        <strong>Uploaded:</strong>{" "}
+                                        {uploadedFile.uploaded_at
+                                            ? new Date(
+                                                uploadedFile.uploaded_at
+                                            ).toLocaleString()
+                                            : "N/A"}
+                                    </p>
+                                </article>
+                            ))}
                         </div>
                     )}
                 </section>
             )}
-        </div>
+        </main>
     );
 }
 
