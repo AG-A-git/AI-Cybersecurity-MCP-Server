@@ -24,7 +24,10 @@ from schemas import (
 from auth import get_current_user
 
 # AI analysis pipeline
-from services.scan_service import create_scan
+from services.scan_service import (
+    create_scan,
+    retry_failed_scan,
+)
 from services.scan_result_service import (
     get_scan_result,
     get_scan_history
@@ -149,4 +152,40 @@ def get_scan(
     return success_response(
         "Scan details retrieved successfully",
         result
+    )
+
+@router.post("/{scan_id}/retry", status_code=202)
+def retry_scan_endpoint(
+    scan_id: int,
+    background_tasks: BackgroundTasks,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db),
+):
+    current_user = get_authenticated_user(credentials, db)
+
+    scan = retry_failed_scan(
+        db=db,
+        scan_id=scan_id,
+        user_id=current_user.id,
+    )
+
+    worker_session_factory = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=db.get_bind(),
+    )
+
+    background_tasks.add_task(
+        execute_scan_in_background,
+        scan.id,
+        worker_session_factory,
+    )
+
+    return success_response(
+        "Scan retry accepted for processing",
+        {
+            "scan_id": scan.id,
+            "project_id": scan.project_id,
+            "status": scan.status,
+        },
     )

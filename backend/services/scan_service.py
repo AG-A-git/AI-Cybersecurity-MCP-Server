@@ -518,16 +518,11 @@ def retry_failed_scan(
     scan_id: int,
     user_id: int,
 ):
-    """
-    Retry a previously failed scan.
-    """
+    """Atomically queue a failed scan for background retry."""
 
     scan = (
         db.query(Scan)
-        .join(
-            Project,
-            Scan.project_id == Project.id,
-        )
+        .join(Project, Scan.project_id == Project.id)
         .filter(
             Scan.id == scan_id,
             Project.owner_id == user_id,
@@ -535,7 +530,7 @@ def retry_failed_scan(
         .first()
     )
 
-    if not scan:
+    if scan is None:
         raise HTTPException(
             status_code=404,
             detail="Scan not found",
@@ -547,113 +542,76 @@ def retry_failed_scan(
             detail="Only failed scans can be retried",
         )
 
-    project = (
-        db.query(Project)
-        .filter(Project.id == scan.project_id)
+    uploaded_file_exists = (
+        db.query(UploadedFile.id)
+        .filter(UploadedFile.project_id == scan.project_id)
         .first()
     )
 
-    if not project:
-        raise HTTPException(
-            status_code=404,
-            detail="Project not found",
-        )
-
-    uploaded_files = (
-        db.query(UploadedFile)
-        .filter(
-            UploadedFile.project_id == scan.project_id
-        )
-        .all()
-    )
-
-    if not uploaded_files:
+    if uploaded_file_exists is None:
         raise HTTPException(
             status_code=400,
             detail="No uploaded files found for this project",
         )
 
     try:
-        scan.status = ScanStatus.PENDING.value
-        scan.started_at = None
-        scan.completed_at = None
-        scan.error_message = None
+        # Only one request can change this failed scan to pending.
+        # The conditional update also avoids overwriting a newer state.
+        from sqlalchemy import update
+
+        result = db.execute(
+            update(Scan)
+            .where(
+                Scan.id == scan_id,
+                Scan.status == ScanStatus.FAILED.value,
+            )
+            .values(
+                status=ScanStatus.PENDING.value,
+                started_at=None,
+                completed_at=None,
+                error_message=None,
+            )
+        )
+
+        if result.rowcount != 1:
+            db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail="Scan is no longer eligible for retry",
+            )
 
         db.commit()
         db.refresh(scan)
 
         logger.info(
-            "Failed scan reset for retry | "
-            "scan_id=%s | user_id=%s",
-            scan.id,
+            "Failed scan queued for retry | scan_id=%s | user_id=%s",
+            scan_id,
             user_id,
         )
 
-    except Exception:
+        return scan
+
+    except HTTPException:
+        raise
+
+    except IntegrityError as exc:
         db.rollback()
-
-        logger.exception(
-            "Failed to reset scan for retry | scan_id=%s",
-            scan.id,
+        logger.warning(
+            "Retry rejected by a database constraint | scan_id=%s",
+            scan_id,
         )
+        raise HTTPException(
+            status_code=409,
+            detail="Another active scan may already exist for this project",
+        ) from exc
 
+    except Exception as exc:
+        db.rollback()
+        logger.exception(
+            "Failed to queue scan retry | scan_id=%s",
+            scan_id,
+        )
         raise HTTPException(
             status_code=500,
             detail="Unable to retry scan",
-        )
-
-    try:
-        mark_scan_running(scan)
-
-        db.commit()
-        db.refresh(scan)
-
-        logger.info(
-            "Scan retry started | "
-            "scan_id=%s | project_id=%s | user_id=%s",
-            scan.id,
-            scan.project_id,
-            user_id,
-        )
-
-        results = run_scan_pipeline(
-            db=db,
-            scan=scan,
-            uploaded_files=uploaded_files,
-        )
-
-        mark_scan_completed(scan)
-
-        db.commit()
-        db.refresh(scan)
-
-        logger.info(
-            "Scan retry completed | "
-            "scan_id=%s | project_id=%s",
-            scan.id,
-            scan.project_id,
-        )
-
-        return scan, results
-
-    except Exception:
-        logger.exception(
-            "Scan retry failed | "
-            "scan_id=%s | project_id=%s",
-            scan.id,
-            scan.project_id,
-        )
-
-        fail_scan_safely(
-            db,
-            scan.id,
-            "Scan retry failed",
-        )
-
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "Scan retry failed. Please check the scan details "
-                "for more information."
-            ),
-        )
+        ) from exc

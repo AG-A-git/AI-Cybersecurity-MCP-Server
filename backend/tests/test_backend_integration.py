@@ -1025,3 +1025,204 @@ def test_scan_result_ownership_isolation():
     # --------------------------------------------------
 
     assert response.status_code == 403
+# ==================================================
+# SCAN RETRY API TESTS
+# ==================================================
+
+from models import Project, Scan, UploadedFile, User
+
+
+
+def _retry_test_token(
+    email="integration_test@example.com",
+    username="integration_test_user",
+):
+    """Register the test user if needed and return an access token."""
+    is_default_user = email == "integration_test@example.com"
+
+    password = (
+        "TestPassword123!"
+        if is_default_user
+        else "RetryTestPassword123!"
+    )
+
+    registration_response = client.post(
+        "/register",
+        json={
+            "username": username,
+            "email": email,
+            "password": password,
+        },
+    )
+
+    # A 400 can mean the account already exists from another test.
+    assert registration_response.status_code in (200, 400)
+
+    login_response = client.post(
+        "/login",
+        json={
+            "email": email,
+            "password": password,
+        },
+    )
+
+    assert login_response.status_code == 200, (
+        f"Unable to log in test user {email}: "
+        f"{login_response.status_code} {login_response.text}"
+    )
+
+    return login_response.json()["access_token"]
+
+
+def _create_retry_test_scan(
+    status="failed",
+    include_file=True,
+    owner_email="integration_test@example.com",
+):
+    """Create a scan directly in the isolated test database."""
+    db = TestingSessionLocal()
+
+    try:
+        user = (
+            db.query(User)
+            .filter(User.email == owner_email)
+            .first()
+        )
+        assert user is not None, f"Test user not found: {owner_email}"
+
+        project = Project(
+            project_name="Retry Test Project",
+            description="Project for scan retry tests",
+            owner_id=user.id,
+        )
+        db.add(project)
+        db.flush()
+
+        scan = Scan(
+            project_id=project.id,
+            status=status,
+            error_message=(
+                "Simulated test failure" if status == "failed" else None
+            ),
+        )
+        db.add(scan)
+        db.flush()
+
+        scan_id = scan.id
+
+        if include_file:
+            db.add(
+                UploadedFile(
+                    filename="retry_test.py",
+                    filepath="tests/sample_upload.py",
+                    language="python",
+                    project_id=project.id,
+                    user_id=user.id,
+                )
+            )
+
+        db.commit()
+        return scan_id
+    finally:
+        db.close()
+
+
+def test_retry_failed_scan_successfully(monkeypatch):
+    token = _retry_test_token()
+    scan_id = _create_retry_test_scan(status="failed", include_file=True)
+
+    # Prevent tests from invoking real scanner or AI services.
+    monkeypatch.setattr(
+        "services.scan_worker.run_scan_pipeline",
+        lambda db, scan, uploaded_files: None,
+    )
+
+    response = client.post(
+        f"/scans/{scan_id}/retry",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 202, response.text
+    data = response.json()["data"]
+    assert data["scan_id"] == scan_id
+    assert data["status"] == "pending"
+
+    # TestClient executes the background task before returning.
+    db = TestingSessionLocal()
+    try:
+        scan = db.query(Scan).filter(Scan.id == scan_id).first()
+        assert scan is not None
+        assert scan.status == "completed"
+        assert scan.error_message is None
+    finally:
+        db.close()
+
+
+def test_retry_rejects_scan_that_is_not_failed():
+    token = _retry_test_token()
+    scan_id = _create_retry_test_scan(status="completed")
+
+    response = client.post(
+        f"/scans/{scan_id}/retry",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 409
+
+
+def test_retry_missing_scan_returns_404():
+    token = _retry_test_token()
+
+    response = client.post(
+        "/scans/999999999/retry",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_retry_without_uploaded_files_returns_400():
+    token = _retry_test_token()
+    scan_id = _create_retry_test_scan(
+        status="failed",
+        include_file=False,
+    )
+
+    response = client.post(
+        f"/scans/{scan_id}/retry",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 400
+
+
+def test_retry_scan_owned_by_another_user_returns_404():
+    owner_email = "retry_owner_test@example.com"
+
+    _retry_test_token(
+        email=owner_email,
+        username="retry_owner_test_user",
+    )
+    requester_token = _retry_test_token()
+
+    scan_id = _create_retry_test_scan(
+        status="failed",
+        include_file=True,
+        owner_email=owner_email,
+    )
+
+    response = client.post(
+        f"/scans/{scan_id}/retry",
+        headers={"Authorization": f"Bearer {requester_token}"},
+    )
+
+    assert response.status_code == 404
+
+    # Confirm the rejected request did not alter the owner's scan.
+    db = TestingSessionLocal()
+    try:
+        scan = db.query(Scan).filter(Scan.id == scan_id).first()
+        assert scan is not None
+        assert scan.status == "failed"
+    finally:
+        db.close()
