@@ -61,8 +61,8 @@ def analyze_vulnerabilities(findings):
                 )
 
             combined_result = {
+                **analysis,
                 **finding,
-                **analysis
             }
 
             # Preserve the core scanner contract.
