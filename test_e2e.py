@@ -1,3 +1,4 @@
+
 from mcp_server.tools import run_ai_analysis
 
 
@@ -6,85 +7,56 @@ def print_result(title, result):
     print(title)
     print("=" * 50)
 
-    print("\nSeverity:")
-    print(result["severity"])
-
-    print("\nRisk Score:")
-    print(result["risk_score"])
-
-    print("\nOWASP:")
-    print(result["owasp"])
-
-    print("\nCWE:")
-    print(result["cwe"])
-
-    print("\nExplanation:")
-    print(result["explanation"])
-
-    print("\nRecommendation:")
-    print(result["recommendation"])
+    for label, key in [
+        ("Severity", "severity"),
+        ("Risk Score", "risk_score"),
+        ("OWASP", "owasp"),
+        ("CWE", "cwe"),
+        ("Explanation", "explanation"),
+        ("Recommendation", "recommendation"),
+    ]:
+        print(f"\n{label}:")
+        print(result[key])
 
 
-# --------------------------------------------------
-# Test 1: SQL Injection
-# --------------------------------------------------
+def main():
+    sql_injection = {
+        "file": "login.py",
+        "line": 22,
+        "vulnerability": "SQL Injection",
+        "severity": "Critical",
+        "confidence": 95,
+        "code": "cursor.execute(query)",
+    }
 
-sql_injection = {
-    "file": "login.py",
-    "line": 22,
-    "vulnerability": "SQL Injection",
-    "severity": "Critical",
-    "confidence": 95,
-    "code": "cursor.execute(query)"
-}
+    xss = {
+        "file": "profile.html",
+        "line": 15,
+        "vulnerability": "XSS",
+        "severity": "High",
+        "confidence": 91,
+        "code": "element.innerHTML = user_input",
+    }
 
-sql_result = run_ai_analysis(sql_injection)
+    hardcoded_credentials = {
+        "file": "config.py",
+        "line": 8,
+        "vulnerability": "Hardcoded Credentials",
+        "severity": "High",
+        "confidence": 93,
+        "code": "password = 'admin123'",
+    }
 
-print_result(
-    "TEST 1 - SQL INJECTION",
-    sql_result
-)
+    scenarios = [
+        ("TEST 1 - SQL INJECTION", sql_injection),
+        ("TEST 2 - XSS", xss),
+        ("TEST 3 - HARDCODED CREDENTIALS", hardcoded_credentials),
+    ]
 
-
-# --------------------------------------------------
-# Test 2: XSS
-# --------------------------------------------------
-
-xss = {
-    "file": "profile.html",
-    "line": 15,
-    "vulnerability": "XSS",
-    "severity": "High",
-    "confidence": 91,
-    "code": "element.innerHTML = user_input"
-}
-
-xss_result = run_ai_analysis(xss)
-
-print_result(
-    "TEST 2 - XSS",
-    xss_result
-)
+    for title, finding in scenarios:
+        result = run_ai_analysis(finding)
+        print_result(title, result)
 
 
-# --------------------------------------------------
-# Test 3: Hardcoded Credentials
-# --------------------------------------------------
-
-hardcoded_credentials = {
-    "file": "config.py",
-    "line": 8,
-    "vulnerability": "Hardcoded Credentials",
-    "severity": "High",
-    "confidence": 93,
-    "code": "password = 'admin123'"
-}
-
-credentials_result = run_ai_analysis(
-    hardcoded_credentials
-)
-
-print_result(
-    "TEST 3 - HARDCODED CREDENTIALS",
-    credentials_result
-)
+if __name__ == "__main__":
+    main()

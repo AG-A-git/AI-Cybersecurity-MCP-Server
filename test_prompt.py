@@ -1,17 +1,27 @@
-from ai.prompts import PROMPT_MAP
+
+from ai.prompts import build_prompt
 from ai.llm import OllamaClient
 
-client = OllamaClient()
 
-details = """
-File: login.py
-Line: 42
-Code:
-query = "SELECT * FROM users WHERE username='" + username + "'"
-"""
+def main():
+    details = {
+        "file": "login.py",
+        "line": 42,
+        "vulnerability": "SQL Injection",
+        "severity": "High",
+        "confidence": 90,
+        "code": (
+            'query = "SELECT * FROM users WHERE username=\'" '
+            '+ username + "\'"'
+        ),
+    }
 
-prompt = PROMPT_MAP["SQL Injection"].format(details=details)
+    prompt = build_prompt(details)
+    client = OllamaClient()
+    response = client.generate(prompt)
 
-response = client.generate(prompt)
+    print(response)
 
-print(response)
+
+if __name__ == "__main__":
+    main()

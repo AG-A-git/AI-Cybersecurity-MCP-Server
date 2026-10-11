@@ -1,4 +1,5 @@
-import json
+
+from unittest.mock import patch
 
 from ai.models import VulnerabilityInput
 from ai.llm import analyze_vulnerability
@@ -11,60 +12,57 @@ def test_ai_output():
         "vulnerability": "SQL Injection",
         "severity": "Critical",
         "confidence": 95,
-        "code": "cursor.execute(query)"
+        "code": "cursor.execute(query)",
     }
 
-    vulnerability = VulnerabilityInput(
-        **scanner_result
-    )
+    vulnerability = VulnerabilityInput(**scanner_result)
 
-    print("\n======================================")
-    print("TASK 9: AI OUTPUT VALIDATION")
-    print("======================================")
+    expected_result = {
+        "file": "login.py",
+        "line": 22,
+        "code": "cursor.execute(query)",
+        "vulnerability": "SQL Injection",
+        "severity": "Critical",
+        "confidence": 95.0,
+        "risk_score": 95.0,
+        "risk_level": "Critical",
+        "owasp": "A03:2021 Injection",
+        "cwe": "CWE-89",
+        "ai_status": "completed",
+        "ai_analysis": {
+            "explanation": (
+                "User input reaches a SQL query without safe parameterization."
+            ),
+            "recommendation": (
+                "Use parameterized queries and avoid building SQL "
+                "with string concatenation."
+            ),
+        },
+        "recommendation": (
+            "Use parameterized queries and avoid building SQL "
+            "with string concatenation."
+        ),
+    }
 
-    result = analyze_vulnerability(
-        vulnerability
-    )
-
-    print("\n===== FINAL AI OUTPUT =====")
-    print(
-        json.dumps(
-            result,
-            indent=4
-        )
-    )
-
-    required_fields = [
-        "file",
-        "line",
-        "code",
-        "vulnerability",
-        "severity",
-        "confidence",
-        "risk_score",
-        "risk_level",
-        "owasp",
-        "cwe",
-        "ai_status",
-        "ai_analysis",
-        "recommendation"
-    ]
-
-    print("\n===== OUTPUT VALIDATION =====")
-
-    for field in required_fields:
-        if field in result:
-            print(f"{field}: OK")
-        else:
-            print(f"{field}: MISSING")
+    # Patch the lower-level dependency so the real implementation
+    # runs without making a live Ollama request.
+    with patch(
+        "ai.llm.OllamaClient.generate",
+        return_value=(
+            '{"explanation":"User input reaches a SQL query '
+            'without safe parameterization.",'
+            '"recommendation":"Use parameterized queries and avoid '
+            'building SQL with string concatenation."}'
+        ),
+    ):
+        result = analyze_vulnerability(vulnerability)
 
     assert result is not None
-
-    for field in required_fields:
-        assert field in result, f"Missing field: {field}"
-
-    print("\nTASK 9: PASSED")
-
-
-if __name__ == "__main__":
-    test_ai_output()
+    assert result["file"] == expected_result["file"]
+    assert result["line"] == expected_result["line"]
+    assert result["vulnerability"] == expected_result["vulnerability"]
+    assert result["severity"] == expected_result["severity"]
+    assert result["confidence"] == expected_result["confidence"]
+    assert result["ai_status"] == expected_result["ai_status"]
+    assert result["ai_analysis"]["explanation"]
+    assert result["ai_analysis"]["recommendation"]

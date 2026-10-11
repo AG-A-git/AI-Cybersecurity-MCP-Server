@@ -1,12 +1,14 @@
 from ai.llm import OllamaClient
 
-client = OllamaClient()
 
-prompt = """
-Explain what SQL Injection is in two simple sentences.
-"""
+def main():
+    client = OllamaClient()
+    prompt = "Explain what SQL Injection is in two simple sentences."
+    response = client.generate(prompt)
 
-response = client.generate(prompt)
+    print("\nAI Response:\n")
+    print(response)
 
-print("\nAI Response:\n")
-print(response)
+
+if __name__ == "__main__":
+    main()
