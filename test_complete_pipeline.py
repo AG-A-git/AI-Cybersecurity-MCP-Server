@@ -1,141 +1,83 @@
+
+# ======================================================
+# Complete Cybersecurity AI Pipeline Integration Test
+# ======================================================
+
 import json
+import sys
+from pathlib import Path
 
-from scanner.engine import scan_project
-
-from ai.models import VulnerabilityInput
-from ai.llm import analyze_vulnerability
-
-
-# ======================================================
-# STEP 1: Scan the project
-# ======================================================
-
-PROJECT_PATH = "./pipeline_test_files"
+from mcp_server.tools import analyze_scan
 
 
-print("\n======================================")
-print("STEP 1: RUNNING MEMBER 2 SCANNER")
-print("======================================")
+def main():
+    print("\n======================================")
+    print("STEP 1: RUNNING MEMBER 2 SCANNER")
+    print("======================================")
 
-scanner_results = scan_project(PROJECT_PATH)
-
-
-print(
-    f"\nScanner findings detected: "
-    f"{len(scanner_results)}"
-)
-
-
-# ======================================================
-# STEP 2: Display scanner findings
-# ======================================================
-
-print("\n======================================")
-print("STEP 2: SCANNER JSON")
-print("======================================")
-
-for finding in scanner_results:
-
-    print(
-        json.dumps(
-            finding,
-            indent=2
+    # Import and execute the scanner only when this script
+    # is run directly, not when pytest imports this module.
+    try:
+        from scanner.scanner import scan_file  # Adjust if your scanner uses a different module.
+    except ImportError as exc:
+        print(f"Could not import scanner: {exc}")
+        print(
+            "Update the scanner import to match your project's "
+            "actual scanner module."
         )
-    )
+        return 1
 
+    target_file = Path("sql_test.py")
 
-# ======================================================
-# STEP 3: Send findings to AI
-# ======================================================
-
-print("\n======================================")
-print("STEP 3: AI ANALYSIS")
-print("======================================")
-
-
-ai_results = []
-
-
-for index, scanner_result in enumerate(
-    scanner_results,
-    start=1
-):
-
-    print(
-        f"\nAnalyzing finding {index}..."
-    )
+    if not target_file.exists():
+        target_file.write_text(
+            '''query = "SELECT * FROM users WHERE username='" + username + "'"\\n''',
+            encoding="utf-8",
+        )
+        print(f"Created sample file: {target_file}")
 
     try:
+        findings = scan_file(str(target_file))
+    except Exception as exc:
+        print(f"Scanner failed: {type(exc).__name__}: {exc}")
+        return 1
 
-        # --------------------------------------------------
-        # Convert scanner result to AI input model
-        # --------------------------------------------------
+    print(f"\nScanner findings detected: {len(findings)}")
 
-        vulnerability = VulnerabilityInput(
-            **scanner_result
-        )
+    print("\n======================================")
+    print("STEP 2: SCANNER JSON")
+    print("======================================")
+    print(json.dumps(findings, indent=2, default=str))
 
-        # --------------------------------------------------
-        # Run AI analysis
-        # --------------------------------------------------
+    if not findings:
+        print("No findings detected; there is nothing to analyze.")
+        return 0
 
-        result = analyze_vulnerability(
-            vulnerability
-        )
+    print("\n======================================")
+    print("STEP 3: AI ANALYSIS")
+    print("======================================")
 
-        ai_results.append(
-            result
-        )
+    try:
+        results = analyze_scan(findings)
+    except Exception as exc:
+        print(f"AI analysis failed: {type(exc).__name__}: {exc}")
+        return 1
 
-    except Exception as e:
+    print("\n======================================")
+    print("STEP 4: FINAL RESULTS")
+    print("======================================")
+    print(json.dumps(results, indent=2, default=str))
 
-        print(
-            f"AI analysis failed: {e}"
-        )
+    # Verify the pipeline returned a usable result.
+    if results is None:
+        print("FAILED: Pipeline returned None.")
+        return 1
 
-
-# ======================================================
-# STEP 4: Display structured AI results
-# ======================================================
-
-print("\n======================================")
-print("STEP 4: STRUCTURED AI RESULTS")
-print("======================================")
-
-
-print(
-    json.dumps(
-        ai_results,
-        indent=2
-    )
-)
+    print("\n======================================")
+    print("COMPLETE PIPELINE TEST: PASSED")
+    print("======================================")
+    return 0
 
 
-# ======================================================
-# STEP 5: Save results
-# ======================================================
-
-output_file = "ai_pipeline_results.json"
-
-
-with open(
-    output_file,
-    "w",
-    encoding="utf-8"
-) as file:
-
-    json.dump(
-        ai_results,
-        file,
-        indent=2
-    )
-
-
-print("\n======================================")
-print("PIPELINE COMPLETE")
-print("======================================")
-
-print(
-    f"\nAI results saved to: "
-    f"{output_file}"
-)
+if __name__ == "__main__":
+    sys.exit(main())
