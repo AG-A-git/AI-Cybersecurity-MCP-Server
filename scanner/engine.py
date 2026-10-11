@@ -1,7 +1,7 @@
 from pathlib import Path
-
 from scanner.utils import run_all_rules, remove_duplicates
 from scanner.scan import scan_zip
+from scanner.finding import validate_finding
 
 
 # Source-code extensions supported by the scanner
@@ -77,9 +77,10 @@ def scan_project(project_path):
                       or ZIP project.
 
     Returns:
-        list: Security findings.
+        list: Validated and deduplicated security findings.
     """
-    # Support ZIP projects for the MCP backend
+    # Support ZIP projects for the MCP backend.
+    # ZIP scanning retains its existing validation and safety checks.
     if str(project_path).lower().endswith(".zip"):
         return scan_zip(project_path)
 
@@ -89,6 +90,16 @@ def scan_project(project_path):
 
     for file_path in source_files:
         file_results = run_all_rules(str(file_path))
-        results.extend(file_results)
 
+        # Validate each finding before adding it to the results.
+        for finding in file_results:
+            try:
+                validate_finding(finding)
+            except (ValueError, TypeError):
+                # Ignore malformed findings rather than returning them.
+                continue
+
+            results.append(finding)
+
+    # Remove duplicate valid findings.
     return remove_duplicates(results)

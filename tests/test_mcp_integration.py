@@ -57,3 +57,32 @@ def test_mcp_scan_code_scans_project_directory(tmp_path):
 def test_mcp_scan_code_raises_for_missing_path():
     with pytest.raises(FileNotFoundError, match="Path does not exist"):
         scan_code("definitely_missing_scanner_test_project")
+
+
+def test_mcp_scan_code_filters_invalid_findings(tmp_path, monkeypatch):
+    import scanner.engine as engine
+
+    source_file = tmp_path / "app.py"
+    source_file.write_text(
+        "message = 'hello'\n",
+        encoding="utf-8",
+    )
+
+    # Missing the required "confidence" field.
+    invalid_finding = {
+        "file_name": "app.py",
+        "line_number": 1,
+        "vulnerability_type": "Test Finding",
+        "severity": "High",
+        "code": "message = 'hello'",
+    }
+
+    monkeypatch.setattr(
+        engine,
+        "run_all_rules",
+        lambda file_path: [invalid_finding],
+    )
+
+    findings = engine.scan_project(str(source_file))
+
+    assert findings == []
