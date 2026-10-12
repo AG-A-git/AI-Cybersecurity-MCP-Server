@@ -1,4 +1,6 @@
+
 import axios from "axios";
+import { normalizeApiError } from "../utils/apiError";
 
 const api = axios.create({
     baseURL: "http://127.0.0.1:8000",
@@ -13,65 +15,32 @@ api.interceptors.request.use(
             config.headers.Authorization = `Bearer ${token}`;
         }
 
-        // For file uploads, let the browser set
-        // the correct multipart/form-data boundary
+        // Let the browser set the multipart/form-data boundary
         if (config.data instanceof FormData) {
             delete config.headers["Content-Type"];
         }
 
         return config;
     },
-    (error) => {
-        return Promise.reject(error);
-    }
+    (error) => Promise.reject(error)
 );
 
 // Centralized API error handling
 api.interceptors.response.use(
-    (response) => {
-        return response;
-    },
+    (response) => response,
     (error) => {
-        if (error.response) {
-            switch (error.response.status) {
-                case 400:
-                    error.userMessage = "Invalid request.";
-                    break;
+        // Clear an invalid or expired token
+        if (error.response?.status === 401) {
+            localStorage.removeItem("access_token");
 
-                case 401:
-                    error.userMessage = "Please login again.";
-
-                    // Remove expired/invalid token
-                    localStorage.removeItem("access_token");
-
-                    // Redirect to login page
-                    if (window.location.pathname !== "/login") {
-                        window.location.href = "/login";
-                    }
-
-                    break;
-
-                case 403:
-                    error.userMessage = "Access denied.";
-                    break;
-
-                case 404:
-                    error.userMessage = "Resource not found.";
-                    break;
-
-                case 500:
-                    error.userMessage =
-                        "Server error. Please try again later.";
-                    break;
-
-                default:
-                    error.userMessage =
-                        "Something went wrong. Please try again.";
+            // Redirect to login if not already there
+            if (window.location.pathname !== "/login") {
+                window.location.href = "/login";
             }
-        } else {
-            error.userMessage =
-                "Backend unavailable. Please try again.";
         }
+
+        // Attach a consistent, user-friendly error message
+        error.userMessage = normalizeApiError(error);
 
         return Promise.reject(error);
     }
