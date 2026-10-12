@@ -1,3 +1,4 @@
+import requests
 from .input import validate_vulnerability
 from .risk_score import (
     calculate_risk,
@@ -197,8 +198,9 @@ def analyze_finding(
             )
 
         except (
+            requests.exceptions.Timeout,
             TimeoutError,
-            RuntimeError
+            RuntimeError,
         ):
 
             # One controlled retry only
