@@ -51,7 +51,10 @@ function Upload() {
                     : []
             );
         } catch (err) {
-            console.error("Failed to load project files:", err);
+            console.error(
+                "Failed to load project files:",
+                err
+            );
 
             setUploadedFiles([]);
 
@@ -88,11 +91,14 @@ function Upload() {
             );
 
             if (savedProjectExists) {
-                setProjectId(String(savedProjectId));
-                await fetchProjectFiles(String(savedProjectId));
+                const selectedId = String(savedProjectId);
+
+                setProjectId(selectedId);
+                await fetchProjectFiles(selectedId);
             } else {
                 setProjectId("");
                 setUploadedFiles([]);
+
                 localStorage.removeItem("selected_project_id");
             }
         } catch (err) {
@@ -193,9 +199,10 @@ function Upload() {
             return;
         }
 
-        // Recheck the size before sending the request.
         if (file.size > MAX_FILE_SIZE) {
-            setError("File is too large. Maximum size is 5 MB.");
+            setError(
+                "File is too large. Maximum size is 5 MB."
+            );
             return;
         }
 
@@ -206,9 +213,6 @@ function Upload() {
                 "selected_project_id",
                 String(projectId)
             );
-
-            console.log("Sending project_id:", projectId);
-            console.log("Sending file:", file.name);
 
             const response = await uploadFile(projectId, file);
 
@@ -227,6 +231,8 @@ function Upload() {
                 fileInput.value = "";
             }
 
+            // Refresh the list after a successful upload.
+            // fetchProjectFiles handles refresh errors itself.
             await fetchProjectFiles(projectId);
         } catch (err) {
             console.error("Upload failed:", err);
@@ -329,9 +335,14 @@ function Upload() {
                             <strong>Select Source File</strong>
                         </label>
 
-                        <p style={{ fontSize: "14px", color: "#6b7280" }}>
-                            Allowed extensions: .py, .js, .java, .html,
-                            .zip. Maximum size: 5 MB.
+                        <p
+                            style={{
+                                fontSize: "14px",
+                                color: "#6b7280",
+                            }}
+                        >
+                            Allowed extensions: .py, .js, .java,
+                            .html, .zip. Maximum size: 5 MB.
                         </p>
 
                         <input
