@@ -20,7 +20,11 @@ export const createProject = async (projectData) => {
 };
 
 // Fetch files for a project
+// Temporary fallback until the backend route is implemented
 export const getProjectFiles = async (projectId) => {
-    const response = await api.get(`/projects/${projectId}/files`);
-    return response.data;
+    console.warn(
+        `Project file listing is unavailable for project ${projectId}: backend route is missing.`
+    );
+
+    return [];
 };

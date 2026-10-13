@@ -1,10 +1,13 @@
 
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { getProjects, getProjectFiles } from "../services/projectService";
 import { uploadFile } from "../services/uploadService";
 import { startScan } from "../services/scanService";
 
 const Upload = () => {
+    const navigate = useNavigate();
+
     const [projects, setProjects] = useState([]);
     const [projectId, setProjectId] = useState("");
     const [file, setFile] = useState(null);
@@ -15,6 +18,7 @@ const Upload = () => {
     const [error, setError] = useState("");
     const [message, setMessage] = useState("");
 
+    // Fetch uploaded files for the selected project.
     const fetchProjectFiles = useCallback(async (id) => {
         if (!id) {
             setUploadedFiles([]);
@@ -32,7 +36,6 @@ const Upload = () => {
                         : []
             );
         } catch (err) {
-            // The backend may not yet implement GET /projects/{id}/files.
             console.warn(
                 "Could not load project files:",
                 err.response?.status || err.message
@@ -41,6 +44,7 @@ const Upload = () => {
         }
     }, []);
 
+    // Fetch projects and restore the selected project.
     const fetchProjects = useCallback(async () => {
         setLoadingProjects(true);
         setError("");
@@ -71,20 +75,18 @@ const Upload = () => {
 
             if (selectedId) {
                 localStorage.setItem("selected_project_id", selectedId);
+                await fetchProjectFiles(selectedId);
             } else {
                 localStorage.removeItem("selected_project_id");
                 setUploadedFiles([]);
             }
-
-            if (selectedId) {
-                await fetchProjectFiles(selectedId);
-            }
         } catch (err) {
             console.error("Failed to load projects:", err);
+
             setError(
                 err.response?.data?.detail ||
                 err.userMessage ||
-                "Could not load projects. Check that the backend is running and try again."
+                "Could not load projects. Check that the backend is running."
             );
         } finally {
             setLoadingProjects(false);
@@ -95,6 +97,7 @@ const Upload = () => {
         fetchProjects();
     }, [fetchProjects]);
 
+    // Change the selected project.
     const handleProjectChange = async (event) => {
         const id = event.target.value;
 
@@ -104,6 +107,9 @@ const Upload = () => {
         setError("");
         setUploadedFiles([]);
 
+        const fileInput = document.getElementById("source-file");
+        if (fileInput) fileInput.value = "";
+
         if (id) {
             localStorage.setItem("selected_project_id", id);
             await fetchProjectFiles(id);
@@ -112,6 +118,7 @@ const Upload = () => {
         }
     };
 
+    // Validate the selected file.
     const handleFileChange = (event) => {
         const selectedFile = event.target.files?.[0];
 
@@ -123,8 +130,16 @@ const Upload = () => {
             return;
         }
 
-        const allowedExtensions = [".py", ".js", ".java", ".html", ".zip"];
+        const allowedExtensions = [
+            ".py",
+            ".js",
+            ".java",
+            ".html",
+            ".zip",
+        ];
+
         const fileName = selectedFile.name.toLowerCase();
+
         const isAllowed = allowedExtensions.some((extension) =>
             fileName.endsWith(extension)
         );
@@ -132,13 +147,17 @@ const Upload = () => {
         if (!isAllowed) {
             setFile(null);
             event.target.value = "";
-            setError("Choose a .py, .js, .java, .html, or .zip file.");
+
+            setError(
+                "Choose a .py, .js, .java, .html, or .zip file."
+            );
             return;
         }
 
         setFile(selectedFile);
     };
 
+    // Upload the selected file.
     const handleUpload = async (event) => {
         event.preventDefault();
 
@@ -178,13 +197,14 @@ const Upload = () => {
             setError(
                 err.response?.data?.detail ||
                 err.userMessage ||
-                "Upload failed. Check the backend upload endpoint and try again."
+                "Upload failed. Check the backend upload endpoint."
             );
         } finally {
             setUploading(false);
         }
     };
 
+    // Start scanning and navigate to the Results page.
     const handleStartScan = async () => {
         if (!projectId) {
             setError("Please select a project first.");
@@ -199,12 +219,24 @@ const Upload = () => {
             const response = await startScan(projectId);
             const result = response?.data ?? response;
 
-            setMessage(
-                result?.message ||
-                `Scan request submitted successfully. Scan ID: ${
-                    result?.id ?? result?.scan_id ?? "Check the scan response"
-                }`
-            );
+            console.log("Scan response:", result);
+
+            const scanId = result?.scan_id ?? result?.id;
+
+            if (!scanId) {
+                setError(
+                    "The backend did not return a scan ID. Check the scan response."
+                );
+                return;
+            }
+
+            // Navigate to Results and pass the scan ID.
+            navigate("/results", {
+                state: {
+                    scanId,
+                    result,
+                },
+            });
         } catch (err) {
             console.error("Scan failed:", err);
 
@@ -250,6 +282,7 @@ const Upload = () => {
                 </div>
             )}
 
+            {/* Project selection */}
             <section style={styles.card}>
                 <label htmlFor="project-select" style={styles.label}>
                     Select Project
@@ -271,7 +304,10 @@ const Upload = () => {
                     </option>
 
                     {projects.map((project) => (
-                        <option key={project.id} value={String(project.id)}>
+                        <option
+                            key={project.id}
+                            value={String(project.id)}
+                        >
                             {project.project_name ||
                                 project.name ||
                                 `Project ${project.id}`}
@@ -286,8 +322,9 @@ const Upload = () => {
                 )}
             </section>
 
+            {/* File upload */}
             <section style={styles.card}>
-                <h2 style={styles.subheading}>Choose a file</h2>
+                <h2 style={styles.subheading}>Choose a File</h2>
 
                 <p style={styles.hint}>
                     Supported files: .py, .js, .java, .html, and .zip
@@ -320,7 +357,9 @@ const Upload = () => {
                         style={{
                             ...styles.primaryButton,
                             opacity:
-                                !projectId || !file || uploading ? 0.6 : 1,
+                                !projectId || !file || uploading
+                                    ? 0.6
+                                    : 1,
                         }}
                     >
                         {uploading ? "Uploading..." : "Upload File"}
@@ -328,6 +367,7 @@ const Upload = () => {
                 </form>
             </section>
 
+            {/* Uploaded files */}
             <section style={styles.card}>
                 <h2 style={styles.subheading}>Uploaded Files</h2>
 
@@ -344,31 +384,42 @@ const Upload = () => {
                     </ul>
                 ) : (
                     <p style={styles.hint}>
-                        No files to display, or the backend file-list endpoint
-                        is not available yet.
+                        No files to display, or the backend file-list
+                        endpoint is not available yet.
                     </p>
                 )}
             </section>
 
+            {/* Security scan */}
             <section style={styles.card}>
                 <h2 style={styles.subheading}>Security Scan</h2>
 
                 <p style={styles.hint}>
-                    Upload your code first, then request a scan for the
+                    Upload your code first, then start a scan for the
                     selected project.
                 </p>
 
                 <button
                     type="button"
                     onClick={handleStartScan}
-                    disabled={!projectId || scanning || uploading}
+                    disabled={
+                        !projectId ||
+                        scanning ||
+                        uploading ||
+                        loadingProjects
+                    }
                     style={{
                         ...styles.primaryButton,
                         opacity:
-                            !projectId || scanning || uploading ? 0.6 : 1,
+                            !projectId ||
+                            scanning ||
+                            uploading ||
+                            loadingProjects
+                                ? 0.6
+                                : 1,
                     }}
                 >
-                    {scanning ? "Starting Scan..." : "Start Scan"}
+                    {scanning ? "Scanning..." : "Start Scan"}
                 </button>
             </section>
         </main>

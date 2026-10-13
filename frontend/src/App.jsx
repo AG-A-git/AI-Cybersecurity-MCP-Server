@@ -1,4 +1,5 @@
-import { Routes, Route } from "react-router-dom";
+
+import { Routes, Route, Navigate } from "react-router-dom";
 
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -16,11 +17,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 function App() {
     return (
         <Routes>
-
-            {/* =========================
-                PUBLIC ROUTES
-            ========================= */}
-
+            {/* Public routes */}
             <Route
                 path="/login"
                 element={<Login />}
@@ -31,11 +28,7 @@ function App() {
                 element={<Register />}
             />
 
-
-            {/* =========================
-                PROTECTED ROUTES
-            ========================= */}
-
+            {/* Protected dashboard */}
             <Route
                 path="/dashboard"
                 element={
@@ -45,6 +38,7 @@ function App() {
                 }
             />
 
+            {/* Protected projects */}
             <Route
                 path="/projects"
                 element={
@@ -54,11 +48,22 @@ function App() {
                 }
             />
 
+            {/* Protected file upload and scan */}
             <Route
                 path="/upload"
                 element={
                     <ProtectedRoute>
                         <Upload />
+                    </ProtectedRoute>
+                }
+            />
+
+            {/* Scan results: support both route paths */}
+            <Route
+                path="/results"
+                element={
+                    <ProtectedRoute>
+                        <ScanResults />
                     </ProtectedRoute>
                 }
             />
@@ -72,7 +77,7 @@ function App() {
                 }
             />
 
-            {/* Vulnerability Details */}
+            {/* Vulnerability details */}
             <Route
                 path="/vulnerability-details"
                 element={
@@ -82,6 +87,7 @@ function App() {
                 }
             />
 
+            {/* Scan history */}
             <Route
                 path="/history"
                 element={
@@ -91,6 +97,7 @@ function App() {
                 }
             />
 
+            {/* Reports */}
             <Route
                 path="/reports"
                 element={
@@ -100,6 +107,7 @@ function App() {
                 }
             />
 
+            {/* User profile */}
             <Route
                 path="/profile"
                 element={
@@ -109,16 +117,17 @@ function App() {
                 }
             />
 
-
-            {/* =========================
-                DEFAULT ROUTE
-            ========================= */}
-
+            {/* Default route */}
             <Route
-                path="*"
-                element={<Login />}
+                path="/"
+                element={<Navigate to="/dashboard" replace />}
             />
 
+            {/* Unknown routes */}
+            <Route
+                path="*"
+                element={<Navigate to="/login" replace />}
+            />
         </Routes>
     );
 }

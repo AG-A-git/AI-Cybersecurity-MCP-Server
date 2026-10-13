@@ -1,15 +1,22 @@
 
 import api from "./api";
 
-// Get all scans
-export const getScans = () => api.get("/scans/");
+// Fetch all scans
+export const getScans = async () => {
+    const response = await api.get("/scans/");
+    return response.data;
+};
 
 // Start a scan for a project
-export const startScan = (projectId) =>
-    api.post("/scans/", {
+export const startScan = async (projectId) => {
+    const response = await api.post("/scans/", {
         project_id: Number(projectId),
     });
+    return response.data;
+};
 
-// Get details and vulnerabilities for one scan
-export const getScanResults = (scanId) =>
-    api.get(`/scans/${scanId}`);
+// Get details for one scan
+export const getScanResults = async (scanId) => {
+    const response = await api.get(`/scans/${scanId}`);
+    return response.data;
+};

@@ -1,4 +1,3 @@
-
 import axios from "axios";
 import { normalizeApiError } from "../utils/apiError";
 
@@ -25,23 +24,20 @@ api.interceptors.request.use(
     (error) => Promise.reject(error)
 );
 
-// Centralized API error handling
+// Handle API errors without automatically redirecting to login
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        // Clear an invalid or expired token
         if (error.response?.status === 401) {
-            localStorage.removeItem("access_token");
-
-            // Redirect to login if not already there
-            if (window.location.pathname !== "/login") {
-                window.location.href = "/login";
-            }
+            console.error(
+                "Authentication failed:",
+                error.config?.method,
+                error.config?.url,
+                error.response?.data
+            );
         }
 
-        // Attach a consistent, user-friendly error message
         error.userMessage = normalizeApiError(error);
-
         return Promise.reject(error);
     }
 );

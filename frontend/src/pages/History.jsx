@@ -1,139 +1,129 @@
-import { useEffect, useState } from "react";
 
-import {
-    getProjects,
-    getProjectFiles,
-} from "../services/projectService";
-
+import { useCallback, useEffect, useState } from "react";
+import { getProjects } from "../services/projectService";
+import { getScans } from "../services/scanService";
 import LoadingState from "../components/LoadingState";
 import ErrorState from "../components/ErrorState";
 import EmptyState from "../components/EmptyState";
 
+function getList(response, keys = []) {
+    if (Array.isArray(response)) return response;
+
+    for (const key of keys) {
+        if (Array.isArray(response?.[key])) {
+            return response[key];
+        }
+    }
+
+    if (Array.isArray(response?.data)) {
+        return response.data;
+    }
+
+    return [];
+}
+
 function History() {
-    const [files, setFiles] = useState([]);
+    const [scans, setScans] = useState([]);
+    const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
-    const loadHistory = async () => {
+    const loadHistory = useCallback(async () => {
+        setLoading(true);
+        setError("");
+
         try {
-            setLoading(true);
-            setError("");
+            const [projectsResult, scansResult] =
+                await Promise.allSettled([
+                    getProjects(),
+                    getScans(),
+                ]);
 
-            const projectsResponse =
-                await getProjects();
+            if (projectsResult.status === "fulfilled") {
+                setProjects(
+                    getList(projectsResult.value, ["projects"])
+                );
+            } else {
+                console.error(
+                    "Failed to load projects:",
+                    projectsResult.reason
+                );
+                setProjects([]);
+            }
 
-            const projectList =
-                Array.isArray(
-                    projectsResponse.data
-                )
-                    ? projectsResponse.data
-                    : [];
-
-            const fileResults =
-                await Promise.all(
-                    projectList.map(
-                        async (project) => {
-                            try {
-                                const response =
-                                    await getProjectFiles(
-                                        project.id
-                                    );
-
-                                return (
-                                    response.data ||
-                                    []
-                                ).map(
-                                    (file) => ({
-                                        ...file,
-                                        project_name:
-                                            project.name,
-                                    })
-                                );
-                            } catch (err) {
-                                console.error(
-                                    `Failed to load files for project ${project.id}:`,
-                                    err
-                                );
-
-                                return [];
-                            }
-                        }
-                    )
+            if (scansResult.status === "fulfilled") {
+                setScans(
+                    getList(scansResult.value, ["scans"])
+                );
+            } else {
+                console.error(
+                    "Failed to load scans:",
+                    scansResult.reason
                 );
 
-            setFiles(
-                fileResults.flat()
-            );
+                throw scansResult.reason;
+            }
         } catch (err) {
-            console.error(
-                "Upload history error:",
-                err
-            );
-
+            console.error("History loading error:", err);
             setError(
                 err.userMessage ||
-                    err.response?.data?.detail ||
-                    "Unable to load upload history."
+                err.response?.data?.detail ||
+                "Unable to load scan history. Please try again."
             );
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
         loadHistory();
-    }, []);
+    }, [loadHistory]);
+
+    const getProjectName = (scan) => {
+        const projectId = scan.project_id ?? scan.projectId;
+
+        const project = projects.find(
+            (item) => String(item.id) === String(projectId)
+        );
+
+        return (
+            scan.project_name ||
+            project?.project_name ||
+            project?.name ||
+            (projectId != null ? `Project ${projectId}` : "Unknown project")
+        );
+    };
 
     if (loading) {
         return (
-            <div
-                style={{
-                    padding: "30px",
-                }}
-            >
+            <div style={{ padding: "30px" }}>
                 <h1>Upload History</h1>
-
-                <LoadingState
-                    message="Loading upload history..."
-                />
+                <LoadingState message="Loading history..." />
             </div>
         );
     }
 
     if (error) {
         return (
-            <div
-                style={{
-                    padding: "30px",
-                }}
-            >
+            <div style={{ padding: "30px" }}>
                 <h1>Upload History</h1>
-
-                <ErrorState
-                    message={error}
-                    onRetry={loadHistory}
-                />
+                <ErrorState message={error} onRetry={loadHistory} />
             </div>
         );
     }
 
     return (
-        <div
-            style={{
-                padding: "30px",
-            }}
-        >
+        <div style={{ padding: "30px" }}>
             <h1>Upload History</h1>
 
             <p>
-                View source files uploaded to
-                your cybersecurity projects.
+                Review previous scans for your cybersecurity projects.
             </p>
 
-            {files.length === 0 ? (
+            {scans.length === 0 ? (
                 <EmptyState
-                    title="No uploads yet"
-                    message="Upload a source file from a project to see it here."
+                    title="No scan history yet"
+                    message="Upload a source file and start a scan to see scan records here."
                 />
             ) : (
                 <div
@@ -143,74 +133,64 @@ function History() {
                         gap: "15px",
                     }}
                 >
-                    {files.map(
-                        (file) => (
-                            <div
-                                key={
-                                    file.id
-                                }
+                    {scans.map((scan, index) => {
+                        const scanId = scan.scan_id ?? scan.id;
+                        const findings =
+                            scan.results ??
+                            scan.findings ??
+                            scan.vulnerabilities ??
+                            [];
+
+                        return (
+                            <article
+                                key={scanId ?? index}
                                 style={{
-                                    border:
-                                        "1px solid #ccc",
-                                    borderRadius:
-                                        "8px",
-                                    padding:
-                                        "20px",
+                                    border: "1px solid #ddd",
+                                    borderRadius: "8px",
+                                    padding: "20px",
+                                    background: "#fff",
                                 }}
                             >
                                 <h2>
-                                    {
-                                        file.project_name
-                                    }
+                                    {getProjectName(scan)}
                                 </h2>
 
                                 <p>
-                                    <strong>
-                                        File:
-                                    </strong>{" "}
-                                    {
-                                        file.filename
-                                    }
+                                    <strong>Scan ID:</strong>{" "}
+                                    {scanId ?? "N/A"}
                                 </p>
 
                                 <p>
-                                    <strong>
-                                        File ID:
-                                    </strong>{" "}
-                                    {
-                                        file.id
-                                    }
+                                    <strong>Project ID:</strong>{" "}
+                                    {scan.project_id ?? "N/A"}
                                 </p>
 
                                 <p>
-                                    <strong>
-                                        Project ID:
-                                    </strong>{" "}
-                                    {
-                                        file.project_id
-                                    }
+                                    <strong>Status:</strong>{" "}
+                                    {scan.status ?? "Completed"}
                                 </p>
 
                                 <p>
-                                    <strong>
-                                        Uploaded:
-                                    </strong>{" "}
-                                    {file.uploaded_at
+                                    <strong>Findings:</strong>{" "}
+                                    {Array.isArray(findings)
+                                        ? findings.length
+                                        : scan.vulnerability_count ??
+                                          scan.total_vulnerabilities ??
+                                          "N/A"}
+                                </p>
+
+                                <p>
+                                    <strong>Scan date:</strong>{" "}
+                                    {scan.created_at || scan.started_at
                                         ? new Date(
-                                            file.uploaded_at
-                                        ).toLocaleString()
+                                              scan.created_at ??
+                                              scan.started_at
+                                          ).toLocaleString()
                                         : "N/A"}
                                 </p>
-
-                                <p>
-                                    <strong>
-                                        Status:
-                                    </strong>{" "}
-                                    Uploaded
-                                </p>
-                            </div>
-                        )
-                    )}
+                            </article>
+                        );
+                    })}
                 </div>
             )}
         </div>
