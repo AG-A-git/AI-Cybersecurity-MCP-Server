@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import {
-    getProjects,
-    getProjectFiles,
-} from "../services/projectService";
+import api from "../services/api";
+import { getProjects } from "../services/projectService";
+import { getScans } from "../services/scanService";
 
 import LoadingState from "../components/LoadingState";
 import ErrorState from "../components/ErrorState";
@@ -14,100 +14,204 @@ function Reports() {
     const navigate = useNavigate();
 
     const [projects, setProjects] = useState([]);
+    const [scans, setScans] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [exportingScanId, setExportingScanId] = useState(null);
 
-    const fetchReport = async () => {
+    const loadReports = useCallback(async () => {
+        setLoading(true);
+        setError("");
+
         try {
-            setLoading(true);
-            setError("");
+            const [projectsResult, scansResult] =
+                await Promise.allSettled([
+                    getProjects(),
+                    getScans(),
+                ]);
 
-            const projectsResponse =
-                await getProjects();
+            if (projectsResult.status === "rejected") {
+                throw projectsResult.reason;
+            }
 
-            const projectList =
-                Array.isArray(projectsResponse.data)
-                    ? projectsResponse.data
+            const projectResponse = projectsResult.value;
+            const projectData =
+                projectResponse?.data ?? projectResponse;
+
+            const projectList = Array.isArray(projectData)
+                ? projectData
+                : Array.isArray(projectData?.projects)
+                    ? projectData.projects
                     : [];
 
-            const projectReports =
-                await Promise.all(
-                    projectList.map(
-                        async (project) => {
-                            try {
-                                const filesResponse =
-                                    await getProjectFiles(
-                                        project.id
-                                    );
+            setProjects(projectList);
 
-                                const files =
-                                    Array.isArray(
-                                        filesResponse.data
-                                    )
-                                        ? filesResponse.data
-                                        : [];
+            if (scansResult.status === "fulfilled") {
+                const scanResponse = scansResult.value;
+                const scanData =
+                    scanResponse?.data ?? scanResponse;
 
-                                return {
-                                    ...project,
-                                    files,
-                                    total_files:
-                                        files.length,
-                                };
-                            } catch (err) {
-                                console.error(
-                                    `Failed to load files for project ${project.id}:`,
-                                    err
-                                );
+                const scanList = Array.isArray(scanData)
+                    ? scanData
+                    : Array.isArray(scanData?.scans)
+                        ? scanData.scans
+                        : [];
 
-                                return {
-                                    ...project,
-                                    files: [],
-                                    total_files: 0,
-                                };
-                            }
-                        }
-                    )
+                setScans(scanList);
+            } else {
+                console.error(
+                    "Could not load scans:",
+                    scansResult.reason
                 );
-
-            setProjects(projectReports);
-        } catch (error) {
-            console.error(
-                "Failed to fetch report data:",
-                error
-            );
+                setScans([]);
+            }
+        } catch (err) {
+            console.error("Failed to load reports:", err);
 
             setError(
-                error.userMessage ||
-                    error.response?.data?.detail ||
-                    "Failed to load report data."
+                err.userMessage ||
+                err.response?.data?.detail ||
+                "Unable to load report data. Check your backend connection."
             );
         } finally {
             setLoading(false);
         }
-    };
-
-    useEffect(() => {
-        fetchReport();
     }, []);
 
-    const totalFiles = projects.reduce(
-        (total, project) =>
-            total + project.total_files,
-        0
-    );
+    useEffect(() => {
+        loadReports();
+    }, [loadReports]);
+
+    const getProjectName = (projectId) => {
+        const project = projects.find(
+            (item) => String(item.id) === String(projectId)
+        );
+
+        return (
+            project?.project_name ||
+            project?.name ||
+            `Project ${projectId ?? "Unknown"}`
+        );
+    };
+
+    const getScanId = (scan) =>
+        scan.id ?? scan.scan_id;
+
+    const getScanStatus = (scan) =>
+        scan.status ?? scan.scan_status ?? "Unknown";
+
+    const getFindingCount = (scan) => {
+        const findings =
+            scan.findings ??
+            scan.vulnerabilities ??
+            scan.results;
+
+        if (Array.isArray(findings)) {
+            return findings.length;
+        }
+
+        if (Array.isArray(findings?.findings)) {
+            return findings.findings.length;
+        }
+
+        if (typeof scan.total_findings === "number") {
+            return scan.total_findings;
+        }
+
+        if (typeof scan.finding_count === "number") {
+            return scan.finding_count;
+        }
+
+        return "Not provided";
+    };
+
+    const downloadReport = async (scan) => {
+        const scanId = getScanId(scan);
+
+        if (scanId == null) {
+            alert("The scan ID is unavailable.");
+            return;
+        }
+
+        setExportingScanId(scanId);
+
+        try {
+            // Fetch the full details for this scan.
+            const response = await api.get(`/scans/${scanId}`);
+            const details = response.data ?? response;
+
+            // Support common API response formats.
+            let findings =
+                details.findings ??
+                details.vulnerabilities ??
+                details.results ??
+                [];
+
+            if (!Array.isArray(findings)) {
+                findings = Array.isArray(findings?.findings)
+                    ? findings.findings
+                    : Array.isArray(findings?.vulnerabilities)
+                        ? findings.vulnerabilities
+                        : [];
+            }
+
+            const projectId =
+                scan.project_id ?? details.project_id ?? null;
+
+            const report = {
+                report_generated_at: new Date().toISOString(),
+                scan_id: scanId,
+                project_id: projectId,
+                project_name: getProjectName(projectId),
+                scan_status:
+                    details.status ??
+                    details.scan_status ??
+                    getScanStatus(scan),
+                findings,
+                finding_count: findings.length,
+                note:
+                    findings.length === 0
+                        ? "The scan detail endpoint did not return findings in the expected fields. Check its response structure if this scan is expected to contain vulnerabilities."
+                        : "Findings retrieved from the scan detail endpoint.",
+            };
+
+            const blob = new Blob(
+                [JSON.stringify(report, null, 2)],
+                { type: "application/json" }
+            );
+
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+
+            link.href = url;
+            link.download = `scan-report-${scanId}.json`;
+
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+
+            // Release the temporary download URL after the click.
+            window.setTimeout(() => {
+                URL.revokeObjectURL(url);
+            }, 1000);
+        } catch (err) {
+            console.error("Failed to export scan report:", err);
+
+            alert(
+                err.response?.data?.detail ||
+                err.userMessage ||
+                "Unable to export scan details. Check that the backend is running."
+            );
+        } finally {
+            setExportingScanId(null);
+        }
+    };
 
     if (loading) {
         return (
-            <div
-                style={{
-                    padding: "30px",
-                }}
-            >
+            <div style={{ padding: "30px" }}>
                 <h1>Reports</h1>
-
-                <LoadingState
-                    message="Loading project report..."
-                />
+                <LoadingState message="Loading report data..." />
             </div>
         );
     }
@@ -122,330 +226,343 @@ function Reports() {
                 }}
             >
                 <h1>Reports</h1>
-
                 <ErrorState
                     message={error}
-                    onRetry={fetchReport}
+                    onRetry={loadReports}
                 />
             </div>
         );
     }
 
-    if (projects.length === 0) {
-        return (
-            <div
-                style={{
-                    padding: "30px",
-                    maxWidth: "1000px",
-                    margin: "0 auto",
-                }}
-            >
-                <h1>Reports</h1>
+    const completedScans = scans.filter((scan) => {
+        const status = String(getScanStatus(scan)).toLowerCase();
 
-                <EmptyState
-                    title="No project data"
-                    message="Create a project and upload a file to generate report data."
-                    buttonText="Go to Projects"
-                    onButtonClick={() =>
-                        navigate("/projects")
-                    }
-                />
-            </div>
-        );
-    }
+        return [
+            "completed",
+            "complete",
+            "success",
+            "successful",
+        ].includes(status);
+    });
 
     return (
-        <div
+        <main
             style={{
                 padding: "30px",
                 maxWidth: "1200px",
                 margin: "0 auto",
             }}
         >
-            <h1>Project & Upload Summary</h1>
+            <h1>Reports</h1>
 
             <p>
-                View a summary of your projects
-                and uploaded source files.
+                Review your projects and scan activity,
+                and export available scan data.
             </p>
 
-            <hr />
-
-            {/* SUMMARY */}
-
+            {/* Summary cards */}
             <section
                 style={{
                     display: "grid",
                     gridTemplateColumns:
-                        "repeat(auto-fit, minmax(200px, 1fr))",
-                    gap: "20px",
-                    marginTop: "30px",
+                        "repeat(auto-fit, minmax(180px, 1fr))",
+                    gap: "16px",
+                    margin: "25px 0",
                 }}
             >
-                <div
-                    style={{
-                        border: "1px solid #ccc",
-                        borderRadius: "8px",
-                        padding: "20px",
-                    }}
-                >
-                    <h3>
-                        Total Projects
-                    </h3>
-
-                    <p
+                {[
+                    {
+                        label: "Total Projects",
+                        value: projects.length,
+                    },
+                    {
+                        label: "Total Scans",
+                        value: scans.length,
+                    },
+                    {
+                        label: "Completed Scans",
+                        value: completedScans.length,
+                    },
+                ].map((item) => (
+                    <div
+                        key={item.label}
                         style={{
-                            fontSize: "32px",
-                            fontWeight: "bold",
+                            border: "1px solid #ddd",
+                            borderRadius: "10px",
+                            padding: "20px",
                         }}
                     >
-                        {projects.length}
-                    </p>
-                </div>
+                        <h3>{item.label}</h3>
 
-                <div
-                    style={{
-                        border: "1px solid #ccc",
-                        borderRadius: "8px",
-                        padding: "20px",
-                    }}
-                >
-                    <h3>
-                        Total Uploaded Files
-                    </h3>
-
-                    <p
-                        style={{
-                            fontSize: "32px",
-                            fontWeight: "bold",
-                        }}
-                    >
-                        {totalFiles}
-                    </p>
-                </div>
+                        <p
+                            style={{
+                                fontSize: "30px",
+                                fontWeight: "bold",
+                                margin: "8px 0 0",
+                            }}
+                        >
+                            {item.value}
+                        </p>
+                    </div>
+                ))}
             </section>
 
-            {/* PROJECT REPORTS */}
+            {/* Project summary */}
+            <section style={{ marginTop: "30px" }}>
+                <h2>Project Summary</h2>
 
-            <section
-                style={{
-                    marginTop: "35px",
-                }}
-            >
-                <h2>
-                    Project Reports
-                </h2>
+                {projects.length === 0 ? (
+                    <EmptyState
+                        title="No projects found"
+                        message="Create a project before generating reports."
+                        buttonText="Go to Projects"
+                        onButtonClick={() =>
+                            navigate("/projects")
+                        }
+                    />
+                ) : (
+                    <div
+                        style={{
+                            display: "grid",
+                            gridTemplateColumns:
+                                "repeat(auto-fit, minmax(240px, 1fr))",
+                            gap: "16px",
+                            marginTop: "16px",
+                        }}
+                    >
+                        {projects.map((project) => {
+                            const projectScans = scans.filter(
+                                (scan) =>
+                                    String(scan.project_id) ===
+                                    String(project.id)
+                            );
 
-                <div
-                    style={{
-                        marginTop: "20px",
-                    }}
-                >
-                    {projects.map(
-                        (project) => (
-                            <div
-                                key={project.id}
-                                style={{
-                                    border:
-                                        "1px solid #ccc",
-                                    borderRadius:
-                                        "8px",
-                                    padding:
-                                        "20px",
-                                    marginBottom:
-                                        "20px",
-                                }}
-                            >
-                                <h3>
-                                    {
-                                        project.name
-                                    }
-                                </h3>
-
-                                <p>
-                                    <strong>
-                                        Project ID:
-                                    </strong>{" "}
-                                    {
-                                        project.id
-                                    }
-                                </p>
-
-                                <p>
-                                    <strong>
-                                        Description:
-                                    </strong>{" "}
-                                    {project.description ||
-                                        "No description"}
-                                </p>
-
-                                <p>
-                                    <strong>
-                                        Files:
-                                    </strong>{" "}
-                                    {
-                                        project.total_files
-                                    }
-                                </p>
-
-                                {project.files
-                                    .length ===
-                                0 ? (
-                                    <EmptyState
-                                        title="No files"
-                                        message="No files have been uploaded for this project."
-                                    />
-                                ) : (
-                                    <table
-                                        style={{
-                                            width:
-                                                "100%",
-                                            borderCollapse:
-                                                "collapse",
-                                            marginTop:
-                                                "15px",
-                                        }}
-                                    >
-                                        <thead>
-                                            <tr>
-                                                <th
-                                                    style={{
-                                                        textAlign:
-                                                            "left",
-                                                        padding:
-                                                            "10px",
-                                                        borderBottom:
-                                                            "2px solid #ccc",
-                                                    }}
-                                                >
-                                                    File
-                                                </th>
-
-                                                <th
-                                                    style={{
-                                                        textAlign:
-                                                            "left",
-                                                        padding:
-                                                            "10px",
-                                                        borderBottom:
-                                                            "2px solid #ccc",
-                                                    }}
-                                                >
-                                                    Uploaded
-                                                </th>
-                                            </tr>
-                                        </thead>
-
-                                        <tbody>
-                                            {project.files.map(
-                                                (
-                                                    file
-                                                ) => (
-                                                    <tr
-                                                        key={
-                                                            file.id
-                                                        }
-                                                    >
-                                                        <td
-                                                            style={{
-                                                                padding:
-                                                                    "10px",
-                                                                borderBottom:
-                                                                    "1px solid #eee",
-                                                            }}
-                                                        >
-                                                            {
-                                                                file.filename
-                                                            }
-                                                        </td>
-
-                                                        <td
-                                                            style={{
-                                                                padding:
-                                                                    "10px",
-                                                                borderBottom:
-                                                                    "1px solid #eee",
-                                                            }}
-                                                        >
-                                                            {file.uploaded_at
-                                                                ? new Date(
-                                                                    file.uploaded_at
-                                                                ).toLocaleString()
-                                                                : "N/A"}
-                                                        </td>
-                                                    </tr>
-                                                )
-                                            )}
-                                        </tbody>
-                                    </table>
-                                )}
-
-                                <button
-                                    type="button"
+                            return (
+                                <article
+                                    key={project.id}
                                     style={{
-                                        marginTop:
-                                            "15px",
-                                    }}
-                                    onClick={() => {
-                                        localStorage.setItem(
-                                            "selected_project_id",
-                                            String(
-                                                project.id
-                                            )
-                                        );
-
-                                        navigate(
-                                            "/upload"
-                                        );
+                                        border: "1px solid #ddd",
+                                        borderRadius: "10px",
+                                        padding: "18px",
+                                        overflowWrap: "anywhere",
                                     }}
                                 >
-                                    Open Project
-                                </button>
-                            </div>
-                        )
-                    )}
-                </div>
+                                    <h3>
+                                        {project.project_name ||
+                                            project.name ||
+                                            `Project ${project.id}`}
+                                    </h3>
+
+                                    <p>
+                                        <strong>Project ID:</strong>{" "}
+                                        {project.id}
+                                    </p>
+
+                                    <p>
+                                        <strong>Description:</strong>{" "}
+                                        {project.description ||
+                                            "No description"}
+                                    </p>
+
+                                    <p>
+                                        <strong>Total scans:</strong>{" "}
+                                        {projectScans.length}
+                                    </p>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            localStorage.setItem(
+                                                "selected_project_id",
+                                                String(project.id)
+                                            );
+                                            navigate("/upload");
+                                        }}
+                                    >
+                                        Open Project
+                                    </button>
+                                </article>
+                            );
+                        })}
+                    </div>
+                )}
             </section>
 
-            {/* ACTIONS */}
+            {/* Scan report table */}
+            <section style={{ marginTop: "35px" }}>
+                <h2>Scan Reports</h2>
 
+                {scans.length === 0 ? (
+                    <p>
+                        No scans were returned by the backend.
+                        Upload a file and start a scan first.
+                    </p>
+                ) : (
+                    <div style={{ overflowX: "auto" }}>
+                        <table
+                            style={{
+                                width: "100%",
+                                borderCollapse: "collapse",
+                                marginTop: "16px",
+                            }}
+                        >
+                            <thead>
+                                <tr>
+                                    {[
+                                        "Scan ID",
+                                        "Project",
+                                        "Status",
+                                        "Findings",
+                                        "Actions",
+                                    ].map((heading) => (
+                                        <th
+                                            key={heading}
+                                            style={{
+                                                textAlign: "left",
+                                                padding: "12px",
+                                                borderBottom:
+                                                    "2px solid #ddd",
+                                            }}
+                                        >
+                                            {heading}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+
+                            <tbody>
+                                {scans.map((scan, index) => {
+                                    const scanId = getScanId(scan);
+
+                                    return (
+                                        <tr
+                                            key={scanId ?? index}
+                                        >
+                                            <td
+                                                style={{
+                                                    padding: "12px",
+                                                    borderBottom:
+                                                        "1px solid #eee",
+                                                }}
+                                            >
+                                                {scanId ?? "N/A"}
+                                            </td>
+
+                                            <td
+                                                style={{
+                                                    padding: "12px",
+                                                    borderBottom:
+                                                        "1px solid #eee",
+                                                }}
+                                            >
+                                                {getProjectName(
+                                                    scan.project_id
+                                                )}
+                                            </td>
+
+                                            <td
+                                                style={{
+                                                    padding: "12px",
+                                                    borderBottom:
+                                                        "1px solid #eee",
+                                                }}
+                                            >
+                                                {getScanStatus(scan)}
+                                            </td>
+
+                                            <td
+                                                style={{
+                                                    padding: "12px",
+                                                    borderBottom:
+                                                        "1px solid #eee",
+                                                }}
+                                            >
+                                                {getFindingCount(scan)}
+                                            </td>
+
+                                            <td
+                                                style={{
+                                                    padding: "12px",
+                                                    borderBottom:
+                                                        "1px solid #eee",
+                                                    whiteSpace: "nowrap",
+                                                }}
+                                            >
+                                                <button
+                                                    type="button"
+                                                    disabled={scanId == null}
+                                                    onClick={() => {
+                                                        if (scanId != null) {
+                                                            navigate(
+                                                                "/results",
+                                                                {
+                                                                    state: {
+                                                                        scanId,
+                                                                        result: scan,
+                                                                    },
+                                                                }
+                                                            );
+                                                        }
+                                                    }}
+                                                >
+                                                    View Results
+                                                </button>{" "}
+
+                                                <button
+                                                    type="button"
+                                                    disabled={
+                                                        exportingScanId !== null
+                                                    }
+                                                    onClick={() =>
+                                                        downloadReport(scan)
+                                                    }
+                                                >
+                                                    {String(exportingScanId) ===
+                                                    String(scanId)
+                                                        ? "Exporting..."
+                                                        : "Export JSON"}
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </section>
+
+            {/* Page actions */}
             <div
                 style={{
                     display: "flex",
+                    flexWrap: "wrap",
                     gap: "10px",
                     marginTop: "30px",
                 }}
             >
                 <button
                     type="button"
-                    onClick={fetchReport}
+                    onClick={loadReports}
                 >
-                    Refresh Data
+                    Refresh Reports
                 </button>
 
                 <button
                     type="button"
-                    onClick={() =>
-                        navigate(
-                            "/projects"
-                        )
-                    }
+                    onClick={() => navigate("/projects")}
                 >
-                    Back to Projects
+                    Go to Projects
                 </button>
 
                 <button
                     type="button"
-                    onClick={() =>
-                        navigate(
-                            "/dashboard"
-                        )
-                    }
+                    onClick={() => navigate("/dashboard")}
                 >
                     Back to Dashboard
                 </button>
             </div>
-        </div>
+        </main>
     );
 }
 
