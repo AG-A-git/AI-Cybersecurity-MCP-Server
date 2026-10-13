@@ -1,4 +1,3 @@
-
 import hashlib
 import math
 
@@ -125,9 +124,13 @@ def validate_finding(finding):
     # Validate severity
     # --------------------------------------------------------
 
-    if finding["severity"] not in VALID_SEVERITIES:
+    severity = finding["severity"]
+
+    # Reject non-string values before checking set membership.
+    # This prevents TypeError for unhashable values such as [].
+    if not isinstance(severity, str) or severity not in VALID_SEVERITIES:
         raise ValueError(
-            f"Invalid severity: {finding['severity']}"
+            f"Invalid severity: {severity}"
         )
 
     # --------------------------------------------------------

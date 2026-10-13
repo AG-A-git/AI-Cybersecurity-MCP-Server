@@ -86,3 +86,10 @@ def test_mcp_scan_code_filters_invalid_findings(tmp_path, monkeypatch):
     findings = engine.scan_project(str(source_file))
 
     assert findings == []
+
+
+def test_engine_scan_project_returns_empty_list_for_invalid_path_types():
+    from scanner.engine import scan_project
+
+    for invalid_path in (None, [], {}, 123):
+        assert scan_project(invalid_path) == []

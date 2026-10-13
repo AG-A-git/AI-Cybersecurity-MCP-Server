@@ -1,4 +1,5 @@
 import pytest
+
 from scanner.finding import create_finding
 
 
@@ -11,7 +12,7 @@ def test_standard_finding_structure():
         confidence=85,
         code="requests.get(url)",
         owasp="A10: Server-Side Request Forgery",
-        cwe="CWE-918"
+        cwe="CWE-918",
     )
 
     required_fields = {
@@ -35,13 +36,10 @@ def test_finding_line_number_is_integer():
         confidence=90,
         code="query = user_input",
         owasp="A03: Injection",
-        cwe="CWE-89"
+        cwe="CWE-89",
     )
 
-    assert isinstance(
-        finding["line_number"],
-        int
-    )
+    assert isinstance(finding["line_number"], int)
 
 
 def test_finding_confidence_range():
@@ -53,7 +51,7 @@ def test_finding_confidence_range():
         confidence=90,
         code="return user_input",
         owasp="A03: Injection",
-        cwe="CWE-79"
+        cwe="CWE-79",
     )
 
     assert 0 <= finding["confidence"] <= 100
@@ -68,7 +66,7 @@ def test_finding_severity_is_valid():
         confidence=85,
         code="ldap.search(query)",
         owasp="A03: Injection",
-        cwe="CWE-90"
+        cwe="CWE-90",
     )
 
     assert finding["severity"] in {
@@ -80,7 +78,7 @@ def test_finding_severity_is_valid():
 
 
 def test_invalid_confidence_is_rejected():
-    try:
+    with pytest.raises(ValueError):
         create_finding(
             vulnerability_type="SSRF",
             file_name="app.py",
@@ -89,13 +87,10 @@ def test_invalid_confidence_is_rejected():
             confidence=150,
             code="requests.get(url)",
             owasp="A10: Server-Side Request Forgery",
-            cwe="CWE-918"
+            cwe="CWE-918",
         )
 
-        assert False
 
-    except ValueError:
-        assert True
 def test_finding_fingerprint_is_deterministic():
     finding_one = create_finding(
         vulnerability_type="SSRF",
@@ -105,7 +100,7 @@ def test_finding_fingerprint_is_deterministic():
         confidence=85,
         code="requests.get(url)",
         owasp="A10: Server-Side Request Forgery",
-        cwe="CWE-918"
+        cwe="CWE-918",
     )
 
     finding_two = create_finding(
@@ -116,7 +111,7 @@ def test_finding_fingerprint_is_deterministic():
         confidence=85,
         code="requests.get(url)",
         owasp="A10: Server-Side Request Forgery",
-        cwe="CWE-918"
+        cwe="CWE-918",
     )
 
     assert finding_one["fingerprint"] == finding_two["fingerprint"]
@@ -132,7 +127,7 @@ def test_finding_fingerprint_changes_for_different_line():
         confidence=85,
         code="requests.get(url)",
         owasp="A10: Server-Side Request Forgery",
-        cwe="CWE-918"
+        cwe="CWE-918",
     )
 
     finding_two = create_finding(
@@ -143,7 +138,7 @@ def test_finding_fingerprint_changes_for_different_line():
         confidence=85,
         code="requests.get(url)",
         owasp="A10: Server-Side Request Forgery",
-        cwe="CWE-918"
+        cwe="CWE-918",
     )
 
     assert finding_one["fingerprint"] != finding_two["fingerprint"]
@@ -158,7 +153,7 @@ def test_finding_fingerprint_ignores_confidence_and_evidence():
         confidence=85,
         code="requests.get(url)",
         owasp="A10: Server-Side Request Forgery",
-        cwe="CWE-918"
+        cwe="CWE-918",
     )
 
     finding_two = create_finding(
@@ -170,10 +165,11 @@ def test_finding_fingerprint_ignores_confidence_and_evidence():
         code="requests.get(url)",
         owasp="A10: Server-Side Request Forgery",
         cwe="CWE-918",
-        evidence={"source": "user_input"}
+        evidence={"source": "user_input"},
     )
 
     assert finding_one["fingerprint"] == finding_two["fingerprint"]
+
 
 def test_boolean_line_number_is_rejected():
     with pytest.raises(ValueError):
@@ -188,3 +184,16 @@ def test_boolean_line_number_is_rejected():
             cwe="CWE-918",
         )
 
+
+def test_unhashable_severity_is_rejected():
+    with pytest.raises(ValueError, match="severity"):
+        create_finding(
+            vulnerability_type="Test",
+            file_name="app.py",
+            line_number=1,
+            severity=[],
+            confidence=80,
+            code="print('test')",
+            owasp="Test",
+            cwe="CWE-0",
+        )

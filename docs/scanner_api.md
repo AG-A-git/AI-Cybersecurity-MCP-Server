@@ -2,10 +2,7 @@
 
 ## Overview
 
-The scanner provides a single entry point for scanning an individual source
-file or an entire project directory.
-
-The backend can use:
+The scanner provides an entry point for scanning a supported source file, a project directory, or a ZIP archive.
 
 ```python
 from scanner.engine import scan_project
@@ -13,88 +10,103 @@ from scanner.engine import scan_project
 results = scan_project(project_path)
 ```
 
+The MCP server exposes the scanner through the `scan_code(path: str)` tool.
+
 ## Supported Files
 
-The scanner supports the following source-code extensions:
+The scanner supports these source-code extensions:
 
 - `.py`
 - `.js`
 
-The scanner ignores these directories:
+The engine ignores files within directories named:
 
 - `venv/`
 - `node_modules/`
 - `.git/`
 - `__pycache__/`
 
+ZIP archive scanning is also supported by the scanner implementation.
+
 ## Supported Vulnerabilities
 
-The scanner currently detects:
+Detection depends on the rules available in the project. Categories include:
 
 - SQL Injection
-- Cross Site Scripting (XSS)
+- Cross-Site Scripting (XSS)
+- Server-Side Request Forgery (SSRF)
 - Hardcoded Credentials
 - Weak Cryptography
 - Improper Input Validation
+- LDAP Injection
+- Insecure Deserialization
+- Security Misconfiguration
+
+Detection is rule-based; this list does not guarantee detection of every vulnerability variant.
 
 ## Input
 
-`scan_project()` accepts a file path or project directory path.
+`scan_project()` accepts a path to a supported source file, project directory, or ZIP archive.
 
 Example:
 
 ```python
+from scanner.engine import scan_project
+
 results = scan_project("tests")
 ```
 
+The engine raises `FileNotFoundError` when the supplied path does not exist.
+
 ## Output
 
-The scanner returns a list of JSON-compatible vulnerability dictionaries.
-
-Example:
-
-```json
-[
-  {
-    "file": "login.py",
-    "line": 22,
-    "vulnerability": "SQL Injection",
-    "severity": "Critical",
-    "confidence": 95,
-    "code": "cursor.execute(query)"
-  }
-]
-```
-
-## Finding Fields
-
-Each finding contains the following fields:
+The scanner returns a list of finding dictionaries. Each finding contains these required fields:
 
 | Field | Type | Description |
 |---|---|---|
-| `file` | string | Source file containing the finding |
-| `line` | integer | Line number of the finding |
-| `vulnerability` | string | Detected vulnerability type |
-| `severity` | string | Severity level |
-| `confidence` | integer | Detection confidence from 0 to 100 |
+| `file_name` | string | Source file associated with the finding |
+| `line_number` | integer | One-based source line number |
+| `vulnerability_type` | string | Detected vulnerability category |
+| `severity` | string | Normalized severity level |
+| `confidence` | integer or float | Confidence score from 0 to 100 |
 | `code` | string | Relevant source-code snippet |
+
+The standardized finding creator also supplies these fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `owasp` | string | Associated OWASP category |
+| `cwe` | string | Associated CWE identifier |
+| `fingerprint` | string | SHA-256 fingerprint used to identify a finding |
+
+Additional fields may be supplied by scanning or context-aware analysis. For example, results may include `source_context` with surrounding source lines. The optional `evidence` field, when present in a standardized finding, must be a dictionary.
+
+Consumers should tolerate additional fields and should not assume that optional context fields appear in every result.
 
 ## Severity Values
 
-The scanner uses the following standardized severity values:
+The standardized finding schema accepts these exact values:
 
 - `Critical`
 - `High`
 - `Medium`
 - `Low`
 
+Severity must be a string matching one of these values.
+
 ## Confidence
 
-Confidence is represented as an integer from `0` to `100`.
+Confidence must be a finite numeric value from `0` through `100`, inclusive. Boolean values are not accepted as confidence scores.
 
-## Backend Integration
+## Finding Validation
 
-The backend should use only the scanner entry point:
+Standardized findings are validated by `create_finding()` before they are returned.
+
+Validation checks required fields, non-empty file names and vulnerability types, positive integer line numbers, severity, confidence, code type, and the type of `evidence` when supplied.
+
+## Backend and MCP Integration
+
+For Python integration:
 
 ```python
 from scanner.engine import scan_project
@@ -102,6 +114,16 @@ from scanner.engine import scan_project
 results = scan_project(project_path)
 ```
 
-The backend does not need to import individual vulnerability rules.
+The MCP server exposes this tool:
 
-The scanner engine handles file discovery, rule execution, and result standardization.
+```python
+scan_code(path: str) -> list
+```
+
+The MCP tool delegates scanning to `scanner.engine.scan_project()` and returns its result list.
+
+The backend should use the scanner entry point rather than importing individual vulnerability rules.
+
+## Compatibility Note
+
+The canonical finding field names are `file_name`, `line_number`, and `vulnerability_type`. Integrations should use these names rather than older aliases such as `file`, `line`, or `vulnerability`.

@@ -1,4 +1,6 @@
 from pathlib import Path
+import os
+
 from scanner.utils import run_all_rules, remove_duplicates
 from scanner.scan import scan_zip
 from scanner.finding import validate_finding
@@ -49,7 +51,7 @@ def find_source_files(path):
             if not file.is_file():
                 continue
 
-            # Check only directories relative to the selected project root.
+            # Check directories relative to the selected project root.
             # Ancestors outside the project must not cause files to be skipped.
             relative_path = file.relative_to(path)
 
@@ -78,9 +80,15 @@ def scan_project(project_path):
 
     Returns:
         list: Validated and deduplicated security findings.
+
+    Invalid path types return an empty list.
+    Missing valid paths raise FileNotFoundError.
     """
-    # Support ZIP projects for the MCP backend.
-    # ZIP scanning retains its existing validation and safety checks.
+    # Reject invalid path types before converting to Path or checking suffixes.
+    if not isinstance(project_path, (str, os.PathLike)):
+        return []
+
+    # Support ZIP projects while preserving the existing ZIP safety checks.
     if str(project_path).lower().endswith(".zip"):
         return scan_zip(project_path)
 
