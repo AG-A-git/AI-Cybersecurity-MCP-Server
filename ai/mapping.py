@@ -1,68 +1,34 @@
-VULNERABILITY_MAPPING = {
-    "SQL Injection": {
-        "owasp": "A03:2021 Injection",
-        "cwe": "CWE-89"
-    },
 
-    "XSS": {
-        "owasp": "A03:2021 Injection",
-        "cwe": "CWE-79"
-    },
-
-    "Cross Site Scripting": {
-        "owasp": "A03:2021 Injection",
-        "cwe": "CWE-79"
-    },
-
-    "Hardcoded Credentials": {
-        "owasp": "A07:2021 Identification and Authentication Failures",
-        "cwe": "CWE-798"
-    },
-
-    "Weak Cryptography": {
-        "owasp": "A02:2021 Cryptographic Failures",
-        "cwe": "CWE-327"
-    }
-}
-
+from .vulnerability_mapping import (
+    VULNERABILITY_MAPPING,
+    get_vulnerability_mapping,
+)
 
 
 def get_mapping(vulnerability):
+    """
+    Return the canonical OWASP/CWE mapping for a vulnerability.
 
-    vulnerability = vulnerability.strip()
+    Returns "Unknown" values when no mapping exists.
+    """
 
-    if vulnerability in VULNERABILITY_MAPPING:
+    if not isinstance(vulnerability, str) or not vulnerability.strip():
+        return {
+            "owasp": "Unknown",
+            "cwe": "Unknown",
+        }
 
-        return VULNERABILITY_MAPPING[vulnerability]
+    mapping = get_vulnerability_mapping(vulnerability.strip())
 
+    if mapping is None:
+        return {
+            "owasp": "Unknown",
+            "cwe": "Unknown",
+        }
 
-    return {
-
-        "owasp": "Unknown",
-
-        "cwe": "Unknown"
-
-    }
-
+    return mapping
 
 
 if __name__ == "__main__":
-
-    vulnerabilities = [
-
-        "SQL Injection",
-
-        "XSS",
-
-        "Hardcoded Credentials"
-
-    ]
-
-
-    for vulnerability in vulnerabilities:
-
-        result = get_mapping(vulnerability)
-
-        print("\n", vulnerability)
-
-        print(result)
+    for vulnerability in VULNERABILITY_MAPPING:
+        print(vulnerability, "->", get_mapping(vulnerability))

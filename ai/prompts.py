@@ -81,38 +81,106 @@ Return a concise, actionable recommendation.
 
 
 def get_recommendation(vulnerability):
-    """Return a static remediation recommendation for a finding."""
+    """Return actionable remediation advice for a vulnerability type."""
+    fallback = (
+        "Validate the finding, identify its root cause, apply appropriate "
+        "security controls, and add a regression test."
+    )
+
+    if not isinstance(vulnerability, str) or not vulnerability.strip():
+        return fallback
+
     normalized = (
-        str(vulnerability or "")
+        vulnerability.strip()
         .lower()
         .replace("_", " ")
         .replace("-", " ")
     )
 
-    if "sql injection" in normalized:
+    if "sql injection" in normalized or normalized == "sqli":
         return (
             "Use parameterized queries or prepared statements. "
-            "Never construct SQL queries by concatenating untrusted input."
+            "Never concatenate untrusted input into SQL queries."
         )
 
-    if "xss" in normalized or "cross-site scripting" in normalized:
+    if normalized == "xss" or "cross site scripting" in normalized:
         return (
             "Apply context-appropriate output encoding and safely handle "
             "untrusted input. Avoid unsafe DOM operations."
         )
 
-    if "hardcoded credential" in normalized or (
-        "hardcoded password" in normalized
-    ):
+    if "command injection" in normalized or "os command execution" in normalized:
+        return (
+            "Avoid passing untrusted input to operating-system commands. "
+            "Prefer safe library APIs and strict input validation."
+        )
+
+    if "ldap injection" in normalized:
+        return (
+            "Use safe LDAP query APIs, correctly escape special characters, "
+            "and validate untrusted input before building LDAP queries."
+        )
+
+    if "hardcoded credential" in normalized or "hardcoded secret" in normalized:
         return (
             "Remove secrets from source code, rotate exposed credentials, "
             "and use a secure secrets manager."
         )
 
-    if "command injection" in normalized:
+    if "hardcoded password" in normalized:
         return (
-            "Avoid passing untrusted input to operating-system commands. "
-            "Prefer safe library APIs and strict input validation."
+            "Remove hardcoded passwords, rotate exposed credentials, "
+            "and retrieve secrets from a secure secrets manager."
+        )
+
+    if "weak cryptography" in normalized or "weak encryption" in normalized or normalized == "weak crypto":
+        return (
+            "Replace deprecated algorithms and weak configurations with "
+            "approved cryptographic algorithms and secure key management."
+        )
+
+    if "broken access control" in normalized or "broken authorization" in normalized:
+        return (
+            "Enforce server-side authorization for protected resources and "
+            "actions. Apply least privilege and test cross-user access."
+        )
+
+    if "security misconfiguration" in normalized or normalized == "misconfiguration" or normalized == "insecure configuration":
+        return (
+            "Apply secure configuration defaults, disable unnecessary "
+            "services and debug features, remove default credentials, "
+            "and verify settings against a security baseline."
+        )
+
+    if "insecure authentication" in normalized or "authentication weakness" in normalized or "weak authentication" in normalized or "authentication vulnerability" in normalized:
+        return (
+            "Use a maintained authentication framework, protect passwords "
+            "and sessions, apply rate limiting, and use multi-factor "
+            "authentication where appropriate."
+        )
+
+    if "insecure deserialization" in normalized or "unsafe deserialization" in normalized or "deserialization vulnerability" in normalized:
+        return (
+            "Avoid deserializing untrusted data where possible. Use safe "
+            "data formats, restrict accepted types, and validate data."
+        )
+
+    if (
+        "sensitive data exposure" in normalized
+        or "sensitive information exposure" in normalized
+        or "sensitive information disclosure" in normalized
+        or "data exposure" in normalized
+    ):
+        return (
+            "Minimize sensitive data storage, enforce least-privilege access, "
+            "protect data in transit and at rest, and redact secrets from logs."
+        )
+
+    if normalized == "ssrf" or "server side request forgery" in normalized:
+        return (
+            "Restrict outbound requests to approved destinations, validate "
+            "URLs and resolved IP addresses, block internal and metadata "
+            "endpoints, and enforce network egress controls."
         )
 
     if "path traversal" in normalized:
@@ -121,10 +189,9 @@ def get_recommendation(vulnerability):
             "approved base directory, and reject paths outside it."
         )
 
-    return (
-        "Validate the finding, identify its root cause, apply appropriate "
-        "security controls, and add a regression test."
-    )
+    return fallback
+
+
 
 
 # ============================================================

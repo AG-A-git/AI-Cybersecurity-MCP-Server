@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from ai.response import AIAnalysis, parse_ai_response
 
 
@@ -76,4 +76,35 @@ def test_wrong_field_type():
     """
 
     with pytest.raises(ValueError, match="missing or has invalid fields"):
+        parse_ai_response(response)
+
+
+
+def test_rejects_empty_required_fields():
+    response = """
+    {
+        "explanation": "",
+        "impact": "Test impact",
+        "recommendation": "Test recommendation",
+        "secure_practice": "Test secure practice"
+    }
+    """
+
+    with pytest.raises(ValueError):
+        parse_ai_response(response)
+
+
+
+
+def test_rejects_whitespace_only_required_fields():
+    response = """
+    {
+        "explanation": "   ",
+        "impact": "Test impact",
+        "recommendation": "Test recommendation",
+        "secure_practice": "Test secure practice"
+    }
+    """
+
+    with pytest.raises(ValueError):
         parse_ai_response(response)

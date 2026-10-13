@@ -1,4 +1,5 @@
-from pydantic import BaseModel, Field
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class VulnerabilityInput(BaseModel):
@@ -31,6 +32,20 @@ class AIAnalysis(BaseModel):
     impact: str
     recommendation: str
     secure_practice: str
+
+    @field_validator(
+        "explanation",
+        "impact",
+        "recommendation",
+        "secure_practice",
+    )
+    @classmethod
+    def require_non_empty_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError(
+                "Field must not be empty or whitespace-only."
+            )
+        return value
 
 
 class SecurityAnalysisResponse(BaseModel):
