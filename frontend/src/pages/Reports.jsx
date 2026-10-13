@@ -13,13 +13,17 @@ import EmptyState from "../components/EmptyState";
 const getFindings = (data) => {
     if (Array.isArray(data?.vulnerabilities)) return data.vulnerabilities;
     if (Array.isArray(data?.findings)) return data.findings;
+
     if (Array.isArray(data?.results?.vulnerabilities)) {
         return data.results.vulnerabilities;
     }
+
     if (Array.isArray(data?.results?.findings)) {
         return data.results.findings;
     }
+
     if (Array.isArray(data?.results)) return data.results;
+
     return [];
 };
 
@@ -69,6 +73,13 @@ const getProjectList = (data) => {
     return [];
 };
 
+const getScanList = (data) => {
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.scans)) return data.scans;
+    if (Array.isArray(data?.results)) return data.results;
+    return [];
+};
+
 const getScanId = (scan) => scan.id ?? scan.scan_id;
 
 const getScanStatus = (scan) =>
@@ -80,6 +91,7 @@ const getScanFindings = (scan) => {
 
     if (Array.isArray(findings)) return findings;
     if (Array.isArray(findings?.findings)) return findings.findings;
+
     if (Array.isArray(findings?.vulnerabilities)) {
         return findings.vulnerabilities;
     }
@@ -87,11 +99,33 @@ const getScanFindings = (scan) => {
     return [];
 };
 
+const getSummaryFindingCount = (scan) => {
+    const count =
+        scan.total_findings ??
+        scan.finding_count ??
+        scan.findings_count ??
+        scan.vulnerability_count ??
+        scan.total_vulnerabilities;
+
+    if (typeof count === "number" && Number.isFinite(count)) {
+        return count;
+    }
+
+    if (typeof count === "string" && count.trim() !== "") {
+        const parsed = Number(count);
+
+        if (Number.isFinite(parsed)) return parsed;
+    }
+
+    return null;
+};
+
 function Reports() {
     const navigate = useNavigate();
 
     const [projects, setProjects] = useState([]);
     const [scans, setScans] = useState([]);
+    const [findingCounts, setFindingCounts] = useState({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [exportingScanId, setExportingScanId] = useState(null);
@@ -102,40 +136,101 @@ function Reports() {
 
         try {
             const [projectsResult, scansResult] =
-                await Promise.allSettled([getProjects(), getScans()]);
+                await Promise.allSettled([
+                    getProjects(),
+                    getScans(),
+                ]);
 
             if (projectsResult.status === "rejected") {
                 throw projectsResult.reason;
             }
 
-            setProjects(
-                getProjectList(
-                    projectsResult.value?.data ?? projectsResult.value
-                )
+            const projectData =
+                projectsResult.value?.data ?? projectsResult.value;
+
+            const projectList = getProjectList(projectData);
+            setProjects(projectList);
+
+            if (scansResult.status === "rejected") {
+                throw scansResult.reason;
+            }
+
+            const scanData =
+                scansResult.value?.data ?? scansResult.value;
+
+            const scanList = getScanList(scanData);
+            setScans(scanList);
+
+            // Show available counts immediately while details load.
+            const initialCounts = {};
+
+            scanList.forEach((scan) => {
+                const id = getScanId(scan);
+
+                if (id == null) return;
+
+                const findings = getScanFindings(scan);
+                const summaryCount = getSummaryFindingCount(scan);
+
+                if (findings.length > 0) {
+                    initialCounts[id] =
+                        removeDuplicateFindings(findings).length;
+                } else if (summaryCount !== null) {
+                    initialCounts[id] = summaryCount;
+                }
+            });
+
+            setFindingCounts(initialCounts);
+
+            // Fetch details for every scan to calculate counts consistently
+            // with the JSON export.
+            const detailResults = await Promise.allSettled(
+                scanList
+                    .filter((scan) => getScanId(scan) != null)
+                    .map(async (scan) => {
+                        const id = getScanId(scan);
+                        const response = await api.get(`/scans/${id}`);
+
+                        return {
+                            id,
+                            details: response.data ?? response,
+                        };
+                    })
             );
 
-            if (scansResult.status === "fulfilled") {
-                const scanData =
-                    scansResult.value?.data ?? scansResult.value;
+            const resolvedCounts = { ...initialCounts };
 
-                setScans(
-                    Array.isArray(scanData)
-                        ? scanData
-                        : Array.isArray(scanData?.scans)
-                          ? scanData.scans
-                          : Array.isArray(scanData?.results)
-                            ? scanData.results
-                            : []
-                );
-            } else {
-                console.error(
-                    "Could not load scans:",
-                    scansResult.reason
-                );
-                setScans([]);
-            }
+            detailResults.forEach((result) => {
+                if (result.status !== "fulfilled") {
+                    console.warn(
+                        "Could not retrieve scan finding count:",
+                        result.reason
+                    );
+                    return;
+                }
+
+                const { id, details } = result.value;
+                const findings = getFindings(details);
+
+                if (findings.length > 0) {
+                    resolvedCounts[id] =
+                        removeDuplicateFindings(findings).length;
+                } else {
+                    const summaryCount =
+                        getSummaryFindingCount(details);
+
+                    if (summaryCount !== null) {
+                        resolvedCounts[id] = summaryCount;
+                    } else {
+                        resolvedCounts[id] = 0;
+                    }
+                }
+            });
+
+            setFindingCounts(resolvedCounts);
         } catch (err) {
             console.error("Failed to load reports:", err);
+
             setError(
                 err.userMessage ??
                     err.response?.data?.detail ??
@@ -153,7 +248,8 @@ function Reports() {
     const getProjectName = (projectId, scan = null) => {
         const project = projects.find(
             (item) =>
-                String(item.id ?? item.project_id) === String(projectId)
+                String(item.id ?? item.project_id) ===
+                String(projectId)
         );
 
         return (
@@ -167,19 +263,24 @@ function Reports() {
     };
 
     const getFindingCount = (scan) => {
+        const id = getScanId(scan);
+
+        // Prefer the count resolved from the detailed scan endpoint.
+        if (id != null && findingCounts[id] !== undefined) {
+            return findingCounts[id];
+        }
+
         const findings = getScanFindings(scan);
 
-        if (findings.length > 0) return findings.length;
-
-        if (typeof scan.total_findings === "number") {
-            return scan.total_findings;
+        if (findings.length > 0) {
+            return removeDuplicateFindings(findings).length;
         }
 
-        if (typeof scan.finding_count === "number") {
-            return scan.finding_count;
-        }
+        const summaryCount = getSummaryFindingCount(scan);
 
-        return findings.length;
+        if (summaryCount !== null) return summaryCount;
+
+        return "—";
     };
 
     const downloadReport = async (selectedScan) => {
@@ -196,8 +297,9 @@ function Reports() {
             const response = await api.get(`/scans/${scanId}`);
             const details = response.data ?? response;
 
-            const allFindings = getFindings(details);
-            const uniqueFindings = removeDuplicateFindings(allFindings);
+            const uniqueFindings = removeDuplicateFindings(
+                getFindings(details)
+            );
 
             const projectId =
                 details.project_id ??
@@ -217,6 +319,7 @@ function Reports() {
             ) {
                 try {
                     const projectsResponse = await getProjects();
+
                     const projectList = getProjectList(
                         projectsResponse?.data ?? projectsResponse
                     );
@@ -284,6 +387,7 @@ function Reports() {
 
             link.href = url;
             link.download = `scan-report-${scanId}.json`;
+
             document.body.appendChild(link);
             link.click();
             link.remove();
@@ -291,6 +395,7 @@ function Reports() {
             window.setTimeout(() => URL.revokeObjectURL(url), 1000);
         } catch (err) {
             console.error("Failed to export scan report:", err);
+
             alert(
                 err.response?.data?.detail ??
                     err.userMessage ??
@@ -338,7 +443,10 @@ function Reports() {
                 {[
                     { label: "Total Projects", value: projects.length },
                     { label: "Total Scans", value: scans.length },
-                    { label: "Completed Scans", value: completedScans.length },
+                    {
+                        label: "Completed Scans",
+                        value: completedScans.length,
+                    },
                 ].map((item) => (
                     <article
                         key={item.label}
@@ -367,11 +475,14 @@ function Reports() {
                 ) : (
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {projects.map((project) => {
-                            const projectId = project.id ?? project.project_id;
+                            const projectId =
+                                project.id ?? project.project_id;
+
                             const projectScans = scans.filter(
                                 (scan) =>
-                                    String(scan.project_id ?? scan.project?.id) ===
-                                    String(projectId)
+                                    String(
+                                        scan.project_id ?? scan.project?.id
+                                    ) === String(projectId)
                             );
 
                             return (
@@ -385,15 +496,19 @@ function Reports() {
                                             project.title ??
                                             `Project ${projectId}`}
                                     </h3>
+
                                     <p className="mt-2 text-sm text-gray-600">
                                         Project ID: {projectId}
                                     </p>
+
                                     <p className="mt-2 break-words text-sm text-gray-600">
                                         {project.description ?? "No description"}
                                     </p>
+
                                     <p className="mt-3 text-sm">
                                         Total scans: {projectScans.length}
                                     </p>
+
                                     <button
                                         type="button"
                                         className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
@@ -429,18 +544,23 @@ function Reports() {
                         <table className="w-full min-w-[650px] border-collapse text-left">
                             <thead className="bg-gray-50">
                                 <tr>
-                                    {["Scan ID", "Project", "Status", "Findings", "Actions"].map(
-                                        (heading) => (
-                                            <th
-                                                key={heading}
-                                                className="border-b border-gray-200 p-3 text-sm font-semibold"
-                                            >
-                                                {heading}
-                                            </th>
-                                        )
-                                    )}
+                                    {[
+                                        "Scan ID",
+                                        "Project",
+                                        "Status",
+                                        "Findings",
+                                        "Actions",
+                                    ].map((heading) => (
+                                        <th
+                                            key={heading}
+                                            className="border-b border-gray-200 p-3 text-sm font-semibold"
+                                        >
+                                            {heading}
+                                        </th>
+                                    ))}
                                 </tr>
                             </thead>
+
                             <tbody>
                                 {scans.map((scan, index) => {
                                     const scanId = getScanId(scan);
@@ -450,18 +570,23 @@ function Reports() {
                                             <td className="border-b border-gray-100 p-3">
                                                 {scanId ?? "N/A"}
                                             </td>
+
                                             <td className="border-b border-gray-100 p-3">
                                                 {getProjectName(
-                                                    scan.project_id ?? scan.project?.id,
+                                                    scan.project_id ??
+                                                        scan.project?.id,
                                                     scan
                                                 )}
                                             </td>
+
                                             <td className="border-b border-gray-100 p-3">
                                                 {getScanStatus(scan)}
                                             </td>
+
                                             <td className="border-b border-gray-100 p-3">
                                                 {getFindingCount(scan)}
                                             </td>
+
                                             <td className="border-b border-gray-100 p-3">
                                                 <div className="flex flex-wrap gap-2">
                                                     <button
@@ -479,6 +604,7 @@ function Reports() {
                                                     >
                                                         View Results
                                                     </button>
+
                                                     <button
                                                         type="button"
                                                         disabled={
@@ -486,7 +612,9 @@ function Reports() {
                                                             scanId == null
                                                         }
                                                         className="rounded-md bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
-                                                        onClick={() => downloadReport(scan)}
+                                                        onClick={() =>
+                                                            downloadReport(scan)
+                                                        }
                                                     >
                                                         {String(exportingScanId) ===
                                                         String(scanId)
@@ -512,6 +640,7 @@ function Reports() {
                 >
                     Refresh Reports
                 </button>
+
                 <button
                     type="button"
                     className="rounded-lg border border-gray-300 px-4 py-2"
@@ -519,6 +648,7 @@ function Reports() {
                 >
                     Go to Projects
                 </button>
+
                 <button
                     type="button"
                     className="rounded-lg border border-gray-300 px-4 py-2"
