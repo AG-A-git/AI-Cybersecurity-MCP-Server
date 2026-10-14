@@ -110,7 +110,7 @@ Output
     "confidence": 95,
     "risk_score": 85.5,
     "risk_level": "High",
-    "ai_status": "success",
+    "ai_status": "completed",
     "ai_analysis": {
         "severity": "High",
         "risk_score": 90,

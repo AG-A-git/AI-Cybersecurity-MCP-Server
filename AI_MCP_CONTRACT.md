@@ -273,7 +273,7 @@ Example
   "risk_level": "High",
   "owasp": "A03:2021 Injection",
   "cwe": "CWE-89",
-  "ai_status": "success",
+  "ai_status": "completed",
   "ai_analysis": {
     "severity": "High",
     "explanation": "The supplied code is vulnerable to SQL injection.",
