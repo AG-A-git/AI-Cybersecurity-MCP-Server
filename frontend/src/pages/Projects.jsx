@@ -24,7 +24,7 @@ function Projects() {
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
 
-    // Fetch all projects
+    // Fetch all projects and support both backend response formats.
     const fetchProjects = async () => {
         try {
             setLoadingProjects(true);
@@ -32,16 +32,21 @@ function Projects() {
 
             const data = await getProjects();
 
-            console.log("Projects:", data);
+            const projectList = Array.isArray(data)
+                ? data
+                : Array.isArray(data?.projects)
+                    ? data.projects
+                    : [];
 
-            setProjects(Array.isArray(data) ? data : []);
+            setProjects(projectList);
         } catch (err) {
             console.error("Failed to fetch projects:", err);
 
             setError(
                 err.userMessage ||
-                err.response?.data?.detail ||
-                "Failed to load projects."
+                (typeof err.response?.data?.detail === "string"
+                    ? err.response.data.detail
+                    : "Failed to load projects.")
             );
         } finally {
             setLoadingProjects(false);
@@ -52,7 +57,7 @@ function Projects() {
         fetchProjects();
     }, []);
 
-    // Create a new project
+    // Create a new project.
     const handleCreate = async (e) => {
         e.preventDefault();
 
@@ -91,16 +96,23 @@ function Projects() {
                 (typeof detail === "string"
                     ? detail
                     : Array.isArray(detail)
-                    ? detail.map((item) => item.msg).join(", ")
-                    : "Failed to create project.")
+                        ? detail
+                            .map((item) => item.msg)
+                            .join(", ")
+                        : "Failed to create project.")
             );
         } finally {
             setLoading(false);
         }
     };
 
-    // Open a project
+    // Save the selected project and open the upload page.
     const handleOpenProject = (projectId) => {
+        if (projectId == null) {
+            setError("Unable to open this project because its ID is missing.");
+            return;
+        }
+
         localStorage.setItem(
             "selected_project_id",
             String(projectId)
@@ -109,14 +121,9 @@ function Projects() {
         navigate("/upload");
     };
 
-    // Navigate to upload for a selected project
+    // Navigate to upload for the selected project.
     const handleUploadFile = (projectId) => {
-        localStorage.setItem(
-            "selected_project_id",
-            String(projectId)
-        );
-
-        navigate("/upload");
+        handleOpenProject(projectId);
     };
 
     return (
@@ -220,6 +227,7 @@ function Projects() {
                             >
                                 <h3>
                                     {project.project_name ||
+                                        project.name ||
                                         "Unnamed Project"}
                                 </h3>
 
@@ -231,7 +239,7 @@ function Projects() {
 
                                 <p>
                                     <strong>Project ID:</strong>{" "}
-                                    {project.id}
+                                    {project.id ?? "N/A"}
                                 </p>
 
                                 <p>
@@ -263,6 +271,7 @@ function Projects() {
                                                 project.id
                                             )
                                         }
+                                        disabled={project.id == null}
                                     >
                                         Open Project
                                     </button>
@@ -274,6 +283,7 @@ function Projects() {
                                                 project.id
                                             )
                                         }
+                                        disabled={project.id == null}
                                     >
                                         Upload File
                                     </button>

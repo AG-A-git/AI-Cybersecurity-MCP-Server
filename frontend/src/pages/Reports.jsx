@@ -2,17 +2,24 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import api from "../services/api";
 import { getProjects } from "../services/projectService";
-import { getScans } from "../services/scanService";
+import {
+    getScans,
+    getScanResults,
+} from "../services/scanService";
 
 import LoadingState from "../components/LoadingState";
 import ErrorState from "../components/ErrorState";
 import EmptyState from "../components/EmptyState";
 
 const getFindings = (data) => {
-    if (Array.isArray(data?.vulnerabilities)) return data.vulnerabilities;
-    if (Array.isArray(data?.findings)) return data.findings;
+    if (Array.isArray(data?.vulnerabilities)) {
+        return data.vulnerabilities;
+    }
+
+    if (Array.isArray(data?.findings)) {
+        return data.findings;
+    }
 
     if (Array.isArray(data?.results?.vulnerabilities)) {
         return data.results.vulnerabilities;
@@ -22,7 +29,9 @@ const getFindings = (data) => {
         return data.results.findings;
     }
 
-    if (Array.isArray(data?.results)) return data.results;
+    if (Array.isArray(data?.results)) {
+        return data.results;
+    }
 
     return [];
 };
@@ -36,8 +45,8 @@ const getFindingKey = (finding) => {
             .toLowerCase();
 
     return JSON.stringify([
-        normalize(finding.file_name ?? finding.filename),
-        normalize(finding.line_number),
+        normalize(finding.file_name ?? finding.filename ?? finding.file),
+        normalize(finding.line_number ?? finding.line),
         normalize(
             finding.vulnerability_type ??
                 finding.vulnerability ??
@@ -59,7 +68,9 @@ const removeDuplicateFindings = (findings) => {
     return findings.filter((finding) => {
         const key = getFindingKey(finding);
 
-        if (seen.has(key)) return false;
+        if (seen.has(key)) {
+            return false;
+        }
 
         seen.add(key);
         return true;
@@ -70,6 +81,7 @@ const getProjectList = (data) => {
     if (Array.isArray(data)) return data;
     if (Array.isArray(data?.projects)) return data.projects;
     if (Array.isArray(data?.results)) return data.results;
+    if (Array.isArray(data?.data)) return data.data;
     return [];
 };
 
@@ -77,20 +89,28 @@ const getScanList = (data) => {
     if (Array.isArray(data)) return data;
     if (Array.isArray(data?.scans)) return data.scans;
     if (Array.isArray(data?.results)) return data.results;
+    if (Array.isArray(data?.data)) return data.data;
     return [];
 };
 
 const getScanId = (scan) => scan.id ?? scan.scan_id;
 
 const getScanStatus = (scan) =>
-    scan.status ?? scan.scan_status ?? "Unknown";
+    scan.status ?? scan.scan_status ?? scan.state ?? "Unknown";
 
 const getScanFindings = (scan) => {
     const findings =
-        scan.findings ?? scan.vulnerabilities ?? scan.results;
+        scan.findings ??
+        scan.vulnerabilities ??
+        scan.results;
 
-    if (Array.isArray(findings)) return findings;
-    if (Array.isArray(findings?.findings)) return findings.findings;
+    if (Array.isArray(findings)) {
+        return findings;
+    }
+
+    if (Array.isArray(findings?.findings)) {
+        return findings.findings;
+    }
 
     if (Array.isArray(findings?.vulnerabilities)) {
         return findings.vulnerabilities;
@@ -107,17 +127,15 @@ const getSummaryFindingCount = (scan) => {
         scan.vulnerability_count ??
         scan.total_vulnerabilities;
 
-    if (typeof count === "number" && Number.isFinite(count)) {
-        return count;
+    if (count === null || count === undefined || count === "") {
+        return null;
     }
 
-    if (typeof count === "string" && count.trim() !== "") {
-        const parsed = Number(count);
+    const parsed = Number(count);
 
-        if (Number.isFinite(parsed)) return parsed;
-    }
-
-    return null;
+    return Number.isFinite(parsed) && parsed >= 0
+        ? parsed
+        : null;
 };
 
 function Reports() {
@@ -128,6 +146,7 @@ function Reports() {
     const [findingCounts, setFindingCounts] = useState({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [exportError, setExportError] = useState("");
     const [exportingScanId, setExportingScanId] = useState(null);
 
     const loadReports = useCallback(async () => {
@@ -145,8 +164,8 @@ function Reports() {
                 throw projectsResult.reason;
             }
 
-            const projectData =
-                projectsResult.value?.data ?? projectsResult.value;
+            const projectData = projectsResult.value?.data ??
+                projectsResult.value;
 
             const projectList = getProjectList(projectData);
             setProjects(projectList);
@@ -155,13 +174,12 @@ function Reports() {
                 throw scansResult.reason;
             }
 
-            const scanData =
-                scansResult.value?.data ?? scansResult.value;
+            const scanData = scansResult.value?.data ??
+                scansResult.value;
 
             const scanList = getScanList(scanData);
             setScans(scanList);
 
-            // Show available counts immediately while details load.
             const initialCounts = {};
 
             scanList.forEach((scan) => {
@@ -182,19 +200,14 @@ function Reports() {
 
             setFindingCounts(initialCounts);
 
-            // Fetch details for every scan to calculate counts consistently
-            // with the JSON export.
             const detailResults = await Promise.allSettled(
                 scanList
                     .filter((scan) => getScanId(scan) != null)
                     .map(async (scan) => {
                         const id = getScanId(scan);
-                        const response = await api.get(`/scans/${id}`);
+                        const details = await getScanResults(id);
 
-                        return {
-                            id,
-                            details: response.data ?? response,
-                        };
+                        return { id, details };
                     })
             );
 
@@ -221,8 +234,8 @@ function Reports() {
 
                     if (summaryCount !== null) {
                         resolvedCounts[id] = summaryCount;
-                    } else {
-                        resolvedCounts[id] = 0;
+                    } else if (initialCounts[id] === undefined) {
+                        delete resolvedCounts[id];
                     }
                 }
             });
@@ -265,8 +278,10 @@ function Reports() {
     const getFindingCount = (scan) => {
         const id = getScanId(scan);
 
-        // Prefer the count resolved from the detailed scan endpoint.
-        if (id != null && findingCounts[id] !== undefined) {
+        if (
+            id != null &&
+            findingCounts[id] !== undefined
+        ) {
             return findingCounts[id];
         }
 
@@ -278,24 +293,25 @@ function Reports() {
 
         const summaryCount = getSummaryFindingCount(scan);
 
-        if (summaryCount !== null) return summaryCount;
-
-        return "—";
+        return summaryCount !== null
+            ? summaryCount
+            : "Not available";
     };
 
     const downloadReport = async (selectedScan) => {
         const scanId = getScanId(selectedScan);
 
+        setExportError("");
+
         if (scanId == null) {
-            alert("The scan ID is unavailable.");
+            setExportError("The scan ID is unavailable.");
             return;
         }
 
         setExportingScanId(scanId);
 
         try {
-            const response = await api.get(`/scans/${scanId}`);
-            const details = response.data ?? response;
+            const details = await getScanResults(scanId);
 
             const uniqueFindings = removeDuplicateFindings(
                 getFindings(details)
@@ -314,7 +330,8 @@ function Reports() {
             });
 
             if (
-                projectName === `Project ${projectId ?? "Unknown"}` &&
+                projectName ===
+                    `Project ${projectId ?? "Unknown"}` &&
                 projectId != null
             ) {
                 try {
@@ -357,8 +374,12 @@ function Reports() {
                     file_name:
                         finding.file_name ??
                         finding.filename ??
+                        finding.file ??
                         "Unknown",
-                    line_number: finding.line_number ?? null,
+                    line_number:
+                        finding.line_number ??
+                        finding.line ??
+                        null,
                     vulnerability_type:
                         finding.vulnerability_type ??
                         finding.vulnerability ??
@@ -372,9 +393,19 @@ function Reports() {
                         finding.source_code ??
                         finding.snippet ??
                         "",
+                    explanation:
+                        finding.explanation ??
+                        finding.description ??
+                        finding.message ??
+                        null,
+                    recommendation:
+                        finding.recommendation ??
+                        finding.remediation ??
+                        finding.fix ??
+                        null,
                 })),
                 finding_count: uniqueFindings.length,
-                note: "Unique findings retrieved from the scan detail endpoint.",
+                note: "Findings retrieved from the scan detail endpoint. This JSON file is generated by the frontend.",
             };
 
             const blob = new Blob(
@@ -392,14 +423,17 @@ function Reports() {
             link.click();
             link.remove();
 
-            window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+            window.setTimeout(
+                () => URL.revokeObjectURL(url),
+                1000
+            );
         } catch (err) {
             console.error("Failed to export scan report:", err);
 
-            alert(
-                err.response?.data?.detail ??
-                    err.userMessage ??
-                    "Unable to export scan details. Check that the backend is running."
+            setExportError(
+                err.userMessage ??
+                    err.response?.data?.detail ??
+                    "Unable to export scan details. Please try again."
             );
         } finally {
             setExportingScanId(null);
@@ -408,19 +442,22 @@ function Reports() {
 
     if (loading) {
         return (
-            <div className="p-6">
+            <main className="p-4 sm:p-6">
                 <h1 className="mb-4 text-2xl font-bold">Reports</h1>
                 <LoadingState message="Loading report data..." />
-            </div>
+            </main>
         );
     }
 
     if (error) {
         return (
-            <div className="mx-auto max-w-6xl p-6">
+            <main className="mx-auto max-w-6xl p-4 sm:p-6">
                 <h1 className="mb-4 text-2xl font-bold">Reports</h1>
-                <ErrorState message={error} onRetry={loadReports} />
-            </div>
+                <ErrorState
+                    message={error}
+                    onRetry={loadReports}
+                />
+            </main>
         );
     }
 
@@ -438,6 +475,24 @@ function Reports() {
                     Review projects, scan activity, and export security findings.
                 </p>
             </header>
+
+            {exportError && (
+                <div
+                    role="alert"
+                    className="rounded-lg border border-red-200 bg-red-50 p-3 text-red-700"
+                >
+                    <div className="flex items-center justify-between gap-3">
+                        <p>{exportError}</p>
+                        <button
+                            type="button"
+                            className="shrink-0 rounded border border-red-300 px-3 py-1 text-sm"
+                            onClick={() => setExportError("")}
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 {[
@@ -474,20 +529,21 @@ function Reports() {
                     />
                 ) : (
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        {projects.map((project) => {
+                        {projects.map((project, index) => {
                             const projectId =
                                 project.id ?? project.project_id;
 
                             const projectScans = scans.filter(
                                 (scan) =>
                                     String(
-                                        scan.project_id ?? scan.project?.id
+                                        scan.project_id ??
+                                        scan.project?.id
                                     ) === String(projectId)
                             );
 
                             return (
                                 <article
-                                    key={projectId}
+                                    key={projectId ?? `project-${index}`}
                                     className="overflow-hidden rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
                                 >
                                     <h3 className="break-words text-lg font-semibold">
@@ -498,7 +554,7 @@ function Reports() {
                                     </h3>
 
                                     <p className="mt-2 text-sm text-gray-600">
-                                        Project ID: {projectId}
+                                        Project ID: {projectId ?? "Not available"}
                                     </p>
 
                                     <p className="mt-2 break-words text-sm text-gray-600">

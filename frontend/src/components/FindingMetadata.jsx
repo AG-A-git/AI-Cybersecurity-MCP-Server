@@ -1,4 +1,17 @@
 function FindingMetadata({ finding }) {
+    const confidence = finding.confidence;
+
+    const formattedConfidence =
+        confidence === null ||
+        confidence === undefined ||
+        confidence === ""
+            ? "Not available"
+            : typeof confidence === "number" ||
+              (typeof confidence === "string" &&
+                  !Number.isNaN(Number(confidence)))
+            ? `${confidence}%`
+            : confidence;
+
     return (
         <div
             style={{
@@ -11,22 +24,17 @@ function FindingMetadata({ finding }) {
         >
             <div>
                 <strong>File</strong>
-                <p>{finding.file_name || "Not available"}</p>
+                <p>{finding.file_name || finding.file || "Not available"}</p>
             </div>
 
             <div>
                 <strong>Line</strong>
-                <p>{finding.line_number ?? "Not available"}</p>
+                <p>{finding.line_number ?? finding.line ?? "Not available"}</p>
             </div>
 
             <div>
                 <strong>Confidence</strong>
-                <p>
-                    {finding.confidence !== null &&
-                    finding.confidence !== undefined
-                        ? `${finding.confidence}%`
-                        : "Not available"}
-                </p>
+                <p>{formattedConfidence}</p>
             </div>
 
             <div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getProjects } from "../services/projectService";
 import { getScans } from "../services/scanService";
 
@@ -25,41 +25,51 @@ function Dashboard() {
 
             if (projectsResult.status === "fulfilled") {
                 const data = projectsResult.value;
+
                 const projectList = Array.isArray(data)
                     ? data
                     : Array.isArray(data?.projects)
-                        ? data.projects
-                        : Array.isArray(data?.data)
-                            ? data.data
-                            : [];
+                      ? data.projects
+                      : Array.isArray(data?.data)
+                        ? data.data
+                        : null;
+
+                if (projectList === null) {
+                    throw new Error("Unexpected projects API response.");
+                }
 
                 setProjects(projectList);
             } else {
-                console.error("Projects request failed:", projectsResult.reason);
                 throw projectsResult.reason;
             }
 
             if (scansResult.status === "fulfilled") {
                 const data = scansResult.value;
+
                 const scanList = Array.isArray(data)
                     ? data
                     : Array.isArray(data?.scans)
-                        ? data.scans
-                        : Array.isArray(data?.data)
-                            ? data.data
-                            : [];
+                      ? data.scans
+                      : Array.isArray(data?.data)
+                        ? data.data
+                        : null;
+
+                if (scanList === null) {
+                    throw new Error("Unexpected scans API response.");
+                }
 
                 setScans(scanList);
             } else {
-                console.error("Scans request failed:", scansResult.reason);
-                setScans([]);
+                throw scansResult.reason;
             }
         } catch (err) {
             console.error("Dashboard error:", err);
+
             setError(
                 err.userMessage ||
-                err.response?.data?.detail ||
-                "Unable to load projects. Check that you are logged in and the backend is running."
+                    err.response?.data?.detail ||
+                    err.message ||
+                    "Unable to load dashboard data. Check your login and backend."
             );
         } finally {
             setLoading(false);
@@ -70,45 +80,53 @@ function Dashboard() {
         fetchDashboardData();
     }, [fetchDashboardData]);
 
-    const totalVulnerabilities = scans.reduce((total, scan) => {
-        const results = scan.results ?? scan.findings ?? scan.vulnerabilities;
+    const totalVulnerabilities = useMemo(() => {
+        return scans.reduce((total, scan) => {
+            const count = Number(scan.vulnerability_count ?? 0);
 
-        if (Array.isArray(results)) {
-            return total + results.length;
-        }
-
-        const count = Number(
-            scan.vulnerability_count ?? scan.total_vulnerabilities ?? 0
-        );
-
-        return total + (Number.isFinite(count) ? count : 0);
-    }, 0);
+            return total + (
+                Number.isFinite(count) && count > 0 ? count : 0
+            );
+        }, 0);
+    }, [scans]);
 
     if (loading) {
         return (
-            <div style={{ padding: "30px" }}>
+            <main style={{ padding: "30px" }}>
                 <h1>Dashboard</h1>
                 <LoadingState message="Loading dashboard..." />
-            </div>
+            </main>
         );
     }
 
     if (error) {
         return (
-            <div style={{ padding: "30px" }}>
+            <main style={{ padding: "30px" }}>
                 <h1>Dashboard</h1>
-                <ErrorState message={error} onRetry={fetchDashboardData} />
-            </div>
+                <ErrorState
+                    message={error}
+                    onRetry={fetchDashboardData}
+                />
+            </main>
         );
     }
 
     return (
-        <div style={{ padding: "30px" }}>
-            <h1>Dashboard</h1>
-            <p>Overview of your cybersecurity projects and scans.</p>
+        <main
+            style={{
+                padding: "clamp(16px, 3vw, 30px)",
+                maxWidth: "1400px",
+                margin: "0 auto",
+            }}
+        >
+            <header>
+                <h1>Dashboard</h1>
+                <p>Overview of your cybersecurity projects and scans.</p>
+            </header>
 
             <section
                 className="row g-3"
+                aria-label="Dashboard statistics"
                 style={{ marginTop: "25px" }}
             >
                 <div className="col-12 col-md-6 col-xl-4">
@@ -139,9 +157,10 @@ function Dashboard() {
             <section
                 style={{
                     marginTop: "30px",
-                    border: "1px solid #ccc",
-                    borderRadius: "8px",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: "10px",
                     padding: "20px",
+                    backgroundColor: "#ffffff",
                 }}
             >
                 <h2>Your Projects</h2>
@@ -149,21 +168,22 @@ function Dashboard() {
                 {projects.length === 0 ? (
                     <EmptyState
                         title="No projects yet"
-                        message="No projects were returned by the backend. Check GET /projects/ in Swagger."
+                        message="Create a project to get started."
                     />
                 ) : (
-                    projects.map((project) => (
-                        <div
-                            key={project.id}
+                    projects.map((project, index) => (
+                        <article
+                            key={project.id ?? `project-${index}`}
                             style={{
-                                borderBottom: "1px solid #ddd",
+                                borderBottom: "1px solid #e5e7eb",
                                 padding: "15px 0",
+                                overflowWrap: "anywhere",
                             }}
                         >
                             <h3>
-                                {project.project_name ??
-                                    project.name ??
-                                    `Project ${project.id}`}
+                                {project.name ??
+                                    project.project_name ??
+                                    `Project ${project.id ?? ""}`}
                             </h3>
 
                             <p>
@@ -172,9 +192,10 @@ function Dashboard() {
                             </p>
 
                             <p>
-                                <strong>Project ID:</strong> {project.id}
+                                <strong>Project ID:</strong>{" "}
+                                {project.id ?? "Not available"}
                             </p>
-                        </div>
+                        </article>
                     ))
                 )}
             </section>
@@ -182,9 +203,10 @@ function Dashboard() {
             <section
                 style={{
                     marginTop: "30px",
-                    border: "1px solid #ccc",
-                    borderRadius: "8px",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: "10px",
                     padding: "20px",
+                    backgroundColor: "#ffffff",
                 }}
             >
                 <h2>Recent Scans</h2>
@@ -193,30 +215,43 @@ function Dashboard() {
                     <p>No scans were returned by the backend.</p>
                 ) : (
                     scans.map((scan, index) => (
-                        <div
-                            key={scan.id ?? scan.scan_id ?? index}
+                        <article
+                            key={scan.id ?? scan.scan_id ?? `scan-${index}`}
                             style={{
-                                borderBottom: "1px solid #ddd",
+                                borderBottom: "1px solid #e5e7eb",
                                 padding: "12px 0",
+                                overflowWrap: "anywhere",
                             }}
                         >
                             <p>
-                                <strong>
-                                    Scan ID:
-                                </strong>{" "}
-                                {scan.scan_id ?? scan.id ?? "Not available"}
+                                <strong>Scan ID:</strong>{" "}
+                                {scan.id ?? scan.scan_id ?? "Not available"}
                             </p>
 
                             <p>
                                 <strong>Status:</strong>{" "}
-                                {scan.status ?? scan.state ?? "Completed"}
+                                {scan.status ?? scan.state ?? "Unknown"}
                             </p>
 
                             <p>
                                 <strong>Project ID:</strong>{" "}
                                 {scan.project_id ?? "Not available"}
                             </p>
-                        </div>
+
+                            {scan.created_at && (
+                                <p>
+                                    <strong>Created:</strong>{" "}
+                                    {new Date(
+                                        scan.created_at
+                                    ).toLocaleString()}
+                                </p>
+                            )}
+
+                            <p>
+                                <strong>Vulnerabilities:</strong>{" "}
+                                {Number(scan.vulnerability_count ?? 0)}
+                            </p>
+                        </article>
                     ))
                 )}
             </section>
@@ -224,15 +259,19 @@ function Dashboard() {
             <button
                 type="button"
                 onClick={fetchDashboardData}
+                disabled={loading}
                 style={{
                     marginTop: "25px",
                     padding: "10px 16px",
-                    cursor: "pointer",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "8px",
+                    cursor: loading ? "not-allowed" : "pointer",
+                    opacity: loading ? 0.6 : 1,
                 }}
             >
-                Refresh Dashboard
+                {loading ? "Refreshing..." : "Refresh Dashboard"}
             </button>
-        </div>
+        </main>
     );
 }
 

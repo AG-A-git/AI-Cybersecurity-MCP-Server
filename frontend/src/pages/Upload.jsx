@@ -5,6 +5,10 @@ import { getProjects, getProjectFiles } from "../services/projectService";
 import { uploadFile } from "../services/uploadService";
 import { startScan } from "../services/scanService";
 
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // Temporary 10 MB limit
+
+const ALLOWED_EXTENSIONS = [".py", ".js", ".java", ".html", ".zip"];
+
 const Upload = () => {
     const navigate = useNavigate();
 
@@ -56,7 +60,9 @@ const Upload = () => {
                 ? data
                 : Array.isArray(data?.projects)
                     ? data.projects
-                    : [];
+                    : Array.isArray(data?.data)
+                        ? data.data
+                        : [];
 
             setProjects(projectList);
 
@@ -84,8 +90,8 @@ const Upload = () => {
             console.error("Failed to load projects:", err);
 
             setError(
-                err.response?.data?.detail ||
                 err.userMessage ||
+                err.response?.data?.detail ||
                 "Could not load projects. Check that the backend is running."
             );
         } finally {
@@ -130,17 +136,9 @@ const Upload = () => {
             return;
         }
 
-        const allowedExtensions = [
-            ".py",
-            ".js",
-            ".java",
-            ".html",
-            ".zip",
-        ];
-
         const fileName = selectedFile.name.toLowerCase();
 
-        const isAllowed = allowedExtensions.some((extension) =>
+        const isAllowed = ALLOWED_EXTENSIONS.some((extension) =>
             fileName.endsWith(extension)
         );
 
@@ -151,6 +149,15 @@ const Upload = () => {
             setError(
                 "Choose a .py, .js, .java, .html, or .zip file."
             );
+            return;
+        }
+
+        // Temporary frontend size check; confirm the backend limit.
+        if (selectedFile.size > MAX_FILE_SIZE) {
+            setFile(null);
+            event.target.value = "";
+
+            setError("File size must be 10 MB or less.");
             return;
         }
 
@@ -174,6 +181,14 @@ const Upload = () => {
             return;
         }
 
+        // Recheck size immediately before uploading.
+        if (file.size > MAX_FILE_SIZE) {
+            setError("File size must be 10 MB or less.");
+            return;
+        }
+
+        if (uploading || scanning) return;
+
         setUploading(true);
 
         try {
@@ -195,8 +210,8 @@ const Upload = () => {
             console.error("Upload failed:", err);
 
             setError(
-                err.response?.data?.detail ||
                 err.userMessage ||
+                err.response?.data?.detail ||
                 "Upload failed. Check the backend upload endpoint."
             );
         } finally {
@@ -211,6 +226,8 @@ const Upload = () => {
             return;
         }
 
+        if (uploading || scanning) return;
+
         setError("");
         setMessage("");
         setScanning(true);
@@ -223,14 +240,13 @@ const Upload = () => {
 
             const scanId = result?.scan_id ?? result?.id;
 
-            if (!scanId) {
+            if (scanId == null) {
                 setError(
                     "The backend did not return a scan ID. Check the scan response."
                 );
                 return;
             }
 
-            // Navigate to Results and pass the scan ID.
             navigate("/results", {
                 state: {
                     scanId,
@@ -241,14 +257,16 @@ const Upload = () => {
             console.error("Scan failed:", err);
 
             setError(
-                err.response?.data?.detail ||
                 err.userMessage ||
+                err.response?.data?.detail ||
                 "Could not start the scan. Check the backend scan endpoint."
             );
         } finally {
             setScanning(false);
         }
     };
+
+    const busy = loadingProjects || uploading || scanning;
 
     return (
         <main className="upload-page" style={styles.page}>
@@ -264,7 +282,10 @@ const Upload = () => {
                     type="button"
                     onClick={fetchProjects}
                     disabled={loadingProjects}
-                    style={styles.secondaryButton}
+                    style={{
+                        ...styles.secondaryButton,
+                        opacity: loadingProjects ? 0.6 : 1,
+                    }}
                 >
                     {loadingProjects ? "Loading..." : "Reload Projects"}
                 </button>
@@ -292,22 +313,19 @@ const Upload = () => {
                     id="project-select"
                     value={projectId}
                     onChange={handleProjectChange}
-                    disabled={loadingProjects || projects.length === 0}
+                    disabled={loadingProjects || projects.length === 0 || busy}
                     style={styles.input}
                 >
                     <option value="">
                         {loadingProjects
                             ? "Loading projects..."
                             : projects.length === 0
-                                ? "No projects found — create a project first"
+                                ? "No projects found - create a project first"
                                 : "Choose a project"}
                     </option>
 
                     {projects.map((project) => (
-                        <option
-                            key={project.id}
-                            value={String(project.id)}
-                        >
+                        <option key={project.id} value={String(project.id)}>
                             {project.project_name ||
                                 project.name ||
                                 `Project ${project.id}`}
@@ -327,7 +345,8 @@ const Upload = () => {
                 <h2 style={styles.subheading}>Choose a File</h2>
 
                 <p style={styles.hint}>
-                    Supported files: .py, .js, .java, .html, and .zip
+                    Supported files: .py, .js, .java, .html, and .zip.
+                    Maximum size: 10 MB (temporary limit).
                 </p>
 
                 <form onSubmit={handleUpload}>
@@ -336,11 +355,7 @@ const Upload = () => {
                         type="file"
                         accept=".py,.js,.java,.html,.zip"
                         onChange={handleFileChange}
-                        disabled={
-                            loadingProjects ||
-                            uploading ||
-                            !projectId
-                        }
+                        disabled={busy || !projectId}
                         style={styles.fileInput}
                     />
 
@@ -353,13 +368,10 @@ const Upload = () => {
 
                     <button
                         type="submit"
-                        disabled={!projectId || !file || uploading}
+                        disabled={!projectId || !file || busy}
                         style={{
                             ...styles.primaryButton,
-                            opacity:
-                                !projectId || !file || uploading
-                                    ? 0.6
-                                    : 1,
+                            opacity: !projectId || !file || busy ? 0.6 : 1,
                         }}
                     >
                         {uploading ? "Uploading..." : "Upload File"}
@@ -396,27 +408,17 @@ const Upload = () => {
 
                 <p style={styles.hint}>
                     Upload your code first, then start a scan for the
-                    selected project.
+                    selected project. The backend will verify that files
+                    are available.
                 </p>
 
                 <button
                     type="button"
                     onClick={handleStartScan}
-                    disabled={
-                        !projectId ||
-                        scanning ||
-                        uploading ||
-                        loadingProjects
-                    }
+                    disabled={!projectId || busy}
                     style={{
                         ...styles.primaryButton,
-                        opacity:
-                            !projectId ||
-                            scanning ||
-                            uploading ||
-                            loadingProjects
-                                ? 0.6
-                                : 1,
+                        opacity: !projectId || busy ? 0.6 : 1,
                     }}
                 >
                     {scanning ? "Scanning..." : "Start Scan"}
@@ -446,10 +448,12 @@ const styles = {
     heading: {
         margin: "0 0 8px",
         fontSize: "28px",
+        overflowWrap: "anywhere",
     },
     subtitle: {
         margin: 0,
         color: "var(--text-secondary, #6b7280)",
+        lineHeight: 1.5,
     },
     card: {
         padding: "20px",
@@ -458,6 +462,7 @@ const styles = {
         borderRadius: "12px",
         background: "var(--card-background, #ffffff)",
         boxSizing: "border-box",
+        minWidth: 0,
     },
     subheading: {
         marginTop: 0,
@@ -484,15 +489,18 @@ const styles = {
         maxWidth: "100%",
         margin: "12px 0 16px",
         padding: "8px 0",
+        boxSizing: "border-box",
     },
     fileName: {
         overflowWrap: "anywhere",
         fontSize: "14px",
+        lineHeight: 1.5,
     },
     hint: {
         color: "var(--text-secondary, #6b7280)",
         fontSize: "14px",
         lineHeight: 1.5,
+        overflowWrap: "anywhere",
     },
     primaryButton: {
         padding: "11px 18px",
@@ -502,6 +510,7 @@ const styles = {
         color: "#ffffff",
         cursor: "pointer",
         fontWeight: 600,
+        maxWidth: "100%",
     },
     secondaryButton: {
         padding: "10px 14px",
@@ -518,6 +527,7 @@ const styles = {
         background: "#fef2f2",
         color: "#b91c1c",
         overflowWrap: "anywhere",
+        lineHeight: 1.5,
     },
     success: {
         padding: "12px 14px",
@@ -526,10 +536,12 @@ const styles = {
         background: "#ecfdf5",
         color: "#065f46",
         overflowWrap: "anywhere",
+        lineHeight: 1.5,
     },
     fileList: {
         paddingLeft: "20px",
         overflowWrap: "anywhere",
+        lineHeight: 1.7,
     },
 };
 

@@ -1,7 +1,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import api from "../services/api";
+import { getScanResults } from "../services/scanService";
 import RiskSummary from "../components/RiskSummary";
 import FindingCard from "../components/FindingCard";
 import { normalizeVulnerability } from "../utils/vulnerabilityUtils";
@@ -25,7 +25,11 @@ const getSeverityRank = (severity) => {
 };
 
 const getVulnerabilityType = (item) =>
-    item.vulnerability_type || item.vulnerability || item.type || "Unknown";
+    item.vulnerability_type ||
+    item.vulnerability ||
+    item.type ||
+    item.name ||
+    "Unknown";
 
 function ScanResults() {
     const location = useLocation();
@@ -35,14 +39,20 @@ function ScanResults() {
     const initialState = useMemo(() => {
         if (location.state?.result) {
             const result = location.state.result;
+
             return {
-                scanId: location.state.scanId ?? result.scan_id ?? result.id ?? null,
+                scanId:
+                    location.state.scanId ??
+                    result.scan_id ??
+                    result.id ??
+                    null,
                 result,
             };
         }
 
         try {
             const saved = sessionStorage.getItem(STORAGE_KEY);
+
             return saved
                 ? JSON.parse(saved)
                 : { scanId: null, result: null };
@@ -56,6 +66,7 @@ function ScanResults() {
     const [result, setResult] = useState(initialState.result);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    const [searchTerm, setSearchTerm] = useState("");
     const [severityFilter, setSeverityFilter] = useState("All");
     const [typeFilter, setTypeFilter] = useState("All");
     const [sortOrder, setSortOrder] = useState("severity-high");
@@ -82,8 +93,7 @@ function ScanResults() {
         setError("");
 
         try {
-            const response = await api.get(`/scans/${scanId}`);
-            const data = response.data;
+            const data = await getScanResults(scanId);
 
             if (currentRequest !== requestNumber.current) return;
 
@@ -99,12 +109,15 @@ function ScanResults() {
 
             console.error("Failed to load scan results:", err);
 
-            if (resultRef.current && getFindings(resultRef.current).length > 0) {
+            if (
+                resultRef.current &&
+                getFindings(resultRef.current).length > 0
+            ) {
                 setError("");
             } else {
                 setError(
-                    err.response?.data?.detail ??
-                        err.userMessage ??
+                    err.userMessage ||
+                        err.response?.data?.detail ||
                         "Could not load scan results. Please try again."
                 );
             }
@@ -134,9 +147,9 @@ function ScanResults() {
         return () => {
             requestNumber.current += 1;
         };
-    }, [scanId, loadScanResults]);
+    }, [location.state, loadScanResults]);
 
-    // Normalize the backend data, then remove duplicate findings.
+    // Normalize findings and remove duplicates.
     const vulnerabilities = useMemo(() => {
         const normalizedFindings = getFindings(result).map((item) =>
             normalizeVulnerability(item, result)
@@ -171,7 +184,10 @@ function ScanResults() {
         [vulnerabilities]
     );
 
+    // Search, filter, and sort findings.
     const sortedVulnerabilities = useMemo(() => {
+        const query = searchTerm.trim().toLowerCase();
+
         const filtered = vulnerabilities.filter((item) => {
             const severityMatches =
                 severityFilter === "All" ||
@@ -182,7 +198,31 @@ function ScanResults() {
                 typeFilter === "All" ||
                 getVulnerabilityType(item) === typeFilter;
 
-            return severityMatches && typeMatches;
+            const searchableText = [
+                getVulnerabilityType(item),
+                item.file_name,
+                item.filename,
+                item.file,
+                item.explanation,
+                item.description,
+                item.message,
+                item.vulnerable_code,
+                item.code,
+                item.source_code,
+                item.snippet,
+                item.cwe,
+                item.owasp,
+                item.recommendation,
+                item.remediation,
+            ]
+                .filter(Boolean)
+                .join(" ")
+                .toLowerCase();
+
+            const searchMatches =
+                !query || searchableText.includes(query);
+
+            return severityMatches && typeMatches && searchMatches;
         });
 
         return [...filtered].sort((a, b) => {
@@ -232,7 +272,13 @@ function ScanResults() {
                     return rankB - rankA;
             }
         });
-    }, [vulnerabilities, severityFilter, typeFilter, sortOrder]);
+    }, [
+        vulnerabilities,
+        searchTerm,
+        severityFilter,
+        typeFilter,
+        sortOrder,
+    ]);
 
     const handleViewDetails = (vulnerability) => {
         navigate("/vulnerability-details", {
@@ -250,6 +296,7 @@ function ScanResults() {
     };
 
     const handleResetFilters = () => {
+        setSearchTerm("");
         setSeverityFilter("All");
         setTypeFilter("All");
         setSortOrder("severity-high");
@@ -272,6 +319,7 @@ function ScanResults() {
                     <h1 className="text-2xl font-bold text-gray-900">
                         Scan Results
                     </h1>
+
                     <p className="mt-1 text-sm text-gray-600">
                         Security analysis results from your scan.
                     </p>
@@ -293,6 +341,7 @@ function ScanResults() {
                     className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700"
                 >
                     <p>{error}</p>
+
                     <button
                         type="button"
                         onClick={loadScanResults}
@@ -309,6 +358,7 @@ function ScanResults() {
                         <h2 className="mb-3 text-lg font-semibold">
                             Scan Information
                         </h2>
+
                         <p>Scan ID: {result.id ?? scanId ?? "N/A"}</p>
                         <p>Project ID: {result.project_id ?? "N/A"}</p>
                         <p>Status: {result.status ?? "Unknown"}</p>
@@ -337,6 +387,7 @@ function ScanResults() {
                                 <p className="text-sm text-gray-500">
                                     {label} Vulnerabilities
                                 </p>
+
                                 <p className={`mt-2 text-3xl font-bold ${color}`}>
                                     {count}
                                 </p>
@@ -352,10 +403,23 @@ function ScanResults() {
 
                     <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
                         <h2 className="mb-4 text-lg font-semibold">
-                            Filter & Sort
+                            Search, Filter & Sort
                         </h2>
 
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                            <label className="text-sm font-medium">
+                                Search Findings
+                                <input
+                                    type="search"
+                                    value={searchTerm}
+                                    onChange={(event) =>
+                                        setSearchTerm(event.target.value)
+                                    }
+                                    placeholder="Search type, file, CWE, code..."
+                                    className="mt-1 block w-full rounded-lg border p-2"
+                                />
+                            </label>
+
                             <label className="text-sm font-medium">
                                 Severity
                                 <select
@@ -372,7 +436,9 @@ function ScanResults() {
                                         "Medium",
                                         "Low",
                                     ].map((item) => (
-                                        <option key={item}>{item}</option>
+                                        <option key={item} value={item}>
+                                            {item}
+                                        </option>
                                     ))}
                                 </select>
                             </label>
@@ -387,6 +453,7 @@ function ScanResults() {
                                     className="mt-1 block w-full rounded-lg border p-2"
                                 >
                                     <option value="All">All types</option>
+
                                     {vulnerabilityTypes.map((type) => (
                                         <option key={type} value={type}>
                                             {type}
@@ -426,17 +493,15 @@ function ScanResults() {
                                     </option>
                                 </select>
                             </label>
-
-                            <div className="flex items-end">
-                                <button
-                                    type="button"
-                                    onClick={handleResetFilters}
-                                    className="w-full rounded-lg border border-gray-300 px-4 py-2"
-                                >
-                                    Reset Filters
-                                </button>
-                            </div>
                         </div>
+
+                        <button
+                            type="button"
+                            onClick={handleResetFilters}
+                            className="mt-4 rounded-lg border border-gray-300 px-4 py-2"
+                        >
+                            Reset Search & Filters
+                        </button>
                     </section>
 
                     <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -444,6 +509,7 @@ function ScanResults() {
                             <h2 className="text-lg font-semibold">
                                 Detected Vulnerabilities
                             </h2>
+
                             <p className="text-sm text-gray-600">
                                 Showing {sortedVulnerabilities.length} of{" "}
                                 {vulnerabilities.length} findings
@@ -452,7 +518,7 @@ function ScanResults() {
 
                         {sortedVulnerabilities.length === 0 ? (
                             <p className="rounded-lg bg-gray-50 p-4 text-gray-600">
-                                No vulnerabilities match the selected filters.
+                                No vulnerabilities match your search or filters.
                             </p>
                         ) : (
                             <div className="space-y-4">
@@ -475,6 +541,7 @@ function ScanResults() {
             {!loading && !result && !error && (
                 <section className="rounded-xl border border-gray-200 bg-white p-5">
                     <p>No scan result was found.</p>
+
                     <button
                         type="button"
                         onClick={() => navigate("/upload")}
@@ -493,6 +560,7 @@ function ScanResults() {
                 >
                     Upload Another File
                 </button>
+
                 <button
                     type="button"
                     onClick={() => navigate("/projects")}
