@@ -31,39 +31,86 @@ const getVulnerabilityType = (item) =>
     item.name ||
     "Unknown";
 
+const getValidScanId = (value) => {
+    if (
+        value === null ||
+        value === undefined ||
+        String(value).trim() === "" ||
+        !Number.isInteger(Number(value)) ||
+        Number(value) <= 0
+    ) {
+        return null;
+    }
+
+    return Number(value);
+};
+
 function ScanResults() {
     const location = useLocation();
     const navigate = useNavigate();
     const { scanId: routeScanId } = useParams();
 
     const initialState = useMemo(() => {
-        if (location.state?.result) {
-            const result = location.state.result;
+        const navigationResult = location.state?.result;
+        const navigationScanId = getValidScanId(
+            location.state?.scanId ??
+                navigationResult?.scan_id ??
+                navigationResult?.id
+        );
 
+        if (
+            navigationResult &&
+            navigationScanId &&
+            getValidScanId(
+                navigationResult.scan_id ?? navigationResult.id
+            ) === navigationScanId
+        ) {
             return {
-                scanId:
-                    location.state.scanId ??
-                    result.scan_id ??
-                    result.id ??
-                    null,
-                result,
+                scanId: navigationScanId,
+                result: navigationResult,
             };
         }
 
         try {
             const saved = sessionStorage.getItem(STORAGE_KEY);
 
-            return saved
-                ? JSON.parse(saved)
-                : { scanId: null, result: null };
-        } catch {
-            return { scanId: null, result: null };
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                const savedScanId = getValidScanId(parsed?.scanId);
+                const savedResultId = getValidScanId(
+                    parsed?.result?.scan_id ?? parsed?.result?.id
+                );
+
+                if (
+                    savedScanId &&
+                    savedResultId === savedScanId
+                ) {
+                    return {
+                        scanId: savedScanId,
+                        result: parsed.result,
+                    };
+                }
+            }
+        } catch (err) {
+            console.warn("Could not restore saved scan results:", err);
         }
+
+        return { scanId: null, result: null };
     }, [location.state]);
 
-    const scanId = routeScanId ?? initialState.scanId;
+    const requestedScanId = getValidScanId(routeScanId);
+    const scanId = requestedScanId ?? initialState.scanId;
 
-    const [result, setResult] = useState(initialState.result);
+    const [result, setResult] = useState(() => {
+        if (!initialState.result) return null;
+
+        const initialResultId = getValidScanId(
+            initialState.result.scan_id ?? initialState.result.id
+        );
+
+        return initialResultId === scanId ? initialState.result : null;
+    });
+
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [searchTerm, setSearchTerm] = useState("");
@@ -79,48 +126,73 @@ function ScanResults() {
     }, [result]);
 
     const loadScanResults = useCallback(async () => {
-        if (!scanId) {
-            if (!resultRef.current) {
-                setError(
-                    "No scan ID was found. Return to Upload and start a scan."
-                );
-            }
+        const validScanId = getValidScanId(scanId);
+
+        if (!validScanId) {
+            resultRef.current = null;
+            setResult(null);
+            setLoading(false);
+            setError(
+                "No valid scan ID was found. Return to Upload and start a scan."
+            );
             return;
         }
 
         const currentRequest = ++requestNumber.current;
+
+        // Only retain existing data if it belongs to the requested scan.
+        const currentResultId = getValidScanId(
+            resultRef.current?.scan_id ?? resultRef.current?.id
+        );
+
+        if (currentResultId !== validScanId) {
+            resultRef.current = null;
+            setResult(null);
+        }
+
         setLoading(true);
         setError("");
 
         try {
-            const data = await getScanResults(scanId);
+            const data = await getScanResults(validScanId);
 
             if (currentRequest !== requestNumber.current) return;
+
+            const returnedScanId = getValidScanId(
+                data?.scan_id ?? data?.id
+            );
+
+            if (returnedScanId !== validScanId) {
+                throw new Error(
+                    "The backend returned results for a different scan."
+                );
+            }
 
             resultRef.current = data;
             setResult(data);
 
             sessionStorage.setItem(
                 STORAGE_KEY,
-                JSON.stringify({ scanId, result: data })
+                JSON.stringify({
+                    scanId: validScanId,
+                    result: data,
+                })
             );
         } catch (err) {
             if (currentRequest !== requestNumber.current) return;
 
             console.error("Failed to load scan results:", err);
 
-            if (
-                resultRef.current &&
-                getFindings(resultRef.current).length > 0
-            ) {
-                setError("");
-            } else {
-                setError(
-                    err.userMessage ||
-                        err.response?.data?.detail ||
-                        "Could not load scan results. Please try again."
-                );
-            }
+            // Clear findings rather than showing stale data as current.
+            resultRef.current = null;
+            setResult(null);
+
+            setError(
+                err.userMessage ||
+                    err.response?.data?.detail ||
+                    err.message ||
+                    "Could not load scan results. Please try again."
+            );
         } finally {
             if (currentRequest === requestNumber.current) {
                 setLoading(false);
@@ -129,17 +201,45 @@ function ScanResults() {
     }, [scanId]);
 
     useEffect(() => {
-        if (location.state?.result && location.state?.scanId) {
-            resultRef.current = location.state.result;
-            setResult(location.state.result);
+        const navigationResult = location.state?.result;
+        const navigationScanId = getValidScanId(
+            location.state?.scanId ??
+                navigationResult?.scan_id ??
+                navigationResult?.id
+        );
 
-            sessionStorage.setItem(
-                STORAGE_KEY,
-                JSON.stringify({
-                    scanId: location.state.scanId,
-                    result: location.state.result,
-                })
+        // Accept navigation data only when it matches the requested scan.
+        if (
+            navigationResult &&
+            navigationScanId &&
+            navigationScanId === getValidScanId(scanId) &&
+            getValidScanId(
+                navigationResult.scan_id ?? navigationResult.id
+            ) === navigationScanId
+        ) {
+            resultRef.current = navigationResult;
+            setResult(navigationResult);
+
+            try {
+                sessionStorage.setItem(
+                    STORAGE_KEY,
+                    JSON.stringify({
+                        scanId: navigationScanId,
+                        result: navigationResult,
+                    })
+                );
+            } catch (err) {
+                console.warn("Could not save scan results:", err);
+            }
+        } else {
+            const currentResultId = getValidScanId(
+                resultRef.current?.scan_id ?? resultRef.current?.id
             );
+
+            if (currentResultId !== getValidScanId(scanId)) {
+                resultRef.current = null;
+                setResult(null);
+            }
         }
 
         loadScanResults();
@@ -147,7 +247,7 @@ function ScanResults() {
         return () => {
             requestNumber.current += 1;
         };
-    }, [location.state, loadScanResults]);
+    }, [location.state, scanId, loadScanResults]);
 
     // Normalize findings and remove duplicates.
     const vulnerabilities = useMemo(() => {
@@ -319,7 +419,6 @@ function ScanResults() {
                     <h1 className="text-2xl font-bold text-gray-900">
                         Scan Results
                     </h1>
-
                     <p className="mt-1 text-sm text-gray-600">
                         Security analysis results from your scan.
                     </p>
@@ -341,11 +440,11 @@ function ScanResults() {
                     className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700"
                 >
                     <p>{error}</p>
-
                     <button
                         type="button"
                         onClick={loadScanResults}
-                        className="mt-2 font-semibold underline"
+                        disabled={loading}
+                        className="mt-2 font-semibold underline disabled:opacity-50"
                     >
                         Try again
                     </button>
@@ -358,7 +457,6 @@ function ScanResults() {
                         <h2 className="mb-3 text-lg font-semibold">
                             Scan Information
                         </h2>
-
                         <p>Scan ID: {result.id ?? scanId ?? "N/A"}</p>
                         <p>Project ID: {result.project_id ?? "N/A"}</p>
                         <p>Status: {result.status ?? "Unknown"}</p>
@@ -387,7 +485,6 @@ function ScanResults() {
                                 <p className="text-sm text-gray-500">
                                     {label} Vulnerabilities
                                 </p>
-
                                 <p className={`mt-2 text-3xl font-bold ${color}`}>
                                     {count}
                                 </p>
@@ -453,7 +550,6 @@ function ScanResults() {
                                     className="mt-1 block w-full rounded-lg border p-2"
                                 >
                                     <option value="All">All types</option>
-
                                     {vulnerabilityTypes.map((type) => (
                                         <option key={type} value={type}>
                                             {type}
@@ -509,7 +605,6 @@ function ScanResults() {
                             <h2 className="text-lg font-semibold">
                                 Detected Vulnerabilities
                             </h2>
-
                             <p className="text-sm text-gray-600">
                                 Showing {sortedVulnerabilities.length} of{" "}
                                 {vulnerabilities.length} findings
@@ -541,7 +636,6 @@ function ScanResults() {
             {!loading && !result && !error && (
                 <section className="rounded-xl border border-gray-200 bg-white p-5">
                     <p>No scan result was found.</p>
-
                     <button
                         type="button"
                         onClick={() => navigate("/upload")}
@@ -560,7 +654,6 @@ function ScanResults() {
                 >
                     Upload Another File
                 </button>
-
                 <button
                     type="button"
                     onClick={() => navigate("/projects")}
