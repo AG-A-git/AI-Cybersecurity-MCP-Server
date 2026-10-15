@@ -67,24 +67,26 @@ Define the intended trusted scan roots and authorization policy. If the deployme
 - No scanner code changes were made during these reviews.
 - Results above reflect the commands and source files actually reviewed.
 
-
 ## Task 12 — Integration Defect Review and Regression Validation
 
 **Status:** Review completed; no confirmed active integration defect requiring a production code change was identified.
 
 ### Areas reviewed
+
 - `scanner/finding.py`: finding validation, severity, confidence, evidence, and fingerprints.
 - `scanner/engine.py`: source discovery, finding validation, invalid-finding filtering, and deduplication.
 - `scanner/utils.py`: rule execution, exception handling, and duplicate removal.
 - Existing finding-schema, project-scanning, and MCP integration tests.
 
 ### Validation results
+
 - Full test suite: **211 passed in 12.04 seconds**.
 - Focused integration tests: **27 passed in 5.18 seconds**.
 - Sample scan: **7 findings**, all with accepted severity values.
 - JSON output contract: **64 findings passed validation**.
 
 ### Findings and limitations
+
 - The legacy severity mapping differs from some active rule severities; no active defect was confirmed.
 - Active rule call sites did not establish a practical filename/fingerprint type mismatch.
 - Invalid-finding filtering has existing test coverage, although not every malformed-input edge case has a dedicated test.
@@ -104,35 +106,41 @@ No production code or existing test files were changed during this review.
 **Status:** Partially verified. Scanner execution and the MCP tool function returned actual results; several workflow stages are not implemented or not yet verified.
 
 ### Environment and preservation
+
 - Project root confirmed: `C:\Users\raksh\OneDrive\Desktop\AI-Cybersecurity-MCP-Server`.
 - Existing untracked files were preserved; no source code was changed.
 
 ### Actual scan results
+
 - Test target: `tests\project_12`.
-- Scanner command: `python -c "from scanner.engine import scan_project; import json; results = scan_project(r'tests\project_12'); print('Total findings:', len(results)); print(json.dumps(results, indent=2, default=str))"`
+- Scanner command: `python -c "from scanner.engine import scan_project; import json; results = scan_project(r'tests/project_12'); print('Total findings:', len(results)); print(json.dumps(results, indent=2, default=str))"`
 - Actual result: **7 findings** — 6 High and 1 Medium.
 - Finding records included file name, line number, vulnerability type, severity, confidence, CWE/OWASP identifiers, fingerprint, and source context.
 
 ### MCP tool validation
+
 - Inspected `mcp_server.py`: `scan_code(path: str)` calls `scan_project(path)` and returns the result.
 - Direct invocation of `scan_code` returned a Python list containing 7 findings.
 - This verifies the tool function, not a complete MCP client/server protocol session.
 
 ### Input handling
+
 - `scan_project(None)` and `scan_project(123)` returned empty lists.
 - A nonexistent path raised `FileNotFoundError`.
 - The reviewed MCP entry point and scanner engine do not enforce an explicit allowed scan-root policy.
 
 ### Workflow gaps and limitations
+
 - Risk score and risk-level calculation were not found in the Python source search.
 - Scan-history persistence and retrieval were not established; SQLite references found were in test/sample files.
 - Unauthorized-target rejection has not been demonstrated.
 - Full MCP protocol behavior has not been independently exercised.
 
 ### Test suite
+
 - Command: `python -m pytest -v`
-- Result: **211 passed in 9.59 seconds**.
-- No test failures were reported.
+- Historical result: **211 passed in 9.59 seconds**.
+- No test failures were reported for that run.
 
 No production code was changed during this validation.
 
@@ -141,13 +149,18 @@ No production code was changed during this validation.
 **Status:** Backend test and scanner output captured.
 
 ### Backend tests
+
 - Command: `python -m pytest -v`
-- Result: 211 passed in 11.79 seconds.
-- Exit code: 0.
+- Saved evidence result: **211 passed in 11.79 seconds**.
+- Saved evidence exit code: 0.
+- Latest verification run: **211 passed in 11.05 seconds**.
 - Text evidence: `evidence/day30/backend_tests.txt`
 - Screenshot: `evidence/day30/backend_tests.png`
 
+The saved evidence and latest verification are separate successful runs with different execution times.
+
 ### Scanner execution
+
 - Command: `python scanner\scan.py tests`
 - Exit code: 0.
 - Text evidence: `evidence/day30/scanner_results.txt`
@@ -155,18 +168,20 @@ No production code was changed during this validation.
 - Observed finding: High-severity Cross-Site Scripting (XSS), CWE-79, in `tests/xss_test.js`.
 
 ### AI analysis status
+
 The inspected MCP server exposes `scan_code(path: str)`. Searches performed during this review did not identify a confirmed AI-provider integration or AI-generated vulnerability analysis workflow. AI analysis remains unverified and should not be reported as implemented.
 
 ### Evidence limitations
-The text files and screenshot files were confirmed present in `evidence/day30`. The screenshots' visual contents have not been independently inspected here.
+
+The text files and screenshot files were confirmed present in `evidence/day30`. The screenshots' visual contents have not been independently inspected in this review.
 
 ## Task 15 — Git Status and Change Review
 
-- Current branch: `r2-scanner`.
-- `git status --short` lists untracked files, including the Day 30 report and evidence folder.
+- Current branch: `member2-scanner`, confirmed by `git status --short --branch`.
+- `git status --short` lists existing untracked files, including `DAY30_MEMBER2_REPORT.md` and evidence files.
 - `git diff --check` completed without reporting whitespace errors.
-- `git diff --stat` showed no tracked-file changes.
+- `git diff --stat` previously showed no tracked-file changes.
 - Existing untracked files have not been deleted, staged, or committed.
-- Untracked files require individual review before deciding whether they belong in the Day 30 deliverables.
+- Untracked files require individual review before deciding which belong in the Day 30 deliverables.
 
-**Status:** Review in progress; no files staged or committed.
+**Status:** Review completed for the checks documented above; AI integration and deployment-level security controls remain unverified. No files have been staged or committed.
