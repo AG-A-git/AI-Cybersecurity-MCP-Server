@@ -1,4 +1,3 @@
-
 import api from "./api";
 
 // Fetch all projects
@@ -19,11 +18,19 @@ export const createProject = async (projectData) => {
     return response.data;
 };
 
-// Fetch files for a project
-// Temporary fallback until the backend route is implemented
+// Fetch files for a project.
+// The backend does not currently expose a GET endpoint for project files.
 export const getProjectFiles = async (projectId) => {
+    if (
+        projectId === null ||
+        projectId === undefined ||
+        String(projectId).trim() === ""
+    ) {
+        throw new Error("Select a project before fetching uploaded files.");
+    }
+
     console.warn(
-        `Project file listing is unavailable for project ${projectId}: backend route is missing.`
+        `Cannot list files for project ${projectId}: the backend does not currently provide a file-list endpoint.`
     );
 
     return [];
