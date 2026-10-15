@@ -1,3 +1,4 @@
+
 """
 Utilities for formatting AI vulnerability analysis responses.
 """
@@ -16,11 +17,14 @@ def format_ai_response(analysis=None, **kwargs):
         analysis = {**analysis, **kwargs}
 
     if not isinstance(analysis, dict):
-        raise TypeError("analysis must be a dictionary or keyword arguments")
+        raise TypeError(
+            "analysis must be a dictionary or keyword arguments"
+        )
 
     return {
         "file": analysis.get("file"),
         "line": analysis.get("line"),
+        "code": analysis.get("code"),
         "vulnerability": analysis.get("vulnerability"),
         "severity": analysis.get("severity"),
         "confidence": analysis.get("confidence"),

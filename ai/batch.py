@@ -16,25 +16,24 @@ def analyze_findings(findings):
     results = []
 
     for finding in findings:
-
         try:
-            result = analyze_finding(
-                finding
-            )
+            result = dict(analyze_finding(finding))
 
-            results.append(
-                result
-            )
+            # Preserve the input finding ID on successful results.
+            if finding.get("finding_id") is not None:
+                result["finding_id"] = finding["finding_id"]
+
+            results.append(result)
 
         except Exception as exc:
-
-            # Keep the original scanner information.
+            # Preserve the original scanner information.
             # One failed finding must not stop the batch.
             results.append(
                 {
                     "finding_id": finding.get("finding_id"),
                     "file": finding.get("file"),
                     "line": finding.get("line"),
+                    "code": finding.get("code"),
                     "vulnerability": finding.get("vulnerability"),
                     "severity": finding.get("severity"),
                     "confidence": finding.get("confidence"),
@@ -44,13 +43,13 @@ def analyze_findings(findings):
                     "impact": None,
                     "recommendation": (
                         "AI analysis failed for this finding."
-                    )
+                    ),
                 }
             )
 
-    # --------------------------------------------------
-    # Calculate batch statistics
-    # --------------------------------------------------
+    # ==================================================
+    # Calculate Batch Statistics
+    # ==================================================
 
     total_findings = len(results)
 
@@ -83,7 +82,7 @@ def analyze_findings(findings):
         "failed_analyses": len(failed_results),
         "total_risk_score": total_risk_score,
         "average_risk_score": average_risk_score,
-        "results": results
+        "results": results,
     }
 
 
@@ -99,7 +98,6 @@ def analyze_finding_dicts(findings):
     validated_findings = []
 
     for finding in findings:
-
         validated_findings.append(
             {
                 "finding_id": finding.get("finding_id"),
@@ -108,29 +106,23 @@ def analyze_finding_dicts(findings):
                 "vulnerability": finding.get("vulnerability"),
                 "severity": finding.get("severity"),
                 "confidence": finding.get("confidence"),
-                "code": finding.get("code")
+                "code": finding.get("code"),
             }
         )
 
-    return analyze_findings(
-        validated_findings
-    )
+    return analyze_findings(validated_findings)
 
 
 # ======================================================
 # Generate Report
 # ======================================================
 
-def generate_report(
-    findings,
-    project=None
-):
+def generate_report(findings, project=None):
     """
     Generate an AI analysis report for multiple findings.
     """
 
     if not findings:
-
         return {
             "project": project,
             "total_findings": 0,
@@ -138,42 +130,20 @@ def generate_report(
             "failed_analyses": 0,
             "total_risk_score": 0,
             "average_risk_score": 0,
-            "findings": []
+            "findings": [],
         }
 
-    if isinstance(
-        findings[0],
-        dict
-    ):
-
-        batch_result = analyze_finding_dicts(
-            findings
-        )
-
+    if isinstance(findings[0], dict):
+        batch_result = analyze_finding_dicts(findings)
     else:
-
-        batch_result = analyze_findings(
-            findings
-        )
+        batch_result = analyze_findings(findings)
 
     return {
         "project": project,
-        "total_findings": batch_result[
-            "findings_count"
-        ],
-        "successful_analyses": batch_result[
-            "successful_analyses"
-        ],
-        "failed_analyses": batch_result[
-            "failed_analyses"
-        ],
-        "total_risk_score": batch_result[
-            "total_risk_score"
-        ],
-        "average_risk_score": batch_result[
-            "average_risk_score"
-        ],
-        "findings": batch_result[
-            "results"
-        ]
+        "total_findings": batch_result["findings_count"],
+        "successful_analyses": batch_result["successful_analyses"],
+        "failed_analyses": batch_result["failed_analyses"],
+        "total_risk_score": batch_result["total_risk_score"],
+        "average_risk_score": batch_result["average_risk_score"],
+        "findings": batch_result["results"],
     }

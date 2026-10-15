@@ -1,3 +1,4 @@
+
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
@@ -8,7 +9,7 @@ from ai.utils import format_ai_response
 app = FastAPI(
     title="AI Cybersecurity MCP Server",
     description="AI vulnerability analysis API",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 
@@ -24,6 +25,7 @@ class VulnerabilityRequest(BaseModel):
 class VulnerabilityResponse(BaseModel):
     file: str
     line: int
+    code: str
     vulnerability: str
     severity: str
     confidence: float
@@ -33,6 +35,7 @@ class VulnerabilityResponse(BaseModel):
     cwe: str
     ai_status: str
     explanation: str | None
+    impact: str | None
     recommendation: str | None
 
 

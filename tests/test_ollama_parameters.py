@@ -1,3 +1,4 @@
+
 from unittest.mock import Mock, patch
 
 from ai.config import (
@@ -6,6 +7,7 @@ from ai.config import (
     OLLAMA_TOP_P,
     OLLAMA_NUM_CTX,
     OLLAMA_NUM_PREDICT,
+    OLLAMA_TIMEOUT,
 )
 from ai.llm import OllamaClient
 
@@ -17,7 +19,6 @@ def test_ollama_generation_parameters():
     """
 
     mock_response = Mock()
-
     mock_response.raise_for_status.return_value = None
 
     mock_response.json.return_value = {
@@ -33,9 +34,7 @@ def test_ollama_generation_parameters():
         "ai.llm.requests.post",
         return_value=mock_response,
     ) as mock_post:
-
         client = OllamaClient()
-
         result = client.generate(
             "Analyze this security finding."
         )
@@ -45,7 +44,6 @@ def test_ollama_generation_parameters():
     mock_post.assert_called_once()
 
     call_kwargs = mock_post.call_args.kwargs
-
     payload = call_kwargs["json"]
 
     assert payload["model"] == OLLAMA_MODEL
@@ -70,9 +68,7 @@ def test_ollama_client_rejects_empty_prompt():
 
     try:
         client.generate("")
-
         assert False, "Expected ValueError"
-
     except ValueError as exc:
         assert "prompt cannot be empty" in str(exc)
 
@@ -86,8 +82,31 @@ def test_ollama_client_rejects_non_string_prompt():
 
     try:
         client.generate(None)
-
         assert False, "Expected TypeError"
-
     except TypeError as exc:
         assert "prompt must be a string" in str(exc)
+
+
+def test_ollama_client_passes_configured_timeout():
+    """
+    Verify that the configured timeout is passed to
+    the HTTP request.
+    """
+
+    mock_response = Mock()
+    mock_response.raise_for_status.return_value = None
+    mock_response.json.return_value = {
+        "response": (
+            '{"explanation":"Test",'
+            '"recommendation":"Fix"}'
+        )
+    }
+
+    with patch(
+        "ai.llm.requests.post",
+        return_value=mock_response,
+    ) as mock_post:
+        client = OllamaClient()
+        client.generate("Test prompt")
+
+    assert mock_post.call_args.kwargs["timeout"] == OLLAMA_TIMEOUT

@@ -1,4 +1,4 @@
-
+﻿
 from ai.batch import generate_report
 
 
@@ -128,3 +128,75 @@ def test_generate_report_preserves_finding_order_and_types(monkeypatch):
         "SSRF",
     ]
     assert all(item["ai_status"] == "completed" for item in returned)
+
+def test_batch_preserves_code_evidence_on_success_and_exception(monkeypatch):
+    from ai.batch import analyze_findings
+
+    def fake_analyze(finding):
+        if finding["file"] == "broken.py":
+            raise RuntimeError("Simulated analysis failure")
+
+        return {
+            "file": finding["file"],
+            "line": finding["line"],
+            "code": finding["code"],
+            "vulnerability": finding["vulnerability"],
+            "severity": finding["severity"],
+            "confidence": finding["confidence"],
+            "risk_score": 80.0,
+            "risk_level": "Critical",
+            "owasp": "A03:2021 Injection",
+            "cwe": "CWE-89",
+            "ai_status": "completed",
+            "explanation": "Test explanation.",
+            "impact": "Test impact.",
+            "recommendation": "Test recommendation.",
+        }
+
+    monkeypatch.setattr(
+        "ai.batch.analyze_finding",
+        fake_analyze,
+    )
+
+    findings = [
+        {
+            "file": "safe-test.py",
+            "line": 10,
+            "vulnerability": "SQL Injection",
+            "severity": "High",
+            "confidence": 90,
+            "code": "query = user_input",
+        },
+        {
+            "file": "broken.py",
+            "line": 20,
+            "vulnerability": "XSS",
+            "severity": "Medium",
+            "confidence": 85,
+            "code": "element.innerHTML = user_input",
+        },
+    ]
+
+    result = analyze_findings(findings)
+    returned = result["results"]
+
+    assert len(returned) == 2
+
+    # Successful analysis keeps its own scanner evidence.
+    assert returned[0]["file"] == "safe-test.py"
+    assert returned[0]["code"] == "query = user_input"
+    assert returned[0]["cwe"] == "CWE-89"
+    assert returned[0]["ai_status"] == "completed"
+
+    # An exception must not stop the batch or lose scanner evidence.
+    assert returned[1]["file"] == "broken.py"
+    assert returned[1]["code"] == "element.innerHTML = user_input"
+    assert returned[1]["line"] == 20
+    assert returned[1]["vulnerability"] == "XSS"
+    assert returned[1]["severity"] == "Medium"
+    assert returned[1]["confidence"] == 85
+    assert returned[1]["ai_status"] == "failed"
+
+    assert result["findings_count"] == 2
+    assert result["successful_analyses"] == 1
+    assert result["failed_analyses"] == 1
