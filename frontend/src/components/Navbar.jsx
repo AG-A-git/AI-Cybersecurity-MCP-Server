@@ -2,7 +2,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 
-function Navbar({ onMenuClick }) {
+function Navbar({ onMenuClick, menuOpen = false }) {
     const navigate = useNavigate();
 
     const handleLogout = () => {
@@ -13,6 +13,7 @@ function Navbar({ onMenuClick }) {
 
     return (
         <nav
+            aria-label="Top navigation"
             style={{
                 background: "#2563eb",
                 color: "white",
@@ -38,7 +39,13 @@ function Navbar({ onMenuClick }) {
                 <button
                     type="button"
                     onClick={onMenuClick}
-                    aria-label="Open navigation menu"
+                    aria-label={
+                        menuOpen
+                            ? "Close navigation menu"
+                            : "Open navigation menu"
+                    }
+                    aria-expanded={menuOpen}
+                    aria-controls="app-sidebar"
                     style={{
                         display: "none",
                         background: "transparent",
@@ -47,6 +54,8 @@ function Navbar({ onMenuClick }) {
                         padding: "8px 10px",
                         borderRadius: "5px",
                         cursor: "pointer",
+                        fontSize: "18px",
+                        lineHeight: 1,
                     }}
                     className="mobile-menu-button"
                 >
@@ -82,9 +91,21 @@ function Navbar({ onMenuClick }) {
 
             <style>
                 {`
+                    .mobile-menu-button:focus-visible,
+                    .navbar-logout:focus-visible {
+                        outline: 3px solid #facc15;
+                        outline-offset: 3px;
+                    }
+
                     @media (max-width: 600px) {
                         .mobile-menu-button {
                             display: inline-block !important;
+                        }
+                    }
+
+                    @media (prefers-reduced-motion: reduce) {
+                        * {
+                            scroll-behavior: auto !important;
                         }
                     }
                 `}

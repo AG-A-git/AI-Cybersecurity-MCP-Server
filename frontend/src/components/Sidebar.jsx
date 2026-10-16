@@ -1,4 +1,5 @@
 
+
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 
@@ -10,50 +11,77 @@ const menuItems = [
     { name: "Reports", path: "/reports" },
 ];
 
-function Sidebar({ mobileOpen = false, onNavigate = () => {} }) {
+function Sidebar({
+    mobileOpen = false,
+    onNavigate = () => {},
+}) {
     const location = useLocation();
 
     return (
         <>
-            <style>
-                {`
+            <style>{`
+                .app-sidebar {
+                    width: 180px;
+                    min-width: 180px;
+                    flex-shrink: 0;
+                    min-height: 100vh;
+                    box-sizing: border-box;
+                    background: #1e293b;
+                    color: white;
+                    padding: 20px 12px;
+                    z-index: 10;
+                }
+
+                .app-sidebar-link {
+                    display: block;
+                    padding: 11px 12px;
+                    border-radius: 6px;
+                    color: white;
+                    text-decoration: none;
+                    font-size: 15px;
+                    overflow-wrap: anywhere;
+                }
+
+                .app-sidebar-link:focus-visible {
+                    outline: 3px solid #facc15;
+                    outline-offset: 2px;
+                }
+
+                @media (max-width: 600px) {
                     .app-sidebar {
-                        width: 180px;
-                        min-width: 180px;
-                        flex-shrink: 0;
+                        position: fixed;
+                        top: 0;
+                        bottom: 0;
+                        left: 0;
+                        width: 240px;
+                        min-width: 0;
                         min-height: 100vh;
-                        box-sizing: border-box;
-                        background: #1e293b;
-                        color: white;
-                        padding: 20px 12px;
-                        z-index: 10;
+                        overflow-y: auto;
+                        transform: translateX(-100%);
+                        transition: transform 0.25s ease;
                     }
 
-                    @media (max-width: 600px) {
-                        .app-sidebar {
-                            position: fixed;
-                            top: 0;
-                            bottom: 0;
-                            left: 0;
-                            width: 240px;
-                            min-width: 0;
-                            min-height: 100vh;
-                            overflow-y: auto;
-                            transform: translateX(-100%);
-                            transition: transform 0.25s ease;
-                        }
-
-                        .app-sidebar.mobile-open {
-                            transform: translateX(0);
-                        }
+                    .app-sidebar.mobile-open {
+                        transform: translateX(0);
                     }
-                `}
-            </style>
+                }
+
+                @media (prefers-reduced-motion: reduce) {
+                    .app-sidebar {
+                        transition: none;
+                    }
+                }
+            `}</style>
 
             <aside
-                className={`app-sidebar ${mobileOpen ? "mobile-open" : ""}`}
+                id="app-sidebar"
+                className={`app-sidebar ${
+                    mobileOpen ? "mobile-open" : ""
+                }`}
             >
-                <h3 style={{ margin: "0 0 24px" }}>Menu</h3>
+                <h3 style={{ margin: "0 0 24px" }}>
+                    Menu
+                </h3>
 
                 <nav
                     aria-label="Main navigation"
@@ -72,16 +100,14 @@ function Sidebar({ mobileOpen = false, onNavigate = () => {} }) {
                                 key={item.path}
                                 to={item.path}
                                 onClick={onNavigate}
+                                aria-current={
+                                    isActive ? "page" : undefined
+                                }
+                                className="app-sidebar-link"
                                 style={{
-                                    display: "block",
-                                    padding: "11px 12px",
-                                    borderRadius: "6px",
-                                    color: "white",
                                     backgroundColor: isActive
                                         ? "#2563eb"
                                         : "transparent",
-                                    textDecoration: "none",
-                                    fontSize: "15px",
                                 }}
                             >
                                 {item.name}

@@ -20,6 +20,24 @@ function Layout({ children }) {
         };
     }, []);
 
+    useEffect(() => {
+        if (!menuOpen) return;
+
+        const handleEscape = (event) => {
+            if (event.key === "Escape") {
+                setMenuOpen(false);
+            }
+        };
+
+        window.addEventListener("keydown", handleEscape);
+
+        return () => {
+            window.removeEventListener("keydown", handleEscape);
+        };
+    }, [menuOpen]);
+
+    const closeMenu = () => setMenuOpen(false);
+
     return (
         <div
             style={{
@@ -32,7 +50,7 @@ function Layout({ children }) {
         >
             <Sidebar
                 mobileOpen={menuOpen}
-                onNavigate={() => setMenuOpen(false)}
+                onNavigate={closeMenu}
             />
 
             <div
@@ -41,9 +59,14 @@ function Layout({ children }) {
                     minWidth: 0,
                 }}
             >
-                <Navbar onMenuClick={() => setMenuOpen(!menuOpen)} />
+                <Navbar
+                    menuOpen={menuOpen}
+                    onMenuClick={() => setMenuOpen((open) => !open)}
+                />
 
                 <main
+                    id="main-content"
+                    tabIndex={-1}
                     style={{
                         padding: "20px",
                         width: "100%",
@@ -59,7 +82,7 @@ function Layout({ children }) {
                 <button
                     type="button"
                     aria-label="Close navigation menu"
-                    onClick={() => setMenuOpen(false)}
+                    onClick={closeMenu}
                     style={{
                         position: "fixed",
                         inset: 0,
@@ -68,6 +91,7 @@ function Layout({ children }) {
                         border: "none",
                         width: "100%",
                         height: "100%",
+                        cursor: "default",
                     }}
                 />
             )}
