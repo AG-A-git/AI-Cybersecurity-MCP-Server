@@ -1,4 +1,5 @@
-﻿import json
+﻿from ai.mapping import get_mapping
+import json
 
 from ai.analysis import analyze_finding
 from ai.batch import analyze_findings as analyze_batch_findings
@@ -287,3 +288,95 @@ def test_batch_preserves_finding_ids_for_success_and_failure(monkeypatch):
         "finding-success",
         "finding-failure",
     ]
+
+def test_distinct_ai_responses_and_mappings_stay_with_each_finding():
+    alpha = make_finding(
+        "alpha.py",
+        11,
+        "SQL Injection",
+        "Critical",
+        95,
+        "cursor.execute(query)",
+    )
+    beta = make_finding(
+        "beta.py",
+        24,
+        "XSS",
+        "Low",
+        70,
+        "element.innerHTML = value",
+    )
+
+    alpha_response = json.dumps({
+        "explanation": "Alpha-specific SQL injection explanation.",
+        "impact": "Alpha-specific database impact.",
+        "recommendation": "Use parameterized SQL queries.",
+        "secure_practice": "Keep SQL commands separate from user data.",
+        "owasp": "AI-OVERRIDE-ALPHA",
+        "cwe": "CWE-999",
+    })
+
+    beta_response = json.dumps({
+        "explanation": "Beta-specific XSS explanation.",
+        "impact": "Beta-specific browser impact.",
+        "recommendation": "Encode untrusted output.",
+        "secure_practice": "Use context-aware output encoding.",
+        "owasp": "AI-OVERRIDE-BETA",
+        "cwe": "CWE-998",
+    })
+
+    client = SequenceClient([alpha_response, beta_response])
+
+    alpha_result = analyze_finding(alpha, client=client)
+    beta_result = analyze_finding(beta, client=client)
+
+    # Each finding keeps its own scanner evidence.
+    assert alpha_result["file"] == "alpha.py"
+    assert alpha_result["line"] == 11
+    assert alpha_result["code"] == "cursor.execute(query)"
+
+    assert beta_result["file"] == "beta.py"
+    assert beta_result["line"] == 24
+    assert beta_result["code"] == "element.innerHTML = value"
+
+    # AI-generated content stays associated with the right finding.
+    assert alpha_result["explanation"] == (
+        "Alpha-specific SQL injection explanation."
+    )
+    assert alpha_result["impact"] == (
+        "Alpha-specific database impact."
+    )
+    assert alpha_result["recommendation"] == (
+        "Use parameterized SQL queries."
+    )
+
+    assert beta_result["explanation"] == (
+        "Beta-specific XSS explanation."
+    )
+    assert beta_result["impact"] == (
+        "Beta-specific browser impact."
+    )
+    assert beta_result["recommendation"] == (
+        "Encode untrusted output."
+    )
+
+    # AI-supplied mapping labels must not override scanner mappings.
+    alpha_mapping = get_mapping("SQL Injection")
+    beta_mapping = get_mapping("XSS")
+
+    assert alpha_result["owasp"] == alpha_mapping["owasp"]
+    assert alpha_result["cwe"] == alpha_mapping["cwe"]
+    assert beta_result["owasp"] == beta_mapping["owasp"]
+    assert beta_result["cwe"] == beta_mapping["cwe"]
+
+    # Risk values remain deterministic and finding-specific.
+    assert alpha_result["risk_score"] == calculate_risk(
+        "Critical", 95, "SQL Injection"
+    )
+    assert beta_result["risk_score"] == calculate_risk(
+        "Low", 70, "XSS"
+    )
+
+    assert alpha_result["ai_status"] == "completed"
+    assert beta_result["ai_status"] == "completed"
+    assert client.call_count == 2
