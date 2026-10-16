@@ -1,4 +1,8 @@
+import logging
+
 from .analysis import analyze_finding
+
+logger = logging.getLogger(__name__)
 
 
 # ======================================================
@@ -25,7 +29,10 @@ def analyze_findings(findings):
 
             results.append(result)
 
-        except Exception as exc:
+        except Exception:
+            logger.warning(
+                "Batch AI analysis failed for one finding; continuing."
+            )
             # Preserve the original scanner information.
             # One failed finding must not stop the batch.
             results.append(
@@ -38,7 +45,7 @@ def analyze_findings(findings):
                     "severity": finding.get("severity"),
                     "confidence": finding.get("confidence"),
                     "ai_status": "failed",
-                    "ai_error": str(exc),
+                    "ai_error": "AI analysis failed for this finding.",
                     "explanation": None,
                     "impact": None,
                     "recommendation": (

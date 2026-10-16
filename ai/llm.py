@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from typing import Any
 
@@ -18,6 +19,8 @@ from .config import (
 from .models import VulnerabilityInput, AIAnalysisResponse
 from .vulnerability_mapping import get_vulnerability_mapping
 from .prompts import build_security_prompt
+
+logger = logging.getLogger(__name__)
 
 
 class OllamaClient:
@@ -568,6 +571,7 @@ def analyze_vulnerability(
 
     except Exception as exc:
         error_type = classify_ai_error(exc)
+        logger.warning("AI analysis failed (category=%s)", error_type)
 
         if error_type == "timeout":
             recommendation = (
@@ -619,7 +623,7 @@ def analyze_vulnerability(
             "ai_error_type": error_type,
             "ai_analysis": None,
             "recommendation": recommendation,
-            "error": str(exc),
+            "error": "AI analysis failed safely.",
         }
 
 def generate_response(prompt: str) -> str:
@@ -627,6 +631,5 @@ def generate_response(prompt: str) -> str:
     try:
         return OllamaClient().generate(prompt)
     except Exception as exc:
-        raise RuntimeError(
-            f"Ollama request failed: {exc}"
-        ) from exc
+        logger.warning("Ollama response generation failed")
+        raise RuntimeError("Ollama request failed") from exc
