@@ -2,7 +2,7 @@ import axios from "axios";
 import { normalizeApiError } from "../utils/apiError";
 
 const api = axios.create({
-    baseURL: "http://127.0.0.1:8001",
+    baseURL: "http://127.0.0.1:8002",
 });
 
 // Add JWT token automatically to every request
