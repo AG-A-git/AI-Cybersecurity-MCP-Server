@@ -45,7 +45,11 @@ const getFindingKey = (finding) => {
             .toLowerCase();
 
     return JSON.stringify([
-        normalize(finding.file_name ?? finding.filename ?? finding.file),
+        normalize(
+            finding.file_name ??
+                finding.filename ??
+                finding.file
+        ),
         normalize(finding.line_number ?? finding.line),
         normalize(
             finding.vulnerability_type ??
@@ -138,6 +142,24 @@ const getSummaryFindingCount = (scan) => {
         : null;
 };
 
+const getErrorMessage = (error, fallback) => {
+    if (error?.userMessage) {
+        return error.userMessage;
+    }
+
+    const detail = error?.response?.data?.detail;
+
+    if (typeof detail === "string" && detail.trim()) {
+        return detail;
+    }
+
+    if (typeof error?.message === "string" && error.message.trim()) {
+        return error.message;
+    }
+
+    return fallback;
+};
+
 function Reports() {
     const navigate = useNavigate();
 
@@ -164,8 +186,8 @@ function Reports() {
                 throw projectsResult.reason;
             }
 
-            const projectData = projectsResult.value?.data ??
-                projectsResult.value;
+            const projectData =
+                projectsResult.value?.data ?? projectsResult.value;
 
             const projectList = getProjectList(projectData);
             setProjects(projectList);
@@ -174,8 +196,8 @@ function Reports() {
                 throw scansResult.reason;
             }
 
-            const scanData = scansResult.value?.data ??
-                scansResult.value;
+            const scanData =
+                scansResult.value?.data ?? scansResult.value;
 
             const scanList = getScanList(scanData);
             setScans(scanList);
@@ -245,9 +267,10 @@ function Reports() {
             console.error("Failed to load reports:", err);
 
             setError(
-                err.userMessage ??
-                    err.response?.data?.detail ??
+                getErrorMessage(
+                    err,
                     "Unable to load report data. Check your backend connection."
+                )
             );
         } finally {
             setLoading(false);
@@ -303,8 +326,13 @@ function Reports() {
 
         setExportError("");
 
-        if (scanId == null) {
-            setExportError("The scan ID is unavailable.");
+        if (
+            scanId == null ||
+            String(scanId).trim() === "" ||
+            !Number.isInteger(Number(scanId)) ||
+            Number(scanId) <= 0
+        ) {
+            setExportError("A valid scan ID is required to export this report.");
             return;
         }
 
@@ -312,6 +340,28 @@ function Reports() {
 
         try {
             const details = await getScanResults(scanId);
+
+            // Validate the response before creating a downloadable report.
+            if (
+                !details ||
+                typeof details !== "object" ||
+                Array.isArray(details)
+            ) {
+                throw new Error(
+                    "The backend returned an invalid scan response. Please try again."
+                );
+            }
+
+            const returnedScanId = details.id ?? details.scan_id;
+
+            if (
+                returnedScanId == null ||
+                String(returnedScanId) !== String(scanId)
+            ) {
+                throw new Error(
+                    "The scan response did not match the requested scan. Export cancelled."
+                );
+            }
 
             const uniqueFindings = removeDuplicateFindings(
                 getFindings(details)
@@ -362,13 +412,25 @@ function Reports() {
 
             const report = {
                 report_generated_at: new Date().toISOString(),
-                scan_id: details.id ?? details.scan_id ?? scanId,
+                scan_id: Number(returnedScanId),
                 project_id: projectId,
                 project_name: projectName,
                 scan_status:
                     details.status ??
                     details.scan_status ??
                     getScanStatus(selectedScan),
+                scan_created_at: details.created_at ?? null,
+                risk_score: details.risk_score ?? null,
+                risk_level: details.risk_level ?? null,
+                vulnerability_count:
+                    details.vulnerability_count ??
+                    uniqueFindings.length,
+                severity_summary: {
+                    critical_count: details.critical_count ?? null,
+                    high_count: details.high_count ?? null,
+                    medium_count: details.medium_count ?? null,
+                    low_count: details.low_count ?? null,
+                },
                 findings: uniqueFindings.map((finding) => ({
                     id: finding.id ?? null,
                     file_name:
@@ -398,6 +460,10 @@ function Reports() {
                         finding.description ??
                         finding.message ??
                         null,
+                    ai_analysis:
+                        typeof finding.ai_analysis === "string"
+                            ? finding.ai_analysis
+                            : null,
                     recommendation:
                         finding.recommendation ??
                         finding.remediation ??
@@ -410,30 +476,31 @@ function Reports() {
 
             const blob = new Blob(
                 [JSON.stringify(report, null, 2)],
-                { type: "application/json" }
+                { type: "application/json;charset=utf-8" }
             );
 
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
 
-            link.href = url;
-            link.download = `scan-report-${scanId}.json`;
+            try {
+                link.href = url;
+                link.download = `scan-report-${scanId}.json`;
+                link.style.display = "none";
 
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-
-            window.setTimeout(
-                () => URL.revokeObjectURL(url),
-                1000
-            );
+                document.body.appendChild(link);
+                link.click();
+            } finally {
+                link.remove();
+                window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }
         } catch (err) {
             console.error("Failed to export scan report:", err);
 
             setExportError(
-                err.userMessage ??
-                    err.response?.data?.detail ??
+                getErrorMessage(
+                    err,
                     "Unable to export scan details. Please try again."
+                )
             );
         } finally {
             setExportingScanId(null);
