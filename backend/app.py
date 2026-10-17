@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+from contextlib import asynccontextmanager
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -33,6 +34,7 @@ from auth import get_current_user
 from routers import projects
 from routers import upload
 from routers import scan
+from services.mcp_server import mcp_app
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -68,6 +70,25 @@ app.add_middleware(
 app.include_router(projects.router)
 app.include_router(upload.router)
 app.include_router(scan.router)
+app.mount("/mcp", mcp_app)
+
+
+# Explicitly manage the mounted MCP application's lifespan.
+# Starlette mounted applications do not automatically start their own lifespan.
+_parent_lifespan = app.router.lifespan_context
+
+
+@asynccontextmanager
+async def _mcp_combined_lifespan(application):
+    async with _parent_lifespan(application) as parent_state:
+        async with mcp_app.router.lifespan_context(mcp_app) as mcp_state:
+            yield {
+                **(mcp_state or {}),
+                **(parent_state or {}),
+            }
+
+
+app.router.lifespan_context = _mcp_combined_lifespan
 print("UPLOAD ROUTES:", [(route.path, route.methods) for route in upload.router.routes])
 security = HTTPBearer()
 @app.get("/")
