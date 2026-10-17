@@ -1,5 +1,6 @@
 import requests
 from .input import validate_vulnerability
+from ._location_safeguard import remove_unverified_code_locations
 from .risk_score import (
     calculate_risk,
     classify_risk
@@ -31,14 +32,8 @@ def analyze_findings(findings):
     results = []
 
     for finding in findings:
-
-        result = analyze_finding(
-            finding
-        )
-
-        results.append(
-            result
-        )
+        result = analyze_finding(finding)
+        results.append(result)
 
     return results
 
@@ -47,81 +42,46 @@ def analyze_findings(findings):
 # Analyze One Finding
 # ======================================================
 
-def analyze_finding(
-    vulnerability,
-    client=None
-):
+def analyze_finding(vulnerability, client=None):
     """
     Central orchestrator for analyzing one scanner finding.
 
     Args:
-        vulnerability:
-            Scanner vulnerability finding.
-
-        client:
-            Optional Ollama client, primarily useful for testing.
+        vulnerability: Scanner vulnerability finding.
+        client: Optional Ollama client, primarily useful for testing.
 
     Returns:
         Structured security analysis result.
     """
 
-    # --------------------------------------------------
     # 1. Validate scanner input
-    # --------------------------------------------------
+    finding = validate_vulnerability(vulnerability)
 
-    finding = validate_vulnerability(
-        vulnerability
-    )
-
-    # --------------------------------------------------
     # 2. Convert validated finding to dictionary
-    # --------------------------------------------------
-
     scanner_data = finding.model_dump()
 
-    # --------------------------------------------------
     # 3. Build focused AI input
-    # --------------------------------------------------
+    ai_input = build_ai_input(scanner_data)
 
-    ai_input = build_ai_input(
-        scanner_data
-    )
-
-    # --------------------------------------------------
     # 4. Get deterministic vulnerability mapping
-    # --------------------------------------------------
-
     vulnerability_name = finding.vulnerability
+    mapping = get_mapping(vulnerability_name)
 
-    mapping = get_mapping(
-        vulnerability_name
-    )
-
-    # --------------------------------------------------
     # 5. Calculate deterministic risk
-    # --------------------------------------------------
-
     risk_score = calculate_risk(
         finding.severity,
         finding.confidence,
         finding.vulnerability
     )
 
-    # --------------------------------------------------
-    # 5.1 Classify deterministic risk level
-    # --------------------------------------------------
+    # 6. Classify deterministic risk level
+    risk_level = classify_risk(risk_score)
 
-    risk_level = classify_risk(
-        risk_score
-    )
-
-    # --------------------------------------------------
-    # 6. Build base result
-    # --------------------------------------------------
-
+    # 7. Build base result
     result = {
         "file": finding.file,
         "line": finding.line,
+        "code": finding.code,
         "vulnerability": vulnerability_name,
         "severity": finding.severity,
         "confidence": finding.confidence,
@@ -143,146 +103,84 @@ def analyze_finding(
         "recommendation": None
     }
 
-    # --------------------------------------------------
-    # 7. Build structured AI prompt
-    # --------------------------------------------------
-
-    # AI is responsible only for:
-    # - explanation
-    # - impact
-    # - recommendation
-    #
-    # Risk score, risk level, OWASP, and CWE remain
-    # deterministic project outputs.
-
+    # 8. Build structured AI prompt
     try:
-
-        prompt = build_structured_analysis_prompt(
-            ai_input
-        )
-
+        prompt = build_structured_analysis_prompt(ai_input)
     except Exception:
-
         result["ai_status"] = "failed"
-
         result["recommendation"] = (
             "AI analysis could not be started."
         )
-
         return result
 
-    # --------------------------------------------------
-    # 8. Create AI client
-    # --------------------------------------------------
-
+    # 9. Create AI client
     if client is None:
-
         client = OllamaClient()
 
-    # --------------------------------------------------
-    # 9. Mark AI analysis as running
-    # --------------------------------------------------
-
+    # 10. Mark AI analysis as running
     result["ai_status"] = "analyzing"
 
-    # --------------------------------------------------
-    # 10. Call Ollama with one controlled retry
-    # --------------------------------------------------
-
+    # 11. Call Ollama with one controlled retry
     try:
-
         try:
-
-            raw_response = client.generate(
-                prompt
-            )
-
+            raw_response = client.generate(prompt)
         except (
             requests.exceptions.Timeout,
             TimeoutError,
             RuntimeError,
         ):
-
             # One controlled retry only
-            raw_response = client.generate(
-                prompt
-            )
+            raw_response = client.generate(prompt)
 
     except TimeoutError:
-
         result["ai_status"] = "failed"
-
         result["recommendation"] = (
             "AI analysis service unavailable."
         )
-
         return result
 
     except RuntimeError:
-
         result["ai_status"] = "failed"
-
         result["recommendation"] = (
             "AI analysis service unavailable."
         )
-
         return result
 
     except Exception:
-
         result["ai_status"] = "failed"
-
         result["recommendation"] = (
             "AI analysis service unavailable."
         )
-
         return result
 
-    # --------------------------------------------------
-    # 11. Validate AI response
-    # --------------------------------------------------
-
+    # 12. Validate AI response
     try:
-
-        ai_result = parse_ai_response(
-            raw_response
-        )
-
+        ai_result = parse_ai_response(raw_response)
     except Exception:
-
         result["ai_status"] = "failed"
-
         result["recommendation"] = (
             "AI analysis response was invalid."
         )
-
         return result
 
-    # --------------------------------------------------
-    # 12. Mark AI analysis successful
-    # --------------------------------------------------
-
+    # 13. Mark AI analysis successful
     result["ai_status"] = "completed"
-
-    result["explanation"] = (
-        ai_result.explanation
+    result["explanation"] = remove_unverified_code_locations(
+        ai_result.explanation, finding.file, finding.line
+    )
+    result["impact"] = remove_unverified_code_locations(
+        ai_result.impact, finding.file, finding.line
+    )
+    result["recommendation"] = remove_unverified_code_locations(
+        ai_result.recommendation, finding.file, finding.line
     )
 
-    result["impact"] = (
-        ai_result.impact
-    )
-
-    result["recommendation"] = (
-        ai_result.recommendation
-    )
-
-    # IMPORTANT:
-    # Do not allow AI output to modify:
-    #
+    # AI output must not modify:
     # - risk_score
     # - risk_level
     # - owasp
     # - cwe
+    # - scanner evidence
 
     return result
 
@@ -291,17 +189,13 @@ def analyze_finding(
 # Backward-Compatible Alias
 # ======================================================
 
-def analyze_vulnerability(
-    vulnerability
-):
+def analyze_vulnerability(vulnerability):
     """
     Backward-compatible wrapper for the previous
     function name.
     """
+    return analyze_finding(vulnerability)
 
-    return analyze_finding(
-        vulnerability
-    )
 
 def analyze_vulnerabilities(findings):
     """Analyze a list of scanner findings."""
