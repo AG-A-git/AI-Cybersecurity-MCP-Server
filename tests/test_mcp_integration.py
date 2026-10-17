@@ -93,3 +93,17 @@ def test_engine_scan_project_returns_empty_list_for_invalid_path_types():
 
     for invalid_path in (None, [], {}, 123):
         assert scan_project(invalid_path) == []
+
+
+def test_engine_scan_project_raises_for_missing_zip(tmp_path):
+    from scanner.engine import scan_project
+
+    missing_zip = tmp_path / "definitely_missing.zip"
+
+    assert not missing_zip.exists()
+
+    with pytest.raises(
+        FileNotFoundError,
+        match="ZIP path does not exist",
+    ):
+        scan_project(str(missing_zip))

@@ -163,9 +163,16 @@ def scan_zip(zip_path):
     if not isinstance(zip_path, (str, os.PathLike)):
         return []
 
+    # Missing ZIP paths raise FileNotFoundError.
+    if not os.path.exists(zip_path):
+        raise FileNotFoundError(
+            f"ZIP path does not exist: {zip_path}"
+        )
+
     try:
         if not zipfile.is_zipfile(zip_path):
             return []
+
     except (OSError, ValueError, TypeError):
         return []
 
@@ -210,6 +217,7 @@ def scan_zip(zip_path):
                             != temp_root
                         ):
                             return []
+
                     except ValueError:
                         return []
 
@@ -245,6 +253,7 @@ def scan_zip(zip_path):
                             file_name,
                             temp_directory
                         )
+
                 except ValueError:
                     continue
 
@@ -269,6 +278,13 @@ def scan_project(path):
         return []
 
     try:
+        # Raise an error for a missing path rather than
+        # silently returning an empty scan result.
+        if not os.path.exists(path):
+            raise FileNotFoundError(
+                f"Path does not exist: {path}"
+            )
+
         if os.path.isfile(path):
 
             if os.fspath(path).lower().endswith(".zip"):
@@ -278,6 +294,9 @@ def scan_project(path):
 
         if os.path.isdir(path):
             return scan_directory(path)
+
+    except FileNotFoundError:
+        raise
 
     except (OSError, ValueError, TypeError):
         return []
