@@ -116,3 +116,56 @@ def test_api_analyze_accepts_unknown_owasp_and_cwe(monkeypatch):
     result = response.json()
     assert result["owasp"] == "Unknown"
     assert result["cwe"] == "Unknown"
+
+
+def test_api_rejects_invalid_payloads_before_analysis(monkeypatch):
+    def unexpected_analysis_call(finding):
+        raise AssertionError("Analysis must not run for invalid requests.")
+
+    monkeypatch.setattr(
+        api_module, "analyze_finding", unexpected_analysis_call
+    )
+
+    invalid_payloads = []
+
+    missing_line = scanner_payload()
+    del missing_line["line"]
+    invalid_payloads.append(missing_line)
+
+    invalid_line = scanner_payload()
+    invalid_line["line"] = 0
+    invalid_payloads.append(invalid_line)
+
+    invalid_confidence = scanner_payload()
+    invalid_confidence["confidence"] = 101
+    invalid_payloads.append(invalid_confidence)
+
+    oversized_code = scanner_payload()
+    oversized_code["code"] = "x" * 10001
+    invalid_payloads.append(oversized_code)
+
+    empty_vulnerability = scanner_payload()
+    empty_vulnerability["vulnerability"] = ""
+    invalid_payloads.append(empty_vulnerability)
+
+    for payload in invalid_payloads:
+        response = client.post("/analyze", json=payload)
+        assert response.status_code == 422
+        assert isinstance(response.json()["detail"], list)
+
+
+def test_api_does_not_return_unexpected_exception_details(monkeypatch):
+    def failing_analysis(finding):
+        raise RuntimeError("synthetic secret internal detail")
+
+    monkeypatch.setattr(
+        api_module, "analyze_finding", failing_analysis
+    )
+
+    safe_client = TestClient(
+        api_module.app, raise_server_exceptions=False
+    )
+    response = safe_client.post("/analyze", json=scanner_payload())
+
+    assert response.status_code == 500
+    assert "synthetic secret internal detail" not in response.text
