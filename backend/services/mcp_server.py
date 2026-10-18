@@ -1,7 +1,10 @@
 """MCP tools for the existing AI cybersecurity backend."""
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
+
+from services.scan_worker import execute_scan_in_background
 
 from fastapi import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
@@ -26,10 +29,14 @@ from services.scan_result_service import (
     calculate_scan_risk_score,
     get_scan_result,
 )
-from services.scan_service import create_scan
+from services.scan_service import create_scan, fail_scan_safely
 
 
 logger = get_logger(__name__)
+_scan_executor = ThreadPoolExecutor(
+    max_workers=2,
+    thread_name_prefix="mcp-scan",
+)
 
 MAX_AI_FINDINGS = 50
 MAX_AI_INPUT_BYTES = 256 * 1024
@@ -87,7 +94,25 @@ def scan_project(project_id: int) -> dict[str, Any]:
             project_id=project_id,
             user_id=user.user_id,
         )
-
+        try:
+            _scan_executor.submit(
+                execute_scan_in_background,
+                scan.id,
+                SessionLocal,
+            )
+        except RuntimeError as exc:
+            logger.exception(
+                "Unable to schedule MCP scan: scan_id=%s",
+                scan.id,
+            )
+            fail_scan_safely(
+                db,
+                scan.id,
+                "Scan could not be scheduled. Please retry.",
+            )
+            raise ValueError(
+                "Unable to schedule the scan."
+            ) from exc
         status = getattr(scan.status, "value", scan.status)
 
         return {
