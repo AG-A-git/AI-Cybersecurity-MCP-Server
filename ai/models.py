@@ -3,12 +3,29 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class VulnerabilityInput(BaseModel):
-    file: str
-    line: int
+    file: str = Field(min_length=1)
+    line: int = Field(ge=1)
     vulnerability: str
-    severity: str
+    severity: str = Field(min_length=1, max_length=50)
     confidence: float = Field(ge=0, le=100)
     code: str
+
+    @field_validator("file", "severity")
+    @classmethod
+    def require_non_whitespace_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError(
+                "Field must not be empty or whitespace-only."
+            )
+        return value
+
+    @field_validator("severity")
+    @classmethod
+    def require_supported_severity(cls, value: str) -> str:
+        from .risk_score import normalize_severity
+
+        normalize_severity(value)
+        return value
 
 
 class AIAnalysisResponse(BaseModel):

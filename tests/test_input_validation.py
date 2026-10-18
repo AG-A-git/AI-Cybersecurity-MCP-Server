@@ -47,6 +47,43 @@ def test_rejects_invalid_field_types(valid_finding, field, value):
         validate_vulnerability(valid_finding)
 
 
+@pytest.mark.parametrize("file_value", ["", "   "])
+def test_rejects_empty_or_whitespace_file(valid_finding, file_value):
+    valid_finding["file"] = file_value
+
+    with pytest.raises(ValidationError):
+        validate_vulnerability(valid_finding)
+
+
+@pytest.mark.parametrize("line", [0, -1])
+def test_rejects_non_positive_line(valid_finding, line):
+    valid_finding["line"] = line
+
+    with pytest.raises(ValidationError):
+        validate_vulnerability(valid_finding)
+
+
+@pytest.mark.parametrize(
+    "severity",
+    ["", "   ", "Unclassified"],
+)
+def test_rejects_empty_or_unsupported_severity(
+    valid_finding, severity
+):
+    valid_finding["severity"] = severity
+
+    with pytest.raises(ValidationError):
+        validate_vulnerability(valid_finding)
+
+
+def test_accepts_supported_severity_case_variants(valid_finding):
+    valid_finding["severity"] = "HIGH"
+
+    result = validate_vulnerability(valid_finding)
+
+    assert result.severity == "HIGH"
+
+
 def test_accepts_very_long_source_code(valid_finding):
     long_code = "x = 1\n" * 50_000
     valid_finding["code"] = long_code
@@ -63,7 +100,9 @@ def test_accepts_finding_without_owasp_or_cwe_metadata(valid_finding):
     assert result.code == "query = user_input"
 
 
-def test_eval_scanner_finding_normalizes_and_maps_code_injection(tmp_path):
+def test_eval_scanner_finding_normalizes_and_maps_code_injection(
+    tmp_path,
+):
     source_file = tmp_path / "sample.py"
     source_file.write_text(
         "eval(user_input)\n",

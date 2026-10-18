@@ -257,3 +257,28 @@ def test_repeated_analyses_do_not_leak_state():
 
     assert first_result["explanation"] != second_result["explanation"]
     assert first_result["risk_score"] != second_result["risk_score"]
+
+def test_http_4xx_error_fails_without_retry():
+    class HttpErrorClient:
+        def __init__(self):
+            self.calls = 0
+
+        def generate(self, prompt):
+            self.calls += 1
+            response = requests.Response()
+            response.status_code = 401
+            raise requests.exceptions.HTTPError(
+                "401 Unauthorized",
+                response=response,
+            )
+
+    client = HttpErrorClient()
+    result = analyze_finding(make_finding(), client=client)
+
+    assert client.calls == 1
+    assert result["ai_status"] == "failed"
+    assert result["recommendation"] == (
+        "AI analysis service unavailable."
+    )
+    assert result["file"] == "app.py"
+    assert result["line"] == 10

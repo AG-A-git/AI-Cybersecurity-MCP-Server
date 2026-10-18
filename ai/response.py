@@ -1,3 +1,4 @@
+
 import json
 import re
 
@@ -10,42 +11,31 @@ def extract_json_response(response: str) -> dict:
     """
     Extract a JSON object from an AI response.
 
-    Handles:
-    - plain JSON
+    Supports:
+    - Plain JSON
     - Markdown JSON code fences
-    - explanatory text around JSON
-    - truncated responses where the final } is missing
+    - Explanatory text before or after JSON
+    - A missing final closing brace when the JSON is otherwise valid
     """
 
     if not isinstance(response, str):
-        raise ValueError(
-            "AI response must be a string."
-        )
+        raise ValueError("AI response must be a string.")
 
     if not response.strip():
-        raise ValueError(
-            "AI returned an empty response."
-        )
+        raise ValueError("AI returned an empty response.")
 
     response = response.strip()
 
-    # --------------------------------------------------------
-    # Remove Markdown code fences
-    # --------------------------------------------------------
-
+    # Remove an optional Markdown code fence.
     if response.startswith("```json"):
         response = response[len("```json"):].strip()
-
     elif response.startswith("```"):
         response = response[len("```"):].strip()
 
     if response.endswith("```"):
         response = response[:-3].strip()
 
-    # --------------------------------------------------------
-    # Try complete response first
-    # --------------------------------------------------------
-
+    # Accept a complete JSON object directly.
     try:
         data = json.loads(response)
 
@@ -55,71 +45,85 @@ def extract_json_response(response: str) -> dict:
     except json.JSONDecodeError:
         pass
 
-    # --------------------------------------------------------
-    # Find JSON object inside surrounding text
-    # --------------------------------------------------------
-
+    # Find the first JSON object in the response.
     start = response.find("{")
 
     if start == -1:
-        raise ValueError(
-            "No JSON object found in AI response."
-        )
+        raise ValueError("No JSON object found in AI response.")
 
-    candidate = response[start:].strip()
+    # Find the matching closing brace while respecting quoted
+    # strings, escaped quotes, and braces inside string values.
+    depth = 0
+    in_string = False
+    escaped = False
 
-    # Remove trailing Markdown fence if present.
-    candidate = re.sub(
-        r"```\s*$",
-        "",
-        candidate,
-    ).strip()
+    for index in range(start, len(response)):
+        char = response[index]
 
-    # --------------------------------------------------------
-    # Try extracted JSON
-    # --------------------------------------------------------
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
 
-    try:
-        data = json.loads(candidate)
+            continue
 
-        if isinstance(data, dict):
-            return data
+        if char == '"':
+            in_string = True
 
-    except json.JSONDecodeError:
-        pass
+        elif char == "{":
+            depth += 1
 
-    # --------------------------------------------------------
-    # Handle truncated JSON.
-    #
-    # Llama may occasionally return the complete fields but
-    # omit the final closing }.
-    # --------------------------------------------------------
+        elif char == "}":
+            depth -= 1
 
-    if not candidate.endswith("}"):
-        candidate += "}"
+            if depth < 0:
+                raise ValueError("AI returned invalid JSON.")
 
-        try:
-            data = json.loads(candidate)
+            if depth == 0:
+                candidate = response[start:index + 1]
 
-            if isinstance(data, dict):
+                try:
+                    data = json.loads(candidate)
+
+                except json.JSONDecodeError as error:
+                    raise ValueError(
+                        "AI returned invalid JSON."
+                    ) from error
+
+                if not isinstance(data, dict):
+                    raise ValueError(
+                        "AI response must be a JSON object."
+                    )
+
                 return data
 
-        except json.JSONDecodeError as error:
-            raise ValueError(
-                "AI returned incomplete JSON."
-            ) from error
+    # Recover a missing final brace only if adding exactly one
+    # brace produces a valid JSON object.
+    candidate = response[start:].strip()
 
-    raise ValueError(
-        "AI returned invalid JSON."
-    )
+    try:
+        data = json.loads(candidate + "}")
+
+    except json.JSONDecodeError as error:
+        raise ValueError(
+            "AI returned incomplete JSON."
+        ) from error
+
+    if not isinstance(data, dict):
+        raise ValueError("AI response must be a JSON object.")
+
+    return data
 
 
 def parse_ai_response(response):
     """
     Parse and validate the structured response returned by Ollama.
 
-    AI output is untrusted and must never be treated as
-    executable instructions or authoritative risk information.
+    AI output is untrusted and must never be treated as executable
+    instructions or authoritative risk information.
     """
 
     data = extract_json_response(response)

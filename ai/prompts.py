@@ -324,6 +324,24 @@ def build_security_prompt(
 ) -> str:
     """Build a security prompt from a scanner finding."""
 
+    def escape_untrusted(value: object) -> str:
+        """Escape markup delimiters in untrusted scanner data."""
+        return (
+            str(value)
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
+
+    file = escape_untrusted(file)
+    vulnerability = escape_untrusted(vulnerability)
+    severity = escape_untrusted(severity)
+    confidence = escape_untrusted(confidence)
+    code = escape_untrusted(code)
+    owasp = escape_untrusted(owasp or "Unknown")
+    cwe = escape_untrusted(cwe or "Unknown")
+
+
     return f"""
 {SECURITY_SYSTEM_PROMPT}
 
