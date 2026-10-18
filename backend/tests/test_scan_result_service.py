@@ -1,3 +1,9 @@
+from unittest.mock import MagicMock
+
+from fastapi import HTTPException
+
+from models import Project, Scan
+from services.scan_result_service import get_owned_scan
 import pytest
 
 from models import Scan, Vulnerability
@@ -126,3 +132,63 @@ def test_serialize_vulnerability_preserves_core_fields():
     assert result["explanation"] == "User input reaches a database query."
     assert result["impact"] == "An attacker may manipulate the SQL query."
     assert result["recommendation"] == "Use parameterized queries."
+
+
+def _mock_owned_scan_query(scan=None, project=None):
+    """Mock sequential Scan and Project queries."""
+    db = MagicMock()
+    scan_query = MagicMock()
+    project_query = MagicMock()
+
+    scan_query.filter.return_value.first.return_value = scan
+    project_query.filter.return_value.first.return_value = project
+
+    db.query.side_effect = [scan_query, project_query]
+    return db
+
+
+def test_get_owned_scan_allows_project_owner():
+    project = Project(id=10, project_name="Owned project", owner_id=7)
+    scan = Scan(id=20, project_id=10, status="completed")
+    db = _mock_owned_scan_query(scan=scan, project=project)
+
+    result_scan, result_project = get_owned_scan(
+        db,
+        scan_id=20,
+        user_id=7,
+    )
+
+    assert result_scan is scan
+    assert result_project is project
+
+
+def test_get_owned_scan_rejects_another_user():
+    project = Project(id=10, project_name="Private project", owner_id=7)
+    scan = Scan(id=20, project_id=10, status="completed")
+    db = _mock_owned_scan_query(scan=scan, project=project)
+
+    with pytest.raises(HTTPException) as exc_info:
+        get_owned_scan(db, scan_id=20, user_id=99)
+
+    assert exc_info.value.status_code == 403
+
+
+def test_get_owned_scan_returns_404_for_missing_scan():
+    db = _mock_owned_scan_query(scan=None)
+
+    with pytest.raises(HTTPException) as exc_info:
+        get_owned_scan(db, scan_id=999, user_id=7)
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Scan not found"
+
+
+def test_get_owned_scan_returns_404_for_missing_project():
+    scan = Scan(id=20, project_id=10, status="completed")
+    db = _mock_owned_scan_query(scan=scan, project=None)
+
+    with pytest.raises(HTTPException) as exc_info:
+        get_owned_scan(db, scan_id=20, user_id=7)
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Project not found"

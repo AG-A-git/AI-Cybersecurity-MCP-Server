@@ -1,4 +1,4 @@
-"""MCP tools for the existing AI cybersecurity backend."""
+﻿"""MCP tools for the existing AI cybersecurity backend."""
 
 import json
 from concurrent.futures import ThreadPoolExecutor
@@ -302,8 +302,12 @@ def generate_report(
     report_format: str = "json",
 ) -> dict[str, Any]:
     user = get_authenticated_mcp_user()
-    normalized_format = report_format.strip().lower()
+    if not isinstance(report_format, str):
+        raise ValueError(
+            "Report format must be a string. Choose json, html, or pdf."
+        )
 
+    normalized_format = report_format.strip().lower()
     report_generators = {
         "json": generate_json_report,
         "html": generate_html_report,

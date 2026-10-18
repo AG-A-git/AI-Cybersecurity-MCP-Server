@@ -325,3 +325,51 @@ def test_worker_can_complete_another_scan_after_failure(
     assert saved_successful_scan.started_at is not None
     assert saved_successful_scan.completed_at is not None
     assert saved_successful_scan.error_message is None
+
+
+
+def test_initialization_failure_attempts_safe_recovery_and_closes_session(
+    worker_db,
+    monkeypatch,
+):
+    _, session_factory, _, _ = worker_db
+    close_calls = []
+    recovery_calls = []
+
+    def tracking_session_factory():
+        session = session_factory()
+        original_close = session.close
+
+        def tracked_close(*args, **kwargs):
+            close_calls.append(True)
+            return original_close(*args, **kwargs)
+
+        session.close = tracked_close
+
+        def fail_execute(*args, **kwargs):
+            raise RuntimeError("Simulated claim failure")
+
+        session.execute = fail_execute
+        return session
+
+    def record_recovery(db, scan_id, message):
+        recovery_calls.append((scan_id, message))
+
+    monkeypatch.setattr(
+        scan_worker,
+        "fail_scan_safely",
+        record_recovery,
+    )
+
+    scan_worker.execute_scan_in_background(
+        scan_id=999999,
+        session_factory=tracking_session_factory,
+    )
+
+    assert recovery_calls == [
+        (
+            999999,
+            "Scan initialization failed. Check server logs for details.",
+        )
+    ]
+    assert close_calls == [True]

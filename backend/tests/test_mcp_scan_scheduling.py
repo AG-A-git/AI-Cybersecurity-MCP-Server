@@ -80,3 +80,37 @@ def test_scan_project_marks_scan_failed_if_submission_fails(
         "Scan could not be scheduled. Please retry.",
     )
     db.close.assert_called_once()
+
+@pytest.mark.parametrize(
+    ("status_code", "detail"),
+    [
+        (404, "Project not found"),
+        (403, "You do not have permission to scan this project"),
+        (400, "No uploaded files found for this project"),
+        (409, "A scan is already in progress for this project"),
+    ],
+)
+def test_scan_project_maps_validation_errors_and_closes_session(
+    monkeypatch,
+    status_code,
+    detail,
+):
+    db, _, executor = setup_scan_project(monkeypatch)
+    monkeypatch.setattr(
+        mcp_server,
+        "create_scan",
+        Mock(
+            side_effect=mcp_server.HTTPException(
+                status_code=status_code,
+                detail=detail,
+            )
+        ),
+    )
+
+    with pytest.raises(mcp_server.ToolError) as exc:
+        mcp_server.scan_project(project_id=14)
+
+    assert str(status_code) in str(exc.value)
+    assert detail in str(exc.value)
+    executor.submit.assert_not_called()
+    db.close.assert_called_once()
