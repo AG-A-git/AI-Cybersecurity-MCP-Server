@@ -1,4 +1,6 @@
-﻿from ai.mapping import get_mapping
+﻿from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+from ai.mapping import get_mapping
 import json
 
 from ai.analysis import analyze_finding
@@ -380,3 +382,90 @@ def test_distinct_ai_responses_and_mappings_stay_with_each_finding():
     assert alpha_result["ai_status"] == "completed"
     assert beta_result["ai_status"] == "completed"
     assert client.call_count == 2
+def test_concurrent_analyses_keep_results_isolated():
+    barrier = Barrier(2, timeout=5)
+
+    class ConcurrentClient:
+        def __init__(self, response):
+            self.response = response
+
+        def generate(self, prompt):
+            barrier.wait()
+            return self.response
+
+    alpha = make_finding(
+        "alpha.py",
+        11,
+        "SQL Injection",
+        "Critical",
+        95,
+        "cursor.execute(query)",
+    )
+
+    beta = make_finding(
+        "beta.py",
+        24,
+        "XSS",
+        "Low",
+        70,
+        "element.innerHTML = value",
+    )
+
+    alpha_response = json.dumps({
+        "explanation": "Alpha-specific explanation.",
+        "impact": "Alpha-specific impact.",
+        "recommendation": "Use parameterized SQL queries.",
+        "secure_practice": "Separate SQL commands from user data.",
+    })
+
+    beta_response = json.dumps({
+        "explanation": "Beta-specific explanation.",
+        "impact": "Beta-specific impact.",
+        "recommendation": "Encode untrusted output.",
+        "secure_practice": "Use context-aware output encoding.",
+    })
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        alpha_future = executor.submit(
+            analyze_finding,
+            alpha,
+            ConcurrentClient(alpha_response),
+        )
+        beta_future = executor.submit(
+            analyze_finding,
+            beta,
+            ConcurrentClient(beta_response),
+        )
+
+        alpha_result = alpha_future.result(timeout=10)
+        beta_result = beta_future.result(timeout=10)
+
+    assert alpha_result["ai_status"] == "completed"
+    assert beta_result["ai_status"] == "completed"
+
+    assert alpha_result["file"] == "alpha.py"
+    assert alpha_result["line"] == 11
+    assert alpha_result["explanation"] == (
+        "Alpha-specific explanation."
+    )
+    assert alpha_result["impact"] == "Alpha-specific impact."
+    assert alpha_result["recommendation"] == (
+        "Use parameterized SQL queries."
+    )
+
+    assert beta_result["file"] == "beta.py"
+    assert beta_result["line"] == 24
+    assert beta_result["explanation"] == (
+        "Beta-specific explanation."
+    )
+    assert beta_result["impact"] == "Beta-specific impact."
+    assert beta_result["recommendation"] == (
+        "Encode untrusted output."
+    )
+
+    assert alpha_result["risk_score"] == calculate_risk(
+        "Critical", 95, "SQL Injection"
+    )
+    assert beta_result["risk_score"] == calculate_risk(
+        "Low", 70, "XSS"
+    )

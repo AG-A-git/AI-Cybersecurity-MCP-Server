@@ -1,3 +1,4 @@
+
 import pytest
 
 from ai.risk_score import (
@@ -84,3 +85,21 @@ def test_invalid_risk_score():
 
     with pytest.raises(ValueError):
         classify_risk(-1)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [float("nan"), float("inf"), float("-inf")],
+)
+def test_non_finite_confidence_is_rejected(value):
+    with pytest.raises(ValueError):
+        validate_confidence(value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [float("nan"), float("inf"), float("-inf")],
+)
+def test_non_finite_risk_score_is_rejected(value):
+    with pytest.raises(ValueError):
+        classify_risk(value)

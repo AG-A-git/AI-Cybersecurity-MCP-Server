@@ -1,4 +1,6 @@
-﻿import json
+
+import json
+import requests
 
 from ai.analysis import analyze_finding
 from ai.mapping import get_mapping
@@ -50,9 +52,14 @@ def test_analysis_preserves_scanner_metadata():
     )
 
     assert result["ai_status"] == "completed"
+
     for field in (
-        "file", "line", "code", "vulnerability",
-        "severity", "confidence",
+        "file",
+        "line",
+        "code",
+        "vulnerability",
+        "severity",
+        "confidence",
     ):
         assert result[field] == finding[field]
 
@@ -114,3 +121,139 @@ def test_malformed_ai_response_preserves_finding_metadata():
     )
     assert result["explanation"] is None
     assert result["impact"] is None
+
+
+def test_timeout_retries_once_then_succeeds():
+    class RetryClient:
+        def __init__(self):
+            self.calls = 0
+
+        def generate(self, prompt):
+            self.calls += 1
+
+            if self.calls == 1:
+                raise requests.exceptions.Timeout()
+
+            return make_ai_response()
+
+    client = RetryClient()
+    result = analyze_finding(make_finding(), client=client)
+
+    assert client.calls == 2
+    assert result["ai_status"] == "completed"
+
+
+def test_repeated_timeout_fails_after_one_retry():
+    class TimeoutClient:
+        def __init__(self):
+            self.calls = 0
+
+        def generate(self, prompt):
+            self.calls += 1
+            raise requests.exceptions.Timeout()
+
+    client = TimeoutClient()
+    result = analyze_finding(make_finding(), client=client)
+
+    assert client.calls == 2
+    assert result["ai_status"] == "failed"
+    assert result["recommendation"] == (
+        "AI analysis service unavailable."
+    )
+    assert result["file"] == "app.py"
+    assert result["line"] == 10
+
+
+def test_connection_error_retries_once_then_succeeds():
+    class ConnectionErrorClient:
+        def __init__(self):
+            self.calls = 0
+
+        def generate(self, prompt):
+            self.calls += 1
+
+            if self.calls == 1:
+                raise requests.exceptions.ConnectionError(
+                    "Ollama is temporarily unavailable"
+                )
+
+            return make_ai_response()
+
+    client = ConnectionErrorClient()
+    result = analyze_finding(make_finding(), client=client)
+
+    assert client.calls == 2
+    assert result["ai_status"] == "completed"
+
+
+def test_repeated_connection_error_fails_after_one_retry():
+    class ConnectionErrorClient:
+        def __init__(self):
+            self.calls = 0
+
+        def generate(self, prompt):
+            self.calls += 1
+            raise requests.exceptions.ConnectionError(
+                "Ollama is unavailable"
+            )
+
+    client = ConnectionErrorClient()
+    result = analyze_finding(make_finding(), client=client)
+
+    assert client.calls == 2
+    assert result["ai_status"] == "failed"
+    assert result["recommendation"] == (
+        "AI analysis service unavailable."
+    )
+    assert result["file"] == "app.py"
+    assert result["line"] == 10
+
+def test_repeated_analyses_do_not_leak_state():
+    first_finding = make_finding()
+    first_finding["file"] = "first.py"
+    first_finding["severity"] = "Critical"
+    first_finding["confidence"] = 95
+
+    second_finding = make_finding()
+    second_finding["file"] = "second.py"
+    second_finding["severity"] = "Low"
+    second_finding["confidence"] = 40
+    second_finding["vulnerability"] = "XSS"
+    second_finding["code"] = "render(user_input)"
+
+    first_result = analyze_finding(
+        first_finding,
+        client=FakeAIClient(
+            make_ai_response(
+                explanation="First finding explanation.",
+                recommendation="First finding recommendation.",
+            )
+        ),
+    )
+
+    second_result = analyze_finding(
+        second_finding,
+        client=FakeAIClient(
+            make_ai_response(
+                explanation="Second finding explanation.",
+                recommendation="Second finding recommendation.",
+            )
+        ),
+    )
+
+    assert first_result["ai_status"] == "completed"
+    assert second_result["ai_status"] == "completed"
+
+    assert first_result["file"] == "first.py"
+    assert first_result["severity"] == "Critical"
+    assert first_result["explanation"] == "First finding explanation."
+    assert first_result["recommendation"] == "First finding recommendation."
+
+    assert second_result["file"] == "second.py"
+    assert second_result["severity"] == "Low"
+    assert second_result["vulnerability"] == "XSS"
+    assert second_result["explanation"] == "Second finding explanation."
+    assert second_result["recommendation"] == "Second finding recommendation."
+
+    assert first_result["explanation"] != second_result["explanation"]
+    assert first_result["risk_score"] != second_result["risk_score"]
