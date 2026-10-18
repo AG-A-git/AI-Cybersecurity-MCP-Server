@@ -24,6 +24,7 @@ from services.report_service import (
     generate_html_report,
     generate_json_report,
     generate_pdf_report,
+    render_report_file,
 )
 from services.scan_result_service import (
     calculate_scan_risk_score,
@@ -292,9 +293,8 @@ def get_risk_score(scan_id: int) -> dict[str, Any]:
 @server.tool(
     name="generate_report",
     description=(
-        "Prepare report data for a scan owned by the authenticated user. "
-        "Supported formats are json, html, and pdf. HTML and PDF currently "
-        "return prepared data and do not render downloadable files."
+        "Generate a JSON, HTML, or PDF report for a scan owned by the "
+        "authenticated user. Returns report data and generated-file metadata."
     ),
 )
 def generate_report(
@@ -302,6 +302,13 @@ def generate_report(
     report_format: str = "json",
 ) -> dict[str, Any]:
     user = get_authenticated_mcp_user()
+    if (
+        not isinstance(scan_id, int)
+        or isinstance(scan_id, bool)
+        or scan_id < 1
+    ):
+        raise ValueError("scan_id must be a positive integer.")
+
     if not isinstance(report_format, str):
         raise ValueError(
             "Report format must be a string. Choose json, html, or pdf."
@@ -313,7 +320,6 @@ def generate_report(
         "html": generate_html_report,
         "pdf": generate_pdf_report,
     }
-
     generator = report_generators.get(normalized_format)
 
     if generator is None:
@@ -330,10 +336,17 @@ def generate_report(
             user_id=user.user_id,
         )
 
+        file_metadata = render_report_file(
+            report=report_data,
+            scan_id=scan_id,
+            report_format=normalized_format,
+        )
+
         return {
             "scan_id": scan_id,
             "format": normalized_format,
-            "rendered_file": False,
+            "rendered_file": True,
+            "file": file_metadata,
             "report": report_data,
         }
 
@@ -348,8 +361,17 @@ def generate_report(
             "Unable to prepare the report."
         ) from exc
 
+    except OSError as exc:
+        logger.exception(
+            "File error while generating MCP report"
+        )
+        raise ValueError(
+            "Unable to write the report file."
+        ) from exc
+
     finally:
         db.close()
+
 
 
 # Mount the MCP HTTP app into the existing FastAPI application.

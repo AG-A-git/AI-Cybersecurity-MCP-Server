@@ -225,3 +225,6 @@ backend/uploads/
 
 # Local scanner test fixture
 backend/test.py
+
+# Locally generated security scan reports
+backend/generated_reports/

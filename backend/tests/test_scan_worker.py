@@ -373,3 +373,60 @@ def test_initialization_failure_attempts_safe_recovery_and_closes_session(
         )
     ]
     assert close_calls == [True]
+
+
+def test_ai_service_failure_marks_scan_failed(
+    worker_db,
+    monkeypatch,
+):
+    db, session_factory, project_id, user_id = worker_db
+    scan = add_scan(db, project_id)
+    add_uploaded_file(db, project_id, user_id)
+
+    def fail_ai_analysis(findings):
+        raise RuntimeError("AI service unavailable")
+
+    # The pipeline imports analyze_vulnerabilities in scan_service,
+    # so patch that exact integration point.
+    from services import scan_service
+
+    monkeypatch.setattr(
+        scan_service,
+        "analyze_vulnerabilities",
+        fail_ai_analysis,
+    )
+
+    # Return a valid scanner finding so the pipeline reaches the AI stage.
+    def fake_scanner(filepath, scan_id):
+        return [
+            {
+                "file": "sample.py",
+                "line": 1,
+                "vulnerability": "SQL Injection",
+                "severity": "High",
+                "confidence": 90,
+                "code": "cursor.execute(query)",
+            }
+        ]
+
+    monkeypatch.setattr(
+        scan_service,
+        "execute_scanner",
+        fake_scanner,
+    )
+
+    scan_worker.execute_scan_in_background(
+        scan.id,
+        session_factory,
+    )
+
+    db.expire_all()
+    saved_scan = (
+        db.query(Scan)
+        .filter(Scan.id == scan.id)
+        .one()
+    )
+
+    assert saved_scan.status == "failed"
+    assert saved_scan.completed_at is not None
+    assert "Scan execution failed" in saved_scan.error_message

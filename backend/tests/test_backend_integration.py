@@ -568,17 +568,7 @@ def test_scan_endpoint_integration(monkeypatch):
     assert result["completed_at"] is not None
 
 def test_scan_lifecycle():
-    login_response = client.post(
-        "/login",
-        json={
-            "email": "integration_test@example.com",
-            "password": "TestPassword123!"
-        }
-    )
-
-    assert login_response.status_code == 200
-
-    token = login_response.json()["access_token"]
+    token = _retry_test_token()
 
     project_response = client.post(
         "/projects/",
