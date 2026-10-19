@@ -49,17 +49,28 @@ def scan_zip_with_status(zip_path, scan_function):
                 message="Invalid ZIP archive.",
             )
 
-        # Match the existing scanner's archive limits and safety checks.
+        # Validate archive contents before invoking the scanner.
         with zipfile.ZipFile(allowed_path, "r") as archive:
             members = archive.infolist()
 
+            # Reject duplicate names to prevent ambiguous archive contents.
+            member_names = [member.filename for member in members]
+            if len(member_names) != len(set(member_names)):
+                return ZipScanResult(
+                    ZipScanStatus.REJECTED,
+                    message="Duplicate ZIP member names rejected.",
+                )
+
+            # Limit the number of archive entries.
             if len(members) > 1000:
                 return ZipScanResult(
                     ZipScanStatus.REJECTED,
                     message="ZIP entry limit exceeded.",
                 )
 
-            if sum(member.file_size for member in members) > 100 * 1024 * 1024:
+            # Limit total declared uncompressed size.
+            total_size = sum(member.file_size for member in members)
+            if total_size > 100 * 1024 * 1024:
                 return ZipScanResult(
                     ZipScanStatus.REJECTED,
                     message="ZIP uncompressed-size limit exceeded.",
@@ -70,8 +81,10 @@ def scan_zip_with_status(zip_path, scan_function):
                 normalized = name.replace("\\", "/")
                 parts = normalized.split("/")
 
+                # Reject absolute paths, drive paths, and traversal.
                 if (
-                    normalized.startswith("/")
+                    "\x00" in name
+                    or normalized.startswith("/")
                     or (len(normalized) >= 2 and normalized[1] == ":")
                     or ".." in parts
                 ):
@@ -80,6 +93,7 @@ def scan_zip_with_status(zip_path, scan_function):
                         message="Unsafe ZIP member path.",
                     )
 
+                # Reject Unix symbolic-link entries.
                 unix_mode = member.external_attr >> 16
                 if (
                     member.create_system == 3
@@ -90,18 +104,25 @@ def scan_zip_with_status(zip_path, scan_function):
                         message="ZIP symbolic-link entry rejected.",
                     )
 
+        # Invoke the existing scanner only after validation succeeds.
         findings = scan_function(allowed_path)
 
         return ZipScanResult(
-            ZipScanStatus.COMPLETED,
-            tuple(findings),
-            "ZIP scan finished.",
+            status=ZipScanStatus.COMPLETED,
+            findings=tuple(findings),
+            message="ZIP scan finished.",
         )
 
     except (FileNotFoundError, PermissionError):
         raise
-    except (OSError, ValueError, TypeError, zipfile.BadZipFile,
-            RuntimeError, NotImplementedError) as error:
+    except (
+        OSError,
+        ValueError,
+        TypeError,
+        zipfile.BadZipFile,
+        RuntimeError,
+        NotImplementedError,
+    ) as error:
         return ZipScanResult(
             ZipScanStatus.FAILED,
             message=f"ZIP scan failed: {error}",
