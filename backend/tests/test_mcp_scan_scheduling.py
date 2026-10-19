@@ -81,6 +81,34 @@ def test_scan_project_marks_scan_failed_if_submission_fails(
     )
     db.close.assert_called_once()
 
+
+def test_scan_project_recovers_from_unexpected_submission_error(
+    monkeypatch,
+):
+    db, scan, executor = setup_scan_project(monkeypatch)
+    executor.submit.side_effect = OSError("unexpected executor failure")
+
+    fail_scan = Mock()
+    monkeypatch.setattr(
+        mcp_server,
+        "fail_scan_safely",
+        fail_scan,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Unable to schedule the scan",
+    ):
+        mcp_server.scan_project(project_id=14)
+
+    fail_scan.assert_called_once_with(
+        db,
+        scan.id,
+        "Scan could not be scheduled. Please retry.",
+    )
+    db.close.assert_called_once()
+
+
 @pytest.mark.parametrize(
     ("status_code", "detail"),
     [

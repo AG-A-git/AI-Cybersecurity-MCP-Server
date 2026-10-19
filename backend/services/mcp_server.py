@@ -101,7 +101,7 @@ def scan_project(project_id: int) -> dict[str, Any]:
                 scan.id,
                 SessionLocal,
             )
-        except RuntimeError as exc:
+        except Exception as exc:
             logger.exception(
                 "Unable to schedule MCP scan: scan_id=%s",
                 scan.id,
@@ -111,9 +111,8 @@ def scan_project(project_id: int) -> dict[str, Any]:
                 scan.id,
                 "Scan could not be scheduled. Please retry.",
             )
-            raise ValueError(
-                "Unable to schedule the scan."
-            ) from exc
+            raise ValueError("Unable to schedule the scan.") from exc
+
         status = getattr(scan.status, "value", scan.status)
 
         return {
@@ -146,7 +145,7 @@ def analyze_vulnerability(
     findings: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Validate bounded finding input before invoking the AI service."""
-
+    get_authenticated_mcp_user()
     if not isinstance(findings, list):
         raise ValueError("Findings must be a list")
 

@@ -101,3 +101,40 @@ def test_mcp_get_scan_results_rejects_unauthorized_scan(
         assert "permission" in str(exc).lower()
     finally:
         db.close.assert_called_once()
+
+
+def test_mcp_risk_score_rejects_unauthorized_scan_before_query(
+    monkeypatch,
+):
+    from fastapi import HTTPException
+
+    db = Mock()
+
+    monkeypatch.setattr(
+        mcp_server,
+        "get_authenticated_mcp_user",
+        lambda: SimpleNamespace(user_id=99),
+    )
+    monkeypatch.setattr(mcp_server, "SessionLocal", lambda: db)
+
+    def reject_ownership(**kwargs):
+        assert kwargs["scan_id"] == 123
+        assert kwargs["user_id"] == 99
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to access this scan",
+        )
+
+    monkeypatch.setattr(mcp_server, "get_scan_result", reject_ownership)
+
+    try:
+        try:
+            mcp_server.get_risk_score(scan_id=123)
+            assert False, "Expected the ownership rejection to propagate"
+        except mcp_server.ToolError as exc:
+            assert "403" in str(exc)
+            assert "permission" in str(exc).lower()
+
+        db.query.assert_not_called()
+    finally:
+        db.close.assert_called_once()

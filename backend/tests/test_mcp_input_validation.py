@@ -1,5 +1,5 @@
 ﻿import pytest
-
+from types import SimpleNamespace
 import services.mcp_server as mcp_server
 
 
@@ -12,6 +12,16 @@ VALID_FINDING = {
     "code": "cursor.execute(query)",
 }
 
+@pytest.fixture(autouse=True)
+def authenticated_mcp_user(monkeypatch):
+    monkeypatch.setattr(
+        mcp_server,
+        "get_authenticated_mcp_user",
+        lambda: SimpleNamespace(
+            user_id=1,
+            email="test@example.com",
+        ),
+    )
 
 def test_analyze_rejects_non_list_before_ai(monkeypatch):
     ai = lambda findings: pytest.fail("AI must not be called")
@@ -77,3 +87,27 @@ def test_analyze_rejects_oversized_input_before_ai(monkeypatch):
 
     with pytest.raises(ValueError, match="256 KiB size limit"):
         mcp_server.analyze_vulnerability(findings=[finding])
+
+def test_analyze_rejects_missing_authenticated_user_before_ai(monkeypatch):
+    def reject_authentication():
+        raise PermissionError("Authenticated MCP user is unavailable")
+
+    def reject_ai_call(findings):
+        pytest.fail("AI must not be called without authentication")
+
+    monkeypatch.setattr(
+        mcp_server,
+        "get_authenticated_mcp_user",
+        reject_authentication,
+    )
+    monkeypatch.setattr(
+        mcp_server,
+        "analyze_vulnerabilities",
+        reject_ai_call,
+    )
+
+    with pytest.raises(
+        PermissionError,
+        match="Authenticated MCP user is unavailable",
+    ):
+        mcp_server.analyze_vulnerability(findings=[VALID_FINDING])
