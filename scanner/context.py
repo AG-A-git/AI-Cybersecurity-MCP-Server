@@ -623,8 +623,8 @@ def build_rule_context(file_path):
                         variable_sources,
                     )
 
-        except SyntaxError:
-            # Context creation must not crash scanning.
+        except (SyntaxError, ValueError):
+            # Malformed Python source must not crash context creation.
             pass
 
     return {

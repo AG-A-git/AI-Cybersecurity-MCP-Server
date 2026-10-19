@@ -89,6 +89,8 @@ def run_all_rules(file_path):
         return results
 
     # Existing rules continue to use the original file_path API.
+    rule_failures = False
+
     for rule in rules:
         try:
             rule_results = rule(file_path)
@@ -97,12 +99,19 @@ def run_all_rules(file_path):
                 results.extend(rule_results)
 
         except (SyntaxError, ValueError, OSError) as error:
+            rule_failures = True
             logger.exception(
                 "Rule %s failed while scanning %s: %s",
                 rule.__name__,
                 file_path,
                 error
             )
+
+    if rule_failures:
+        logger.warning(
+            "Scan for %s completed with rule failures; findings may be incomplete",
+            file_path,
+        )
 
     return results
 

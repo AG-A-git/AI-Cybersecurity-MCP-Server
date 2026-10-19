@@ -107,3 +107,33 @@ def test_engine_scan_project_raises_for_missing_zip(tmp_path):
         match="ZIP path does not exist",
     ):
         scan_project(str(missing_zip))
+
+
+def test_mcp_findings_preserve_schema_through_json_round_trip(tmp_path):
+    import json
+
+    source_file = tmp_path / "app.py"
+    source_file.write_text(
+        "import pickle\n"
+        "data = pickle.loads(request.data)\n",
+        encoding="utf-8",
+    )
+
+    findings = scan_code(str(source_file))
+
+    assert findings
+    required_fields = {
+        "file_name",
+        "line_number",
+        "vulnerability_type",
+        "severity",
+        "confidence",
+        "code",
+    }
+
+    for finding in findings:
+        assert required_fields.issubset(finding.keys())
+
+    restored = json.loads(json.dumps(findings))
+
+    assert restored == findings

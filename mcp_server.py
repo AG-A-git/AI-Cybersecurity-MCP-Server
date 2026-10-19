@@ -14,5 +14,7 @@ def scan_code(path: str) -> list:
     return scan_project(path)
 
 
+
+
 if __name__ == "__main__":
     mcp.run()
