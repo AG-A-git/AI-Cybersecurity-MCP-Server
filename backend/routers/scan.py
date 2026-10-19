@@ -1,3 +1,15 @@
+from pathlib import Path
+
+from fastapi.responses import FileResponse
+
+from services.report_service import (
+    REPORT_DIR,
+    REPORT_FORMATS,
+    generate_json_report,
+    generate_html_report,
+    generate_pdf_report,
+    render_report_file,
+)
 from response_utils import success_response
 from datetime import datetime
 
@@ -188,4 +200,81 @@ def retry_scan_endpoint(
             "project_id": scan.project_id,
             "status": scan.status,
         },
+    )
+
+@router.get("/{scan_id}/report")
+def download_scan_report(
+    scan_id: int,
+    report_format: str = Query("pdf", alias="format"),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db),
+):
+    """Generate and download a report for a scan owned by the current user."""
+    current_user = get_authenticated_user(credentials, db)
+
+    if scan_id < 1:
+        raise HTTPException(
+            status_code=400,
+            detail="scan_id must be a positive integer.",
+        )
+
+    if not isinstance(report_format, str):
+        raise HTTPException(
+            status_code=400,
+            detail="Report format must be json, html, or pdf.",
+        )
+
+    normalized_format = report_format.strip().lower()
+
+    report_generators = {
+        "json": generate_json_report,
+        "html": generate_html_report,
+        "pdf": generate_pdf_report,
+    }
+
+    if normalized_format not in report_generators:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported report format. Choose json, html, or pdf.",
+        )
+
+    # The report service checks scan ownership before returning its data.
+    report_data = report_generators[normalized_format](
+        db=db,
+        scan_id=scan_id,
+        user_id=current_user.id,
+    )
+
+    try:
+        metadata = render_report_file(
+            report=report_data,
+            scan_id=scan_id,
+            report_format=normalized_format,
+        )
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to generate the report file.",
+        ) from exc
+
+    # Resolve only the known filename generated from the validated scan ID.
+    report_path = (REPORT_DIR / metadata["file_name"]).resolve()
+    report_directory = REPORT_DIR.resolve()
+
+    if report_path.parent != report_directory:
+        raise HTTPException(
+            status_code=500,
+            detail="Invalid report file path.",
+        )
+
+    if not report_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="Generated report file not found.",
+        )
+
+    return FileResponse(
+        path=report_path,
+        media_type=metadata["content_type"],
+        filename=metadata["file_name"],
     )

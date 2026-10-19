@@ -375,7 +375,7 @@ def test_initialization_failure_attempts_safe_recovery_and_closes_session(
     assert close_calls == [True]
 
 
-def test_ai_service_failure_marks_scan_failed(
+def test_ai_service_failure_preserves_scanner_findings(
     worker_db,
     monkeypatch,
 ):
@@ -386,8 +386,6 @@ def test_ai_service_failure_marks_scan_failed(
     def fail_ai_analysis(findings):
         raise RuntimeError("AI service unavailable")
 
-    # The pipeline imports analyze_vulnerabilities in scan_service,
-    # so patch that exact integration point.
     from services import scan_service
 
     monkeypatch.setattr(
@@ -396,7 +394,6 @@ def test_ai_service_failure_marks_scan_failed(
         fail_ai_analysis,
     )
 
-    # Return a valid scanner finding so the pipeline reaches the AI stage.
     def fake_scanner(filepath, scan_id):
         return [
             {
@@ -420,13 +417,30 @@ def test_ai_service_failure_marks_scan_failed(
         session_factory,
     )
 
+    from models import Vulnerability
+
     db.expire_all()
-    saved_scan = (
-        db.query(Scan)
-        .filter(Scan.id == scan.id)
-        .one()
+    saved_scan = db.query(Scan).filter(Scan.id == scan.id).one()
+    saved_findings = (
+        db.query(Vulnerability)
+        .filter(Vulnerability.scan_id == scan.id)
+        .all()
     )
 
-    assert saved_scan.status == "failed"
-    assert saved_scan.completed_at is not None
-    assert "Scan execution failed" in saved_scan.error_message
+    assert saved_scan.status == "completed"
+    assert saved_scan.error_message is None
+    assert len(saved_findings) == 1
+
+    finding = saved_findings[0]
+    assert finding.file_name == "sample.py"
+    assert finding.line_number == 1
+    assert finding.vulnerability_type == "SQL Injection"
+    assert finding.severity == "High"
+    assert finding.confidence == 90
+    assert finding.code == "cursor.execute(query)"
+    assert finding.risk_score == 67.5
+    assert finding.owasp_category == "A03:2021 Injection"
+    assert finding.cwe_id == "CWE-89"
+    assert finding.explanation is None
+    assert finding.impact is None
+    assert finding.recommendation is None

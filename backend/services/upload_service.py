@@ -1,3 +1,4 @@
+﻿import stat
 from pathlib import Path
 import uuid
 import zipfile
@@ -115,6 +116,13 @@ def extract_zip(file_path: Path) -> Path:
             root = project_extract_dir.resolve()
 
             for member in members:
+                # Reject symbolic links before extracting any archive entries.
+                unix_mode = member.external_attr >> 16
+                if stat.S_ISLNK(unix_mode):
+                    raise ValueError(
+                        "Unsafe ZIP file: symlink entries are not allowed"
+                    )
+
                 target_path = (project_extract_dir / member.filename).resolve()
                 try:
                     target_path.relative_to(root)
@@ -122,9 +130,7 @@ def extract_zip(file_path: Path) -> Path:
                     raise ValueError(
                         "Unsafe ZIP file: path traversal detected"
                     )
-
             zip_ref.extractall(project_extract_dir)
-
         return project_extract_dir
 
     except Exception:

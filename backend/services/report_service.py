@@ -66,6 +66,9 @@ def _render_html(report: dict[str, Any]) -> str:
 
     for finding in vulnerabilities:
         finding = finding if isinstance(finding, dict) else {}
+        recommendation = finding.get("recommendation")
+        if not isinstance(recommendation, str) or not recommendation.strip():
+            recommendation = "No recommendation available."
         finding_rows.append(
             "<tr>"
             f"<td>{html.escape(str(finding.get('severity', 'Unknown')))}</td>"
@@ -73,7 +76,7 @@ def _render_html(report: dict[str, Any]) -> str:
             f"<td>{html.escape(str(finding.get('file_name', 'Unknown')))}</td>"
             f"<td>{html.escape(str(finding.get('line_number', 'Unknown')))}</td>"
             f"<td><pre>{html.escape(str(finding.get('code', '')))}</pre></td>"
-            f"<td>{html.escape(str(finding.get('recommendation', '')))}</td>"
+            f"<td>{html.escape(recommendation)}</td>"
             "</tr>"
         )
 
@@ -190,6 +193,10 @@ def _render_pdf(report: dict[str, Any]) -> bytes:
             ("Recommendation", "recommendation"),
         ):
             value = finding.get(key, "")
+            if key == "recommendation" and (
+                not isinstance(value, str) or not value.strip()
+            ):
+                value = "No recommendation available."
             if value not in (None, ""):
                 paragraph(f"{label}: {value}", 6)
 

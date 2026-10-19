@@ -1,4 +1,5 @@
-﻿import pytest
+﻿from sqlalchemy.exc import IntegrityError
+import pytest
 from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -138,3 +139,68 @@ def test_create_scan_accepts_valid_request(db):
     assert scan.id is not None
     assert scan.project_id == project.id
     assert scan.status == "pending"
+
+
+def test_database_rejects_second_active_scan_for_same_project(db):
+    user = create_user(db, "duplicate_active_scan_user")
+    project = create_project(db, user.id)
+    add_uploaded_file(db, project.id, user.id)
+
+    first_scan = Scan(
+        project_id=project.id,
+        status="pending",
+    )
+    db.add(first_scan)
+    db.commit()
+
+    second_scan = Scan(
+        project_id=project.id,
+        status="running",
+    )
+    db.add(second_scan)
+
+    with pytest.raises(IntegrityError):
+        db.commit()
+
+    db.rollback()
+
+    saved_scans = (
+        db.query(Scan)
+        .filter(Scan.project_id == project.id)
+        .all()
+    )
+    assert len(saved_scans) == 1
+    assert saved_scans[0].status == "pending"
+
+
+def test_database_allows_new_scan_after_previous_scan_completed(db):
+    user = create_user(db, "completed_scan_history_user")
+    project = create_project(db, user.id)
+    add_uploaded_file(db, project.id, user.id)
+
+    completed_scan = Scan(
+        project_id=project.id,
+        status="completed",
+    )
+    db.add(completed_scan)
+    db.commit()
+
+    new_scan = create_scan(
+        db,
+        project_id=project.id,
+        user_id=user.id,
+    )
+
+    assert new_scan.id != completed_scan.id
+    assert new_scan.status == "pending"
+
+    saved_scans = (
+        db.query(Scan)
+        .filter(Scan.project_id == project.id)
+        .order_by(Scan.id)
+        .all()
+    )
+    assert [scan.status for scan in saved_scans] == [
+        "completed",
+        "pending",
+    ]

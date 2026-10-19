@@ -124,3 +124,24 @@ def test_renderer_rejects_non_object_report(tmp_path):
             report_format="json",
             output_dir=tmp_path,
         )
+@pytest.mark.parametrize("report_format", ["html", "pdf"])
+def test_missing_recommendation_is_explicit(
+    tmp_path, report_data, report_format
+):
+    report_data["vulnerabilities"][0]["recommendation"] = None
+
+    render_report_file(
+        report=report_data,
+        scan_id=25,
+        report_format=report_format,
+        output_dir=tmp_path,
+    )
+
+    generated = tmp_path / f"scan_25.{report_format}"
+
+    assert generated.is_file()
+    assert generated.stat().st_size > 0
+
+    if report_format == "html":
+        content = generated.read_text(encoding="utf-8")
+        assert "No recommendation available." in content

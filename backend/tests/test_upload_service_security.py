@@ -1,4 +1,5 @@
-﻿import asyncio
+﻿import stat
+import asyncio
 import sys
 import zipfile
 from pathlib import Path
@@ -128,3 +129,22 @@ def test_extract_zip_cleans_partial_files_on_extraction_failure(
     assert not (extract_dir / "broken").exists(), (
         "Failed extraction must not leave partial files behind"
     )
+
+def test_extract_zip_rejects_symlink_entries(tmp_path, monkeypatch):
+    extract_dir = tmp_path / "extracted"
+    extract_dir.mkdir()
+    monkeypatch.setattr(upload_service, "EXTRACT_DIR", extract_dir)
+
+    archive = tmp_path / "symlink.zip"
+
+    with zipfile.ZipFile(archive, "w") as zf:
+        info = zipfile.ZipInfo("link.py")
+        info.create_system = 3
+        info.external_attr = (stat.S_IFLNK | 0o777) << 16
+        zf.writestr(info, "../outside.py")
+
+    with pytest.raises(ValueError, match="symlink"):
+        upload_service.extract_zip(archive)
+
+    assert not (tmp_path / "outside.py").exists()
+    assert not (extract_dir / "symlink").exists()

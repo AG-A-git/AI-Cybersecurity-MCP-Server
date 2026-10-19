@@ -64,8 +64,7 @@ def test_ai_input_findings_must_be_dictionaries():
     ):
         ai_client.analyze_vulnerabilities([None])
 
-
-def test_ai_response_must_be_a_dictionary(monkeypatch):
+def test_invalid_ai_response_uses_scanner_fallback(monkeypatch):
     monkeypatch.setattr(
         ai_client,
         "analyze_vulnerability",
@@ -81,14 +80,21 @@ def test_ai_response_must_be_a_dictionary(monkeypatch):
         "code": "cursor.execute(query)",
     }
 
-    with pytest.raises(
-        ValueError,
-        match="AI response at index 0 must be a dictionary",
-    ):
-        ai_client.analyze_vulnerabilities([finding])
+    result = ai_client.analyze_vulnerabilities([finding])[0]
 
+    assert result["file"] == finding["file"]
+    assert result["line"] == finding["line"]
+    assert result["severity"] == finding["severity"]
+    assert result["confidence"] == finding["confidence"]
+    assert result["code"] == finding["code"]
+    assert result["risk_score"] == 67.5
+    assert result["owasp"] == "A03:2021 Injection"
+    assert result["cwe"] == "CWE-89"
+    assert result["explanation"] is None
+    assert result["impact"] is None
+    assert result["recommendation"] is None
 
-def test_ai_analysis_exception_propagates(monkeypatch):
+def test_ai_analysis_exception_uses_scanner_fallback(monkeypatch):
     def fail_analysis(finding):
         raise RuntimeError("AI service unavailable")
 
@@ -107,8 +113,10 @@ def test_ai_analysis_exception_propagates(monkeypatch):
         "code": "cursor.execute(query)",
     }
 
-    with pytest.raises(
-        RuntimeError,
-        match="AI service unavailable",
-    ):
-        ai_client.analyze_vulnerabilities([finding])
+    results = ai_client.analyze_vulnerabilities([finding])
+
+    assert len(results) == 1
+    assert results[0]["file"] == "src/app.py"
+    assert results[0]["severity"] == "High"
+    assert results[0]["risk_score"] == 67.5
+    assert results[0]["explanation"] is None

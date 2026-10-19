@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from models import Project, Scan, UploadedFile, Vulnerability
 from scanner_client import run_scanner
-from services.ai_client import analyze_vulnerabilities
+from services.ai_client import analyze_vulnerabilities, fallback_finding
 from logging_config import get_logger
 
 from services.scan_states import ScanStatus
@@ -383,18 +383,33 @@ def run_scan_pipeline(
         unique_finding_count,
     )
 
+
     # ---------------------------------------------------------
-    # AI stage
+    # AI enrichment stage
     # ---------------------------------------------------------
 
     if results:
-        results = analyze_vulnerabilities(results)
+        try:
+            results = analyze_vulnerabilities(results)
 
-        logger.info(
-            "AI stage completed | scan_id=%s | findings=%s",
-            scan.id,
-            len(results),
-        )
+            logger.info(
+                "AI enrichment finished | scan_id=%s | findings=%s",
+                scan.id,
+                len(results),
+            )
+
+        except Exception:
+            logger.exception(
+                "AI integration unavailable; preserving scanner findings "
+                "with deterministic fallback | scan_id=%s",
+                scan.id,
+            )
+
+            results = [
+                fallback_finding(finding)
+                for finding in results
+            ]
+
 
     # ---------------------------------------------------------
     # Validate AI results

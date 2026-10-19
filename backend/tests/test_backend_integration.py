@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 from pathlib import Path
 
 from sqlalchemy import create_engine
@@ -199,6 +199,7 @@ def test_project_creation():
 
 
 def test_project_ownership_isolation():
+    _retry_test_token()
     # ----------------------------------------------
     # Create second user
     # ----------------------------------------------
@@ -374,6 +375,7 @@ def test_file_upload():
 
 
 def test_upload_ownership_isolation():
+    _retry_test_token()
     # ----------------------------------------------
     # Login as first user
     # ----------------------------------------------
@@ -660,6 +662,7 @@ def test_scan_lifecycle():
 
 
 def test_scan_results_and_risk_score():
+    _retry_test_token()
     login_response = client.post(
         "/login",
         json={
@@ -1016,6 +1019,71 @@ def test_scan_result_ownership_isolation():
     # --------------------------------------------------
 
     assert response.status_code == 403
+    # The second user must not download reports for the first user's scan.
+    for report_format in ("json", "html", "pdf"):
+        report_response = client.get(
+            f"/scans/{scan_id}/report",
+            params={"format": report_format},
+            headers=second_headers,
+        )
+
+        assert report_response.status_code == 403, (
+            f"{report_format.upper()} report should reject another user's scan; "
+            f"got {report_response.status_code}: {report_response.text}"
+        )
+
+
+    # Verify MCP tools enforce ownership against the real test database.
+    import services.mcp_server as mcp_server
+    from fastapi import HTTPException
+    from database import get_db
+
+    # Get the authenticated attacker's actual database user ID.
+    db = TestingSessionLocal()
+    try:
+        attacker = (
+            db.query(User)
+            .filter(User.email == "scan_attacker_test@example.com")
+            .first()
+        )
+        assert attacker is not None
+        attacker_id = attacker.id
+    finally:
+        db.close()
+
+    monkeypatch = __import__("pytest").MonkeyPatch()
+    try:
+        monkeypatch.setattr(
+            mcp_server,
+            "SessionLocal",
+            TestingSessionLocal,
+        )
+        monkeypatch.setattr(
+            mcp_server,
+            "get_authenticated_mcp_user",
+            lambda: type(
+                "AuthenticatedUser",
+                (),
+                {"user_id": attacker_id},
+            )(),
+        )
+
+        for tool_call in (
+            lambda: mcp_server.get_scan_results(scan_id=scan_id),
+            lambda: mcp_server.get_risk_score(scan_id=scan_id),
+            lambda: mcp_server.generate_report(
+                scan_id=scan_id,
+                report_format="json",
+            ),
+        ):
+            try:
+                tool_call()
+                assert False, "MCP tool unexpectedly allowed cross-user access"
+            except mcp_server.ToolError as exc:
+                assert "403" in str(exc), str(exc)
+    finally:
+        monkeypatch.undo()
+
 # ==================================================
 # SCAN RETRY API TESTS
 # ==================================================
