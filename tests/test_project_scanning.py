@@ -161,6 +161,52 @@ def test_zip_rejects_path_traversal(tmp_path):
     assert not outside_file.exists()
 
 
+def test_zip_rejects_windows_style_path_traversal(tmp_path):
+    zip_path = tmp_path / "windows_traversal.zip"
+
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.writestr(r"..\outside.py", 'print("test")')
+
+    assert scan_project(str(zip_path)) == []
+
+
+@pytest.mark.parametrize(
+    "member_name",
+    [
+        r"C:\outside.py",
+        r"\\server\share\outside.py",
+        "/outside.py",
+    ],
+)
+def test_zip_rejects_absolute_member_paths(tmp_path, member_name):
+    zip_path = tmp_path / "absolute_path.zip"
+
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.writestr(member_name, 'print("test")')
+
+    assert scan_project(str(zip_path)) == []
+
+
+def test_zip_rejects_symbolic_link_entries(tmp_path):
+    from scanner.scan import scan_zip
+
+    zip_path = tmp_path / "symlink_entry.zip"
+
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.writestr(
+            "app.py",
+            "import pickle\n"
+            "data = pickle.loads(request.data)\n",
+        )
+
+        link = zipfile.ZipInfo("link.py")
+        link.create_system = 3
+        link.external_attr = (stat.S_IFLNK | 0o777) << 16
+        archive.writestr(link, "app.py")
+
+    assert scan_zip(zip_path) == []
+
+
 def test_zip_rejects_malformed_archive(tmp_path):
     zip_path = tmp_path / "malformed.zip"
     zip_path.write_bytes(b"this is not a valid zip archive")
