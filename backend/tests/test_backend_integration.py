@@ -1217,3 +1217,59 @@ def test_retry_scan_owned_by_another_user_returns_404():
         assert scan.status == "failed"
     finally:
         db.close()
+
+
+def test_upload_response_does_not_expose_internal_filepath():
+    registration = client.post(
+        "/register",
+        json={
+            "username": "upload_privacy_test_user",
+            "email": "upload_privacy_test@example.com",
+            "password": "TestPassword123!"
+        }
+    )
+    assert registration.status_code == 200
+
+    login = client.post(
+        "/login",
+        json={
+            "email": "upload_privacy_test@example.com",
+            "password": "TestPassword123!"
+        }
+    )
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+
+    project_response = client.post(
+        "/projects/",
+        params={
+            "project_name": "Upload Path Privacy Test",
+            "description": "Regression test for upload response privacy"
+        },
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert project_response.status_code == 200
+    project_id = project_response.json()["data"]["id"]
+
+    with open("tests/sample_upload.py", "rb") as test_file:
+        response = client.post(
+            "/upload/",
+            params={"project_id": project_id},
+            files={
+                "file": (
+                    "privacy_test.py",
+                    test_file,
+                    "text/x-python"
+                )
+            },
+            headers={"Authorization": f"Bearer {token}"}
+        )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+
+    assert data["filename"] == "privacy_test.py"
+    assert data["project_id"] == project_id
+    assert "id" in data
+    assert "language" in data
+    assert "filepath" not in data

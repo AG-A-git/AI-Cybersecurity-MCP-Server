@@ -240,7 +240,6 @@ async def upload_file(
         {
             "id": uploaded_file.id,
             "filename": uploaded_file.filename,
-            "filepath": uploaded_file.filepath,
             "language": uploaded_file.language,
             "project_id": uploaded_file.project_id
         }

@@ -1,6 +1,7 @@
 from pathlib import Path
+import uuid
 import zipfile
-
+import shutil
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 MAX_ZIP_EXTRACTED_SIZE = 50 * 1024 * 1024  # 50 MB
@@ -33,109 +34,100 @@ LANGUAGE_MAP = {
 
 
 def validate_extension(filename: str) -> bool:
-    """
-    Check whether the uploaded file has a supported extension.
-    """
-
-    extension = Path(filename).suffix.lower()
-
-    return extension in ALLOWED_EXTENSIONS
+    """Check whether the uploaded file has a supported extension."""
+    if not filename or not filename.strip():
+        return False
+    return Path(filename).suffix.lower() in ALLOWED_EXTENSIONS
 
 
 def get_language(filename: str) -> str:
-    """
-    Determine the programming language from the file extension.
-    """
-
+    """Determine the programming language from the file extension."""
     extension = Path(filename).suffix.lower()
-
     return LANGUAGE_MAP.get(extension, "unknown")
 
 
 async def save_file(file, filename: str) -> Path:
-    """
-    Save an uploaded file to the uploads directory
-    while enforcing a maximum file size.
-    """
-
-    safe_filename = Path(filename).name
-    if not safe_filename:
+    """Save an upload under a unique server-generated name with a size limit."""
+    if not filename or not filename.strip() or not Path(filename).name:
         raise ValueError("Invalid filename")
-    file_path = UPLOAD_DIR / safe_filename
 
+    extension = Path(filename).suffix.lower()
+    if extension not in ALLOWED_EXTENSIONS:
+        raise ValueError("Unsupported file type")
+
+    file_path = UPLOAD_DIR / f"{uuid.uuid4().hex}{extension}"
     total_size = 0
 
-    with open(file_path, "wb") as buffer:
-        while True:
-            chunk = await file.read(1024 * 1024)
+    try:
+        with open(file_path, "xb") as buffer:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
 
-            if not chunk:
-                break
+                total_size += len(chunk)
+                if total_size > MAX_FILE_SIZE:
+                    raise ValueError("File size exceeds the 10 MB limit")
 
-            total_size += len(chunk)
-
-            if total_size > MAX_FILE_SIZE:
-                buffer.close()
-
-                if file_path.exists():
-                    file_path.unlink()
-
-                raise ValueError(
-                    "File size exceeds the 10 MB limit"
-                )
-
-            buffer.write(chunk)
+                buffer.write(chunk)
+    except Exception:
+        if file_path.exists():
+            file_path.unlink()
+        raise
 
     return file_path
 
 
+from pathlib import Path
+import shutil
+import zipfile
+
+
 def extract_zip(file_path: Path) -> Path:
     """
-    Safely extract a ZIP project into the extracted directory.
-    Prevent path traversal and excessive ZIP contents.
+    Safely extract a ZIP project with path, size, and entry-count checks.
+    Remove the extraction directory if validation or extraction fails.
     """
-
     project_name = file_path.stem
-
     project_extract_dir = EXTRACT_DIR / project_name
 
-    project_extract_dir.mkdir(
-        parents=True,
-        exist_ok=True
-    )
+    # Refuse to overwrite an existing extraction directory.
+    if project_extract_dir.exists():
+        raise ValueError("A project with this extracted filename already exists")
 
-    with zipfile.ZipFile(file_path, "r") as zip_ref:
+    project_extract_dir.mkdir(parents=True, exist_ok=False)
 
-        members = zip_ref.infolist()
+    try:
+        with zipfile.ZipFile(file_path, "r") as zip_ref:
+            members = zip_ref.infolist()
 
-        if len(members) > MAX_ZIP_FILES:
-            raise ValueError(
-                "ZIP file contains too many files"
+            if len(members) > MAX_ZIP_FILES:
+                raise ValueError("ZIP file contains too many files")
+
+            total_uncompressed_size = sum(
+                member.file_size for member in members
             )
-
-        total_uncompressed_size = sum(
-            member.file_size
-            for member in members
-        )
-
-        if total_uncompressed_size > MAX_ZIP_EXTRACTED_SIZE:
-            raise ValueError(
-                "ZIP contents exceed the 50 MB extraction limit"
-            )
-
-        for member in members:
-
-            target_path = project_extract_dir / member.filename
-
-            try:
-                target_path.resolve().relative_to(
-                    project_extract_dir.resolve()
-                )
-            except ValueError:
+            if total_uncompressed_size > MAX_ZIP_EXTRACTED_SIZE:
                 raise ValueError(
-                    "Unsafe ZIP file: path traversal detected"
+                    "ZIP contents exceed the 50 MB extraction limit"
                 )
 
-        zip_ref.extractall(project_extract_dir)
+            root = project_extract_dir.resolve()
 
-    return project_extract_dir
+            for member in members:
+                target_path = (project_extract_dir / member.filename).resolve()
+                try:
+                    target_path.relative_to(root)
+                except ValueError:
+                    raise ValueError(
+                        "Unsafe ZIP file: path traversal detected"
+                    )
+
+            zip_ref.extractall(project_extract_dir)
+
+        return project_extract_dir
+
+    except Exception:
+        if project_extract_dir.exists():
+            shutil.rmtree(project_extract_dir, ignore_errors=True)
+        raise
