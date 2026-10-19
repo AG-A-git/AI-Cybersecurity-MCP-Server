@@ -262,6 +262,10 @@ def scan_zip(zip_path):
                     ):
                         return []
 
+                # Reject invalid negative declared file sizes.
+                if any(member.file_size < 0 for member in members):
+                    return []
+
                 # Limit total declared uncompressed size.
                 total_size = sum(
                     member.file_size for member in members

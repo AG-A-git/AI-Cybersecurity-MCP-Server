@@ -1,4 +1,5 @@
-﻿
+﻿import pytest
+import stat
 import zipfile
 
 from scanner.scan import scan_project
@@ -253,3 +254,45 @@ def test_engine_scans_project_inside_ancestor_named_venv(tmp_path):
     source_files = find_source_files(project_path)
 
     assert source_file in source_files
+
+
+def test_zip_rejects_negative_declared_file_size(tmp_path, monkeypatch):
+    import scanner.scan as scan_module
+
+    zip_path = tmp_path / "negative_size.zip"
+
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.writestr("safe.py", "print('safe')")
+
+    original_zip_file = scan_module.zipfile.ZipFile
+
+    class FakeInfo:
+        def __init__(self, original):
+            self.filename = original.filename
+            self.external_attr = original.external_attr
+            self.create_system = original.create_system
+            self.file_size = -1
+
+    class FakeArchive:
+        def __init__(self, *args, **kwargs):
+            self.archive = original_zip_file(*args, **kwargs)
+
+        def __enter__(self):
+            self.archive.__enter__()
+            return self
+
+        def __exit__(self, *args):
+            return self.archive.__exit__(*args)
+
+        def infolist(self):
+            return [
+                FakeInfo(info)
+                for info in self.archive.infolist()
+            ]
+
+        def extractall(self, path):
+            return self.archive.extractall(path)
+
+    monkeypatch.setattr(scan_module.zipfile, "ZipFile", FakeArchive)
+
+    assert scan_module.scan_zip(zip_path) == []
