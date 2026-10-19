@@ -24,6 +24,25 @@ def scan_project(project_path):
             except (OSError, UnicodeDecodeError):
                 continue
 
+            # Detect SQL f-strings spanning multiple source lines.
+            source_text = "".join(lines)
+            multiline_pattern = r"(?is)\bf(?P<quote>\x27{3}|\x22{3})(?:(?!(?P=quote)).)*?\b(?:SELECT|INSERT|UPDATE|DELETE)\b(?:(?!(?P=quote)).)*?\{[^{}]+\}(?:(?!(?P=quote)).)*?(?P=quote)"
+            for match in re.finditer(multiline_pattern, source_text):
+                matched_code = match.group(0)
+                if "\n" not in matched_code:
+                    continue
+                start_line = source_text.count("\n", 0, match.start()) + 1
+                findings.append(
+                    {
+                        "file": os.path.relpath(file_path, project_path),
+                        "line": start_line,
+                        "vulnerability": "SQL Injection",
+                        "severity": "Critical",
+                        "confidence": 95,
+                        "code": matched_code.strip(),
+                    }
+                )
+
             for line_number, line in enumerate(lines, start=1):
                 stripped_line = line.strip()
 
