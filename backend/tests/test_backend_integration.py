@@ -1341,3 +1341,85 @@ def test_upload_response_does_not_expose_internal_filepath():
     assert "id" in data
     assert "language" in data
     assert "filepath" not in data
+def test_zip_upload_cleans_files_when_database_commit_fails(monkeypatch, tmp_path):
+    import io
+    import zipfile
+
+    from sqlalchemy.orm import Session
+    import routers.upload as upload_router
+
+    email = "zip_cleanup_regression@example.com"
+
+    registration = client.post(
+        "/register",
+        json={
+            "username": "zip_cleanup_regression_user",
+            "email": email,
+            "password": "TestPassword123!",
+        },
+    )
+    assert registration.status_code == 200
+
+    login = client.post(
+        "/login",
+        json={"email": email, "password": "TestPassword123!"},
+    )
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+
+    project_response = client.post(
+        "/projects/",
+        params={
+            "project_name": "ZIP Cleanup Regression",
+            "description": "Test upload cleanup after database failure",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert project_response.status_code == 200
+    project_id = project_response.json()["data"]["id"]
+
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as zip_file:
+        zip_file.writestr("sample.py", "print('test')")
+
+    created = {}
+    original_save_file = upload_router.save_file
+
+    async def tracking_save_file(upload, filename):
+        saved_path = await original_save_file(upload, filename)
+        created["file_path"] = saved_path
+        return saved_path
+
+    extracted_dir = tmp_path / "extracted-regression"
+    extracted_dir.mkdir()
+    (extracted_dir / "sample.py").write_text(
+        "print('test')",
+        encoding="utf-8",
+    )
+
+    def fake_extract_zip(file_path):
+        return extracted_dir
+
+    def fail_commit(self):
+        raise RuntimeError("Simulated database commit failure")
+
+    monkeypatch.setattr(upload_router, "save_file", tracking_save_file)
+    monkeypatch.setattr(upload_router, "extract_zip", fake_extract_zip)
+    monkeypatch.setattr(Session, "commit", fail_commit)
+
+    response = client.post(
+        "/upload/",
+        params={"project_id": project_id},
+        files={
+            "file": (
+                "cleanup_regression.zip",
+                archive.getvalue(),
+                "application/zip",
+            )
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 500
+    assert created["file_path"].exists() is False
+    assert extracted_dir.exists() is False

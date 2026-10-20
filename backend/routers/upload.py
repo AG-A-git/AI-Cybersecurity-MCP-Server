@@ -1,3 +1,4 @@
+import shutil
 from response_utils import success_response
 import zipfile
 
@@ -158,10 +159,11 @@ async def upload_file(
     # 7. Safely extract ZIP
     # --------------------------------------------------
 
-    if Path(file.filename).suffix.lower() == ".zip":
+    extracted_dir = None
 
+    if Path(file.filename).suffix.lower() == ".zip":
         try:
-            extract_zip(file_path)
+            extracted_dir = extract_zip(file_path)
 
         except ValueError as e:
 
@@ -222,9 +224,12 @@ async def upload_file(
             file.filename
         )
 
-        # Remove physical file if database operation fails
+        # Remove physical files if database persistence fails.
         if file_path.exists():
             file_path.unlink()
+
+        if extracted_dir is not None and extracted_dir.exists():
+            shutil.rmtree(extracted_dir, ignore_errors=True)
 
         raise HTTPException(
             status_code=500,
