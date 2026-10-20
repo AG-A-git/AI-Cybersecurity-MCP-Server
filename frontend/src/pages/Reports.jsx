@@ -1,12 +1,9 @@
-
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { getProjects } from "../services/projectService";
-import {
-    getScans,
-    getScanResults,
-} from "../services/scanService";
+import { getScans, getScanResults } from "../services/scanService";
+import { downloadScanReport } from "../services/reportService";
 
 import LoadingState from "../components/LoadingState";
 import ErrorState from "../components/ErrorState";
@@ -97,16 +94,16 @@ const getScanList = (data) => {
     return [];
 };
 
-const getScanId = (scan) => scan.id ?? scan.scan_id;
+const getScanId = (scan) => scan?.id ?? scan?.scan_id;
 
 const getScanStatus = (scan) =>
-    scan.status ?? scan.scan_status ?? scan.state ?? "Unknown";
+    scan?.status ?? scan?.scan_status ?? scan?.state ?? "Unknown";
 
 const getScanFindings = (scan) => {
     const findings =
-        scan.findings ??
-        scan.vulnerabilities ??
-        scan.results;
+        scan?.findings ??
+        scan?.vulnerabilities ??
+        scan?.results;
 
     if (Array.isArray(findings)) {
         return findings;
@@ -125,11 +122,11 @@ const getScanFindings = (scan) => {
 
 const getSummaryFindingCount = (scan) => {
     const count =
-        scan.total_findings ??
-        scan.finding_count ??
-        scan.findings_count ??
-        scan.vulnerability_count ??
-        scan.total_vulnerabilities;
+        scan?.total_findings ??
+        scan?.finding_count ??
+        scan?.findings_count ??
+        scan?.vulnerability_count ??
+        scan?.total_vulnerabilities;
 
     if (count === null || count === undefined || count === "") {
         return null;
@@ -170,6 +167,7 @@ function Reports() {
     const [error, setError] = useState("");
     const [exportError, setExportError] = useState("");
     const [exportingScanId, setExportingScanId] = useState(null);
+    const [exportingFormat, setExportingFormat] = useState(null);
 
     const loadReports = useCallback(async () => {
         setLoading(true);
@@ -321,8 +319,9 @@ function Reports() {
             : "Not available";
     };
 
-    const downloadReport = async (selectedScan) => {
+    const downloadReport = async (selectedScan, format = "pdf") => {
         const scanId = getScanId(selectedScan);
+        const normalizedFormat = String(format).toLowerCase();
 
         setExportError("");
 
@@ -332,178 +331,69 @@ function Reports() {
             !Number.isInteger(Number(scanId)) ||
             Number(scanId) <= 0
         ) {
-            setExportError("A valid scan ID is required to export this report.");
+            setExportError(
+                "A valid scan ID is required to export this report."
+            );
+            return;
+        }
+
+        if (!["json", "html", "pdf"].includes(normalizedFormat)) {
+            setExportError("Unsupported report format.");
             return;
         }
 
         setExportingScanId(scanId);
+        setExportingFormat(normalizedFormat);
+
+        let objectUrl;
 
         try {
-            const details = await getScanResults(scanId);
+            const response = await downloadScanReport(
+                scanId,
+                normalizedFormat
+            );
 
-            // Validate the response before creating a downloadable report.
-            if (
-                !details ||
-                typeof details !== "object" ||
-                Array.isArray(details)
-            ) {
+            const blob = response.data;
+
+            if (!(blob instanceof Blob) || blob.size === 0) {
                 throw new Error(
-                    "The backend returned an invalid scan response. Please try again."
+                    "The backend returned an empty report."
                 );
             }
 
-            const returnedScanId = details.id ?? details.scan_id;
+            objectUrl = URL.createObjectURL(blob);
 
-            if (
-                returnedScanId == null ||
-                String(returnedScanId) !== String(scanId)
-            ) {
-                throw new Error(
-                    "The scan response did not match the requested scan. Export cancelled."
-                );
-            }
-
-            const uniqueFindings = removeDuplicateFindings(
-                getFindings(details)
-            );
-
-            const projectId =
-                details.project_id ??
-                selectedScan.project_id ??
-                details.project?.id ??
-                selectedScan.project?.id ??
-                null;
-
-            let projectName = getProjectName(projectId, {
-                ...selectedScan,
-                ...details,
-            });
-
-            if (
-                projectName ===
-                    `Project ${projectId ?? "Unknown"}` &&
-                projectId != null
-            ) {
-                try {
-                    const projectsResponse = await getProjects();
-
-                    const projectList = getProjectList(
-                        projectsResponse?.data ?? projectsResponse
-                    );
-
-                    const project = projectList.find(
-                        (item) =>
-                            String(item.id ?? item.project_id) ===
-                            String(projectId)
-                    );
-
-                    projectName =
-                        project?.project_name ??
-                        project?.name ??
-                        project?.title ??
-                        projectName;
-                } catch (projectError) {
-                    console.error(
-                        "Could not resolve project name:",
-                        projectError
-                    );
-                }
-            }
-
-            const report = {
-                report_generated_at: new Date().toISOString(),
-                scan_id: Number(returnedScanId),
-                project_id: projectId,
-                project_name: projectName,
-                scan_status:
-                    details.status ??
-                    details.scan_status ??
-                    getScanStatus(selectedScan),
-                scan_created_at: details.created_at ?? null,
-                risk_score: details.risk_score ?? null,
-                risk_level: details.risk_level ?? null,
-                vulnerability_count:
-                    details.vulnerability_count ??
-                    uniqueFindings.length,
-                severity_summary: {
-                    critical_count: details.critical_count ?? null,
-                    high_count: details.high_count ?? null,
-                    medium_count: details.medium_count ?? null,
-                    low_count: details.low_count ?? null,
-                },
-                findings: uniqueFindings.map((finding) => ({
-                    id: finding.id ?? null,
-                    file_name:
-                        finding.file_name ??
-                        finding.filename ??
-                        finding.file ??
-                        "Unknown",
-                    line_number:
-                        finding.line_number ??
-                        finding.line ??
-                        null,
-                    vulnerability_type:
-                        finding.vulnerability_type ??
-                        finding.vulnerability ??
-                        finding.type ??
-                        "Unknown",
-                    severity: finding.severity ?? "Unknown",
-                    confidence: finding.confidence ?? null,
-                    code:
-                        finding.code ??
-                        finding.vulnerable_code ??
-                        finding.source_code ??
-                        finding.snippet ??
-                        "",
-                    explanation:
-                        finding.explanation ??
-                        finding.description ??
-                        finding.message ??
-                        null,
-                    ai_analysis:
-                        typeof finding.ai_analysis === "string"
-                            ? finding.ai_analysis
-                            : null,
-                    recommendation:
-                        finding.recommendation ??
-                        finding.remediation ??
-                        finding.fix ??
-                        null,
-                })),
-                finding_count: uniqueFindings.length,
-                note: "Findings retrieved from the scan detail endpoint. This JSON file is generated by the frontend.",
-            };
-
-            const blob = new Blob(
-                [JSON.stringify(report, null, 2)],
-                { type: "application/json;charset=utf-8" }
-            );
-
-            const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
+            link.href = objectUrl;
+            link.download = `scan-report-${scanId}.${normalizedFormat}`;
+            link.style.display = "none";
+
+            document.body.appendChild(link);
 
             try {
-                link.href = url;
-                link.download = `scan-report-${scanId}.json`;
-                link.style.display = "none";
-
-                document.body.appendChild(link);
                 link.click();
             } finally {
                 link.remove();
-                window.setTimeout(() => URL.revokeObjectURL(url), 1000);
             }
         } catch (err) {
-            console.error("Failed to export scan report:", err);
+            console.error("Failed to download scan report:", err);
 
             setExportError(
                 getErrorMessage(
                     err,
-                    "Unable to export scan details. Please try again."
+                    `Unable to download the ${normalizedFormat.toUpperCase()} report. Please try again.`
                 )
             );
         } finally {
+            if (objectUrl) {
+                window.setTimeout(
+                    () => URL.revokeObjectURL(objectUrl),
+                    1000
+                );
+            }
+
             setExportingScanId(null);
+            setExportingFormat(null);
         }
     };
 
@@ -728,22 +618,36 @@ function Reports() {
                                                         View Results
                                                     </button>
 
-                                                    <button
-                                                        type="button"
-                                                        disabled={
-                                                            exportingScanId !== null ||
-                                                            scanId == null
+                                                    {["json", "html", "pdf"].map(
+                                                        (format) => {
+                                                            const isExporting =
+                                                                String(exportingScanId) ===
+                                                                    String(scanId) &&
+                                                                exportingFormat === format;
+
+                                                            return (
+                                                                <button
+                                                                    key={format}
+                                                                    type="button"
+                                                                    disabled={
+                                                                        exportingScanId !== null ||
+                                                                        scanId == null
+                                                                    }
+                                                                    className="rounded-md bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+                                                                    onClick={() =>
+                                                                        downloadReport(
+                                                                            scan,
+                                                                            format
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    {isExporting
+                                                                        ? "Exporting..."
+                                                                        : `Export ${format.toUpperCase()}`}
+                                                                </button>
+                                                            );
                                                         }
-                                                        className="rounded-md bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
-                                                        onClick={() =>
-                                                            downloadReport(scan)
-                                                        }
-                                                    >
-                                                        {String(exportingScanId) ===
-                                                        String(scanId)
-                                                            ? "Exporting..."
-                                                            : "Export JSON"}
-                                                    </button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
