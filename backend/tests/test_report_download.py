@@ -1,13 +1,21 @@
+import sys
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from fastapi import HTTPException
 
+# Always prioritize the backend directory over the repository root.
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+
+if str(BACKEND_DIR) in sys.path:
+    sys.path.remove(str(BACKEND_DIR))
+
+sys.path.insert(0, str(BACKEND_DIR))
+
 from app import app
 from routers import scan as scan_router
 from services import report_service
-
 
 client = TestClient(app)
 
@@ -55,13 +63,11 @@ def test_report_download_returns_attachment(
             "vulnerabilities": [],
         },
     )
-
     response = client.get(
         "/scans/123/report",
         params={"format": report_format},
         headers={"Authorization": "Bearer test-token"},
     )
-
     assert response.status_code == 200
     assert response.headers["content-type"].startswith(
         content_type.split(";")[0]
