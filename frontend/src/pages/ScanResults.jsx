@@ -1,9 +1,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { getScanResults } from "../services/scanService";
+import { getScanResults, retryScan } from "../services/scanService";
 import RiskSummary from "../components/RiskSummary";
 import FindingCard from "../components/FindingCard";
+import ScanStatus from "../components/ScanStatus";
 import { normalizeVulnerability } from "../utils/vulnerabilityUtils";
 import { deduplicateFindings } from "../utils/duplicateFindings";
 
@@ -112,6 +113,7 @@ function ScanResults() {
     });
 
     const [loading, setLoading] = useState(false);
+    const [retrying, setRetrying] = useState(false);
     const [error, setError] = useState("");
     const [searchTerm, setSearchTerm] = useState("");
     const [severityFilter, setSeverityFilter] = useState("All");
@@ -248,6 +250,22 @@ function ScanResults() {
             requestNumber.current += 1;
         };
     }, [location.state, scanId, loadScanResults]);
+
+    // Refresh authoritative results while a scan is active.
+    useEffect(() => {
+        const status = String(result?.status ?? "").trim().toLowerCase();
+        const activeStatuses = ["pending", "running", "in_progress"];
+
+        if (!scanId || loading || !activeStatuses.includes(status)) {
+            return undefined;
+        }
+
+        const timer = window.setTimeout(() => {
+            void loadScanResults();
+        }, 2500);
+
+        return () => window.clearTimeout(timer);
+    }, [scanId, result?.status, loading, loadScanResults]);
 
     // Normalize findings and remove duplicates.
     const vulnerabilities = useMemo(() => {
@@ -395,6 +413,59 @@ function ScanResults() {
         });
     };
 
+    const handleRetryScan = async () => {
+        const validScanId = getValidScanId(scanId);
+        const status = String(result?.status ?? "").trim().toLowerCase();
+
+        if (
+            !validScanId ||
+            !["failed", "error"].includes(status) ||
+            retrying ||
+            loading
+        ) {
+            return;
+        }
+
+        setRetrying(true);
+        setError("");
+
+        try {
+            const retryResult = await retryScan(validScanId);
+            const returnedId = getValidScanId(
+                retryResult?.scan_id ?? retryResult?.id
+            );
+
+            if (returnedId && returnedId !== validScanId) {
+                throw new Error("The backend returned a different scan ID.");
+            }
+
+            const updatedResult = {
+                ...resultRef.current,
+                status: retryResult?.status || "pending",
+            };
+            resultRef.current = updatedResult;
+            setResult(updatedResult);
+
+            // The retry was accepted. Refresh separately so a GET failure
+            // does not incorrectly report that the retry request failed.
+            try {
+                await loadScanResults();
+            } catch (refreshError) {
+                console.error("Retry accepted, but refresh failed:", refreshError);
+            }
+        } catch (err) {
+            console.error("Failed to submit scan retry:", err);
+            setError(
+                err.userMessage ||
+                    err.response?.data?.detail ||
+                    err.message ||
+                    "Could not submit the scan retry. Please try again."
+            );
+        } finally {
+            setRetrying(false);
+        }
+    };
+
     const handleResetFilters = () => {
         setSearchTerm("");
         setSeverityFilter("All");
@@ -459,7 +530,19 @@ function ScanResults() {
                         </h2>
                         <p>Scan ID: {result.id ?? scanId ?? "N/A"}</p>
                         <p>Project ID: {result.project_id ?? "N/A"}</p>
-                        <p>Status: {result.status ?? "Unknown"}</p>
+                        <ScanStatus status={result.status} />
+                        {["failed", "error"].includes(
+                            String(result.status ?? "").trim().toLowerCase()
+                        ) && (
+                            <button
+                                type="button"
+                                onClick={handleRetryScan}
+                                disabled={retrying || loading}
+                                className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                {retrying ? "Retrying scan..." : "Retry Failed Scan"}
+                            </button>
+                        )}
 
                         {result.created_at && (
                             <p>

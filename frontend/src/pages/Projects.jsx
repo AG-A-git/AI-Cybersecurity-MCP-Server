@@ -36,7 +36,9 @@ function Projects() {
                 ? data
                 : Array.isArray(data?.projects)
                     ? data.projects
-                    : [];
+                    : Array.isArray(data?.data)
+                        ? data.data
+                        : [];
 
             setProjects(projectList);
         } catch (err) {

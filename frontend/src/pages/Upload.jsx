@@ -1,4 +1,4 @@
-
+﻿
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getProjects, getProjectFiles } from "../services/projectService";
@@ -234,7 +234,8 @@ const Upload = () => {
 
         try {
             const response = await startScan(projectId);
-            const result = response?.data ?? response;
+            const envelope = response?.data ?? response;
+            const result = envelope?.data ?? envelope;
 
             console.log("Scan response:", result);
 
