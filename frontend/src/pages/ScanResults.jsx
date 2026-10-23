@@ -2,10 +2,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import "../styles/ScanResults.css";
-
-import { getScanResults } from "../services/scanService";
+import { getScanResults, retryScan } from "../services/scanService";
 import RiskSummary from "../components/RiskSummary";
 import FindingCard from "../components/FindingCard";
+import ScanStatus from "../components/ScanStatus";
 import { normalizeVulnerability } from "../utils/vulnerabilityUtils";
 import { deduplicateFindings } from "../utils/duplicateFindings";
 
@@ -115,6 +115,7 @@ function ScanResults() {
     });
 
     const [loading, setLoading] = useState(false);
+    const [retrying, setRetrying] = useState(false);
     const [error, setError] = useState("");
     const [searchTerm, setSearchTerm] = useState("");
     const [severityFilter, setSeverityFilter] = useState("All");
@@ -196,13 +197,13 @@ function ScanResults() {
 
             console.error("Failed to load scan results:", err);
 
-            // A background refresh failure should not erase valid findings.
+            // Keep existing findings if a background refresh fails.
             if (!background) {
-                const currentResultId = getValidScanId(
+                const existingResultId = getValidScanId(
                     resultRef.current?.scan_id ?? resultRef.current?.id
                 );
 
-                if (currentResultId !== validScanId) {
+                if (existingResultId !== validScanId) {
                     resultRef.current = null;
                     setResult(null);
                 }
@@ -262,29 +263,28 @@ function ScanResults() {
             }
         }
 
-        loadScanResults();
+        void loadScanResults();
 
         return () => {
-            // Invalidate outstanding requests when the scan changes or page unmounts.
+            // Ignore outstanding requests when changing scans or unmounting.
             requestNumber.current += 1;
         };
     }, [location.state, scanId, loadScanResults]);
 
-    // Poll every five seconds while the current scan is running.
+    // Refresh results periodically while the scan is active.
     useEffect(() => {
         const status = getScanStatus(result);
+        const activeStatuses = ["pending", "running", "in_progress"];
 
-        if (!scanId || status !== "running") {
+        if (!scanId || !activeStatuses.includes(status)) {
             return undefined;
         }
 
-        const timerId = setTimeout(() => {
-            loadScanResults({ background: true });
+        const timerId = window.setTimeout(() => {
+            void loadScanResults({ background: true });
         }, POLL_INTERVAL_MS);
 
-        return () => {
-            clearTimeout(timerId);
-        };
+        return () => window.clearTimeout(timerId);
     }, [
         scanId,
         result?.status,
@@ -293,7 +293,6 @@ function ScanResults() {
         loadScanResults,
     ]);
 
-    // Normalize findings and remove duplicates.
     const vulnerabilities = useMemo(() => {
         const normalizedFindings = getFindings(result).map((item) =>
             normalizeVulnerability(item, result)
@@ -302,7 +301,6 @@ function ScanResults() {
         return deduplicateFindings(normalizedFindings);
     }, [result]);
 
-    // Calculate severity counts from unique findings.
     const summary = useMemo(() => {
         const counts = {
             critical: 0,
@@ -328,7 +326,6 @@ function ScanResults() {
         [vulnerabilities]
     );
 
-    // Search, filter, and sort findings.
     const sortedVulnerabilities = useMemo(() => {
         const query = searchTerm.trim().toLowerCase();
 
@@ -363,9 +360,11 @@ function ScanResults() {
                 .join(" ")
                 .toLowerCase();
 
-            const searchMatches = !query || searchableText.includes(query);
-
-            return severityMatches && typeMatches && searchMatches;
+            return (
+                severityMatches &&
+                typeMatches &&
+                (!query || searchableText.includes(query))
+            );
         });
 
         return [...filtered].sort((a, b) => {
@@ -375,41 +374,34 @@ function ScanResults() {
             switch (sortOrder) {
                 case "severity-low":
                     return rankA - rankB;
-
                 case "risk-high":
                     return (
                         (Number(b.risk_score) || 0) -
                         (Number(a.risk_score) || 0)
                     );
-
                 case "risk-low":
                     return (
                         (Number(a.risk_score) || 0) -
                         (Number(b.risk_score) || 0)
                     );
-
                 case "file-az":
                     return (a.file_name || a.filename || "").localeCompare(
                         b.file_name || b.filename || ""
                     );
-
                 case "file-za":
                     return (b.file_name || b.filename || "").localeCompare(
                         a.file_name || a.filename || ""
                     );
-
                 case "line-low":
                     return (
                         (Number(a.line_number) || 0) -
                         (Number(b.line_number) || 0)
                     );
-
                 case "line-high":
                     return (
                         (Number(b.line_number) || 0) -
                         (Number(a.line_number) || 0)
                     );
-
                 case "severity-high":
                 default:
                     return rankB - rankA;
@@ -436,6 +428,61 @@ function ScanResults() {
                     result?.filename,
             },
         });
+    };
+
+    const handleRetryScan = async () => {
+        const validScanId = getValidScanId(scanId);
+        const status = getScanStatus(result);
+
+        if (
+            !validScanId ||
+            !["failed", "error"].includes(status) ||
+            retrying ||
+            loading
+        ) {
+            return;
+        }
+
+        setRetrying(true);
+        setError("");
+
+        try {
+            const retryResult = await retryScan(validScanId);
+            const returnedId = getValidScanId(
+                retryResult?.scan_id ?? retryResult?.id
+            );
+
+            if (returnedId && returnedId !== validScanId) {
+                throw new Error("The backend returned a different scan ID.");
+            }
+
+            const updatedResult = {
+                ...resultRef.current,
+                status: retryResult?.status || "pending",
+            };
+
+            resultRef.current = updatedResult;
+            setResult(updatedResult);
+
+            try {
+                await loadScanResults();
+            } catch (refreshError) {
+                console.error(
+                    "Retry accepted, but refresh failed:",
+                    refreshError
+                );
+            }
+        } catch (err) {
+            console.error("Failed to submit scan retry:", err);
+            setError(
+                err.userMessage ||
+                    err.response?.data?.detail ||
+                    err.message ||
+                    "Could not submit the scan retry. Please try again."
+            );
+        } finally {
+            setRetrying(false);
+        }
     };
 
     const handleResetFilters = () => {
@@ -469,7 +516,7 @@ function ScanResults() {
 
                 <button
                     type="button"
-                    onClick={() => loadScanResults()}
+                    onClick={() => void loadScanResults()}
                     disabled={loading}
                     className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium disabled:opacity-50"
                 >
@@ -485,7 +532,7 @@ function ScanResults() {
                     <p>{error}</p>
                     <button
                         type="button"
-                        onClick={() => loadScanResults()}
+                        onClick={() => void loadScanResults()}
                         disabled={loading}
                         className="mt-2 font-semibold underline disabled:opacity-50"
                     >
@@ -500,24 +547,36 @@ function ScanResults() {
                         <h2 className="mb-3 text-lg font-semibold">
                             Scan Information
                         </h2>
-                        <p>Scan ID: {result.id ?? scanId ?? "N/A"}</p>
+                        <p>Scan ID: {result.scan_id ?? result.id ?? scanId ?? "N/A"}</p>
                         <p>Project ID: {result.project_id ?? "N/A"}</p>
-                        <p>
-                            Status:{" "}
-                            <span role="status">{result.status ?? "Unknown"}</span>
-                        </p>
 
-                        {getScanStatus(result) === "running" && (
+                        <ScanStatus status={result.status} />
+
+                        {["failed", "error"].includes(getScanStatus(result)) && (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={handleRetryScan}
+                                    disabled={retrying || loading}
+                                    className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {retrying
+                                        ? "Retrying scan..."
+                                        : "Retry Failed Scan"}
+                                </button>
+                                <p className="mt-2 text-sm text-red-700">
+                                    This scan failed. Check the error details or
+                                    retry the scan.
+                                </p>
+                            </>
+                        )}
+
+                        {["pending", "running", "in_progress"].includes(
+                            getScanStatus(result)
+                        ) && (
                             <p className="mt-2 text-sm text-blue-700">
                                 Scan in progress. Results refresh automatically
                                 every five seconds.
-                            </p>
-                        )}
-
-                        {getScanStatus(result) === "failed" && (
-                            <p className="mt-2 text-sm text-red-700">
-                                This scan failed. Check the error details or try
-                                starting a new scan.
                             </p>
                         )}
 

@@ -40,10 +40,12 @@ function getErrorMessage(err, fallback) {
     }
 
     if (Array.isArray(detail)) {
-        return detail
-            .map((item) => item?.msg)
-            .filter(Boolean)
-            .join(", ") || fallback;
+        return (
+            detail
+                .map((item) => item?.msg)
+                .filter(Boolean)
+                .join(", ") || fallback
+        );
     }
 
     return err?.message || fallback;
@@ -173,7 +175,9 @@ function Projects() {
                     <p className="projects-eyebrow">
                         SECURITY WORKSPACE
                     </p>
+
                     <h1>Projects</h1>
+
                     <p className="projects-subtitle">
                         Organize your applications and prepare source code
                         for security scanning.
@@ -184,6 +188,7 @@ function Projects() {
                     <span className="projects-summary-label">
                         Total projects
                     </span>
+
                     <strong>
                         {loadingProjects ? "—" : projects.length}
                     </strong>
@@ -199,6 +204,7 @@ function Projects() {
                         <h2 id="create-project-heading">
                             Create a project
                         </h2>
+
                         <p>
                             Add an application to your security workspace.
                         </p>
@@ -315,6 +321,7 @@ function Projects() {
                         <h2 id="my-projects-heading">
                             Your projects
                         </h2>
+
                         <p>
                             Select a project to upload source code and
                             begin a security scan.
@@ -349,6 +356,7 @@ function Projects() {
                     <div className="projects-grid">
                         {projects.map((project, index) => {
                             const projectId = project.id;
+
                             const projectTitle =
                                 project.project_name ||
                                 project.name ||
@@ -386,9 +394,8 @@ function Projects() {
                                     </p>
 
                                     <div className="project-card-meta">
-                                        <span>
-                                            Project ID
-                                        </span>
+                                        <span>Project ID</span>
+
                                         <strong>
                                             {projectId ?? "Unavailable"}
                                         </strong>
@@ -408,6 +415,7 @@ function Projects() {
                                             }
                                         >
                                             Upload source code
+
                                             <span aria-hidden="true">
                                                 →
                                             </span>

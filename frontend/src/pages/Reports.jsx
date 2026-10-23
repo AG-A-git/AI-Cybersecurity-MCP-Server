@@ -1,12 +1,10 @@
-
+﻿
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { getProjects } from "../services/projectService";
-import {
-    getScans,
-    getScanResults,
-} from "../services/scanService";
+import { getScans, getScanResults } from "../services/scanService";
+import { downloadScanReport } from "../services/reportService";
 
 import LoadingState from "../components/LoadingState";
 import ErrorState from "../components/ErrorState";
@@ -14,26 +12,11 @@ import EmptyState from "../components/EmptyState";
 import "../styles/Reports.css";
 
 const getFindings = (data) => {
-    if (Array.isArray(data?.vulnerabilities)) {
-        return data.vulnerabilities;
-    }
-
-    if (Array.isArray(data?.findings)) {
-        return data.findings;
-    }
-
-    if (Array.isArray(data?.results?.vulnerabilities)) {
-        return data.results.vulnerabilities;
-    }
-
-    if (Array.isArray(data?.results?.findings)) {
-        return data.results.findings;
-    }
-
-    if (Array.isArray(data?.results)) {
-        return data.results;
-    }
-
+    if (Array.isArray(data?.vulnerabilities)) return data.vulnerabilities;
+    if (Array.isArray(data?.findings)) return data.findings;
+    if (Array.isArray(data?.results?.vulnerabilities)) return data.results.vulnerabilities;
+    if (Array.isArray(data?.results?.findings)) return data.results.findings;
+    if (Array.isArray(data?.results)) return data.results;
     return [];
 };
 
@@ -46,23 +29,15 @@ const getFindingKey = (finding) => {
             .toLowerCase();
 
     return JSON.stringify([
-        normalize(
-            finding.file_name ??
-                finding.filename ??
-                finding.file
-        ),
+        normalize(finding.file_name ?? finding.filename ?? finding.file),
         normalize(finding.line_number ?? finding.line),
-        normalize(
-            finding.vulnerability_type ??
-                finding.vulnerability ??
-                finding.type
-        ),
+        normalize(finding.vulnerability_type ?? finding.vulnerability ?? finding.type),
         normalize(finding.severity),
         normalize(
             finding.code ??
-                finding.vulnerable_code ??
-                finding.source_code ??
-                finding.snippet
+            finding.vulnerable_code ??
+            finding.source_code ??
+            finding.snippet
         ),
     ]);
 };
@@ -72,11 +47,7 @@ const removeDuplicateFindings = (findings) => {
 
     return findings.filter((finding) => {
         const key = getFindingKey(finding);
-
-        if (seen.has(key)) {
-            return false;
-        }
-
+        if (seen.has(key)) return false;
         seen.add(key);
         return true;
     });
@@ -98,61 +69,40 @@ const getScanList = (data) => {
     return [];
 };
 
-const getScanId = (scan) => scan.id ?? scan.scan_id;
+const getScanId = (scan) => scan?.id ?? scan?.scan_id;
 
 const getScanStatus = (scan) =>
-    scan.status ?? scan.scan_status ?? scan.state ?? "Unknown";
+    scan?.status ?? scan?.scan_status ?? scan?.state ?? "Unknown";
 
 const getScanFindings = (scan) => {
-    const findings =
-        scan.findings ??
-        scan.vulnerabilities ??
-        scan.results;
+    const findings = scan?.findings ?? scan?.vulnerabilities ?? scan?.results;
 
-    if (Array.isArray(findings)) {
-        return findings;
-    }
-
-    if (Array.isArray(findings?.findings)) {
-        return findings.findings;
-    }
-
-    if (Array.isArray(findings?.vulnerabilities)) {
-        return findings.vulnerabilities;
-    }
+    if (Array.isArray(findings)) return findings;
+    if (Array.isArray(findings?.findings)) return findings.findings;
+    if (Array.isArray(findings?.vulnerabilities)) return findings.vulnerabilities;
 
     return [];
 };
 
 const getSummaryFindingCount = (scan) => {
     const count =
-        scan.total_findings ??
-        scan.finding_count ??
-        scan.findings_count ??
-        scan.vulnerability_count ??
-        scan.total_vulnerabilities;
+        scan?.total_findings ??
+        scan?.finding_count ??
+        scan?.findings_count ??
+        scan?.vulnerability_count ??
+        scan?.total_vulnerabilities;
 
-    if (count === null || count === undefined || count === "") {
-        return null;
-    }
+    if (count === null || count === undefined || count === "") return null;
 
     const parsed = Number(count);
-
-    return Number.isFinite(parsed) && parsed >= 0
-        ? parsed
-        : null;
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 };
 
 const getErrorMessage = (error, fallback) => {
-    if (error?.userMessage) {
-        return error.userMessage;
-    }
+    if (error?.userMessage) return error.userMessage;
 
     const detail = error?.response?.data?.detail;
-
-    if (typeof detail === "string" && detail.trim()) {
-        return detail;
-    }
+    if (typeof detail === "string" && detail.trim()) return detail;
 
     if (typeof error?.message === "string" && error.message.trim()) {
         return error.message;
@@ -171,17 +121,17 @@ function Reports() {
     const [error, setError] = useState("");
     const [exportError, setExportError] = useState("");
     const [exportingScanId, setExportingScanId] = useState(null);
+    const [exportingFormat, setExportingFormat] = useState(null);
 
     const loadReports = useCallback(async () => {
         setLoading(true);
         setError("");
 
         try {
-            const [projectsResult, scansResult] =
-                await Promise.allSettled([
-                    getProjects(),
-                    getScans(),
-                ]);
+            const [projectsResult, scansResult] = await Promise.allSettled([
+                getProjects(),
+                getScans(),
+            ]);
 
             if (projectsResult.status === "rejected") {
                 throw projectsResult.reason;
@@ -189,7 +139,6 @@ function Reports() {
 
             const projectData =
                 projectsResult.value?.data ?? projectsResult.value;
-
             const projectList = getProjectList(projectData);
             setProjects(projectList);
 
@@ -197,9 +146,7 @@ function Reports() {
                 throw scansResult.reason;
             }
 
-            const scanData =
-                scansResult.value?.data ?? scansResult.value;
-
+            const scanData = scansResult.value?.data ?? scansResult.value;
             const scanList = getScanList(scanData);
             setScans(scanList);
 
@@ -207,15 +154,13 @@ function Reports() {
 
             scanList.forEach((scan) => {
                 const id = getScanId(scan);
-
                 if (id == null) return;
 
                 const findings = getScanFindings(scan);
                 const summaryCount = getSummaryFindingCount(scan);
 
                 if (findings.length > 0) {
-                    initialCounts[id] =
-                        removeDuplicateFindings(findings).length;
+                    initialCounts[id] = removeDuplicateFindings(findings).length;
                 } else if (summaryCount !== null) {
                     initialCounts[id] = summaryCount;
                 }
@@ -229,7 +174,6 @@ function Reports() {
                     .map(async (scan) => {
                         const id = getScanId(scan);
                         const details = await getScanResults(id);
-
                         return { id, details };
                     })
             );
@@ -249,11 +193,9 @@ function Reports() {
                 const findings = getFindings(details);
 
                 if (findings.length > 0) {
-                    resolvedCounts[id] =
-                        removeDuplicateFindings(findings).length;
+                    resolvedCounts[id] = removeDuplicateFindings(findings).length;
                 } else {
-                    const summaryCount =
-                        getSummaryFindingCount(details);
+                    const summaryCount = getSummaryFindingCount(details);
 
                     if (summaryCount !== null) {
                         resolvedCounts[id] = summaryCount;
@@ -266,7 +208,6 @@ function Reports() {
             setFindingCounts(resolvedCounts);
         } catch (err) {
             console.error("Failed to load reports:", err);
-
             setError(
                 getErrorMessage(
                     err,
@@ -285,8 +226,7 @@ function Reports() {
     const getProjectName = (projectId, scan = null) => {
         const project = projects.find(
             (item) =>
-                String(item.id ?? item.project_id) ===
-                String(projectId)
+                String(item.id ?? item.project_id) === String(projectId)
         );
 
         return (
@@ -302,10 +242,7 @@ function Reports() {
     const getFindingCount = (scan) => {
         const id = getScanId(scan);
 
-        if (
-            id != null &&
-            findingCounts[id] !== undefined
-        ) {
+        if (id != null && findingCounts[id] !== undefined) {
             return findingCounts[id];
         }
 
@@ -316,14 +253,12 @@ function Reports() {
         }
 
         const summaryCount = getSummaryFindingCount(scan);
-
-        return summaryCount !== null
-            ? summaryCount
-            : "Not available";
+        return summaryCount !== null ? summaryCount : "Not available";
     };
 
-    const downloadReport = async (selectedScan) => {
+    const downloadReport = async (selectedScan, format = "pdf") => {
         const scanId = getScanId(selectedScan);
+        const normalizedFormat = String(format).toLowerCase();
 
         setExportError("");
 
@@ -337,174 +272,52 @@ function Reports() {
             return;
         }
 
+        if (!["json", "html", "pdf"].includes(normalizedFormat)) {
+            setExportError("Unsupported report format.");
+            return;
+        }
+
         setExportingScanId(scanId);
+        setExportingFormat(normalizedFormat);
+
+        let objectUrl;
 
         try {
-            const details = await getScanResults(scanId);
+            const response = await downloadScanReport(scanId, normalizedFormat);
+            const blob = response.data;
 
-            // Validate the response before creating a downloadable report.
-            if (
-                !details ||
-                typeof details !== "object" ||
-                Array.isArray(details)
-            ) {
-                throw new Error(
-                    "The backend returned an invalid scan response. Please try again."
-                );
+            if (!(blob instanceof Blob) || blob.size === 0) {
+                throw new Error("The backend returned an empty report.");
             }
 
-            const returnedScanId = details.id ?? details.scan_id;
+            objectUrl = URL.createObjectURL(blob);
 
-            if (
-                returnedScanId == null ||
-                String(returnedScanId) !== String(scanId)
-            ) {
-                throw new Error(
-                    "The scan response did not match the requested scan. Export cancelled."
-                );
-            }
-
-            const uniqueFindings = removeDuplicateFindings(
-                getFindings(details)
-            );
-
-            const projectId =
-                details.project_id ??
-                selectedScan.project_id ??
-                details.project?.id ??
-                selectedScan.project?.id ??
-                null;
-
-            let projectName = getProjectName(projectId, {
-                ...selectedScan,
-                ...details,
-            });
-
-            if (
-                projectName ===
-                    `Project ${projectId ?? "Unknown"}` &&
-                projectId != null
-            ) {
-                try {
-                    const projectsResponse = await getProjects();
-
-                    const projectList = getProjectList(
-                        projectsResponse?.data ?? projectsResponse
-                    );
-
-                    const project = projectList.find(
-                        (item) =>
-                            String(item.id ?? item.project_id) ===
-                            String(projectId)
-                    );
-
-                    projectName =
-                        project?.project_name ??
-                        project?.name ??
-                        project?.title ??
-                        projectName;
-                } catch (projectError) {
-                    console.error(
-                        "Could not resolve project name:",
-                        projectError
-                    );
-                }
-            }
-
-            const report = {
-                report_generated_at: new Date().toISOString(),
-                scan_id: Number(returnedScanId),
-                project_id: projectId,
-                project_name: projectName,
-                scan_status:
-                    details.status ??
-                    details.scan_status ??
-                    getScanStatus(selectedScan),
-                scan_created_at: details.created_at ?? null,
-                risk_score: details.risk_score ?? null,
-                risk_level: details.risk_level ?? null,
-                vulnerability_count:
-                    details.vulnerability_count ??
-                    uniqueFindings.length,
-                severity_summary: {
-                    critical_count: details.critical_count ?? null,
-                    high_count: details.high_count ?? null,
-                    medium_count: details.medium_count ?? null,
-                    low_count: details.low_count ?? null,
-                },
-                findings: uniqueFindings.map((finding) => ({
-                    id: finding.id ?? null,
-                    file_name:
-                        finding.file_name ??
-                        finding.filename ??
-                        finding.file ??
-                        "Unknown",
-                    line_number:
-                        finding.line_number ??
-                        finding.line ??
-                        null,
-                    vulnerability_type:
-                        finding.vulnerability_type ??
-                        finding.vulnerability ??
-                        finding.type ??
-                        "Unknown",
-                    severity: finding.severity ?? "Unknown",
-                    confidence: finding.confidence ?? null,
-                    code:
-                        finding.code ??
-                        finding.vulnerable_code ??
-                        finding.source_code ??
-                        finding.snippet ??
-                        "",
-                    explanation:
-                        finding.explanation ??
-                        finding.description ??
-                        finding.message ??
-                        null,
-                    ai_analysis:
-                        typeof finding.ai_analysis === "string"
-                            ? finding.ai_analysis
-                            : null,
-                    recommendation:
-                        finding.recommendation ??
-                        finding.remediation ??
-                        finding.fix ??
-                        null,
-                })),
-                finding_count: uniqueFindings.length,
-                note: "Findings retrieved from the scan detail endpoint. This JSON file is generated by the frontend.",
-            };
-
-            const blob = new Blob(
-                [JSON.stringify(report, null, 2)],
-                { type: "application/json;charset=utf-8" }
-            );
-
-            const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
+            link.href = objectUrl;
+            link.download = `scan-report-${scanId}.${normalizedFormat}`;
+            link.style.display = "none";
+            document.body.appendChild(link);
 
             try {
-                link.href = url;
-                link.download = `scan-report-${scanId}.json`;
-                link.style.display = "none";
-
-                document.body.appendChild(link);
                 link.click();
             } finally {
                 link.remove();
-                window.setTimeout(() => URL.revokeObjectURL(url), 1000);
             }
         } catch (err) {
-            console.error("Failed to export scan report:", err);
-
+            console.error("Failed to download scan report:", err);
             setExportError(
                 getErrorMessage(
                     err,
-                    "Unable to export scan details. Please try again."
+                    `Unable to download the ${normalizedFormat.toUpperCase()} report. Please try again.`
                 )
             );
         } finally {
+            if (objectUrl) {
+                window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+            }
+
             setExportingScanId(null);
+            setExportingFormat(null);
         }
     };
 
@@ -521,10 +334,7 @@ function Reports() {
         return (
             <main className="reports-page">
                 <h1 className="reports-title">Reports</h1>
-                <ErrorState
-                    message={error}
-                    onRetry={loadReports}
-                />
+                <ErrorState message={error} onRetry={loadReports} />
             </main>
         );
     }
@@ -545,10 +355,7 @@ function Reports() {
             </header>
 
             {exportError && (
-                <div
-                    role="alert"
-                    className="reports-export-error"
-                >
+                <div role="alert" className="reports-export-error">
                     <div className="reports-error-content">
                         <p>{exportError}</p>
                         <button
@@ -566,21 +373,11 @@ function Reports() {
                 {[
                     { label: "Total Projects", value: projects.length },
                     { label: "Total Scans", value: scans.length },
-                    {
-                        label: "Completed Scans",
-                        value: completedScans.length,
-                    },
+                    { label: "Completed Scans", value: completedScans.length },
                 ].map((item) => (
-                    <article
-                        key={item.label}
-                        className="reports-stat-card"
-                    >
-                        <h2 className="reports-stat-label">
-                            {item.label}
-                        </h2>
-                        <p className="reports-stat-value">
-                            {item.value}
-                        </p>
+                    <article key={item.label} className="reports-stat-card">
+                        <h2 className="reports-stat-label">{item.label}</h2>
+                        <p className="reports-stat-value">{item.value}</p>
                     </article>
                 ))}
             </section>
@@ -598,15 +395,11 @@ function Reports() {
                 ) : (
                     <div className="reports-project-grid">
                         {projects.map((project, index) => {
-                            const projectId =
-                                project.id ?? project.project_id;
-
+                            const projectId = project.id ?? project.project_id;
                             const projectScans = scans.filter(
                                 (scan) =>
-                                    String(
-                                        scan.project_id ??
-                                        scan.project?.id
-                                    ) === String(projectId)
+                                    String(scan.project_id ?? scan.project?.id) ===
+                                    String(projectId)
                             );
 
                             return (
@@ -624,11 +417,9 @@ function Reports() {
                                     <p className="reports-muted">
                                         Project ID: {projectId ?? "Not available"}
                                     </p>
-
                                     <p className="reports-muted">
                                         {project.description ?? "No description"}
                                     </p>
-
                                     <p className="reports-muted">
                                         Total scans: {projectScans.length}
                                     </p>
@@ -637,6 +428,13 @@ function Reports() {
                                         type="button"
                                         className="reports-button reports-button-primary"
                                         onClick={() => {
+                                            if (projectId == null) {
+                                                setExportError(
+                                                    "This project does not have a valid ID."
+                                                );
+                                                return;
+                                            }
+
                                             localStorage.setItem(
                                                 "selected_project_id",
                                                 String(projectId)
@@ -666,22 +464,13 @@ function Reports() {
                 ) : (
                     <div className="reports-table-wrap">
                         <table className="reports-table">
-                            <thead >
+                            <thead>
                                 <tr>
-                                    {[
-                                        "Scan ID",
-                                        "Project",
-                                        "Status",
-                                        "Findings",
-                                        "Actions",
-                                    ].map((heading) => (
-                                        <th
-                                            key={heading}
-
-                                        >
-                                            {heading}
-                                        </th>
-                                    ))}
+                                    {["Scan ID", "Project", "Status", "Findings", "Actions"].map(
+                                        (heading) => (
+                                            <th key={heading}>{heading}</th>
+                                        )
+                                    )}
                                 </tr>
                             </thead>
 
@@ -691,27 +480,17 @@ function Reports() {
 
                                     return (
                                         <tr key={scanId ?? index}>
-                                            <td >
-                                                {scanId ?? "N/A"}
-                                            </td>
-
-                                            <td >
+                                            <td>{scanId ?? "N/A"}</td>
+                                            <td>
                                                 {getProjectName(
-                                                    scan.project_id ??
-                                                        scan.project?.id,
+                                                    scan.project_id ?? scan.project?.id,
                                                     scan
                                                 )}
                                             </td>
+                                            <td>{getScanStatus(scan)}</td>
+                                            <td>{getFindingCount(scan)}</td>
 
-                                            <td >
-                                                {getScanStatus(scan)}
-                                            </td>
-
-                                            <td >
-                                                {getFindingCount(scan)}
-                                            </td>
-
-                                            <td >
+                                            <td>
                                                 <div className="reports-button-row">
                                                     <button
                                                         type="button"
@@ -729,22 +508,31 @@ function Reports() {
                                                         View Results
                                                     </button>
 
-                                                    <button
-                                                        type="button"
-                                                        disabled={
-                                                            exportingScanId !== null ||
-                                                            scanId == null
-                                                        }
-                                                        className="reports-button reports-button-primary"
-                                                        onClick={() =>
-                                                            downloadReport(scan)
-                                                        }
-                                                    >
-                                                        {String(exportingScanId) ===
-                                                        String(scanId)
-                                                            ? "Exporting..."
-                                                            : "Export JSON"}
-                                                    </button>
+                                                    {["json", "html", "pdf"].map((format) => {
+                                                        const isExporting =
+                                                            String(exportingScanId) ===
+                                                                String(scanId) &&
+                                                            exportingFormat === format;
+
+                                                        return (
+                                                            <button
+                                                                key={format}
+                                                                type="button"
+                                                                disabled={
+                                                                    exportingScanId !== null ||
+                                                                    scanId == null
+                                                                }
+                                                                className="reports-button reports-button-primary"
+                                                                onClick={() =>
+                                                                    downloadReport(scan, format)
+                                                                }
+                                                            >
+                                                                {isExporting
+                                                                    ? "Exporting..."
+                                                                    : `Export ${format.toUpperCase()}`}
+                                                            </button>
+                                                        );
+                                                    })}
                                                 </div>
                                             </td>
                                         </tr>

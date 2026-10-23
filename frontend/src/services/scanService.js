@@ -1,13 +1,10 @@
-
 import api from "./api";
 
-// Fetch all scans
 export const getScans = async () => {
     const response = await api.get("/scans/");
     return response.data;
 };
 
-// Start a scan for a project
 export const startScan = async (projectId) => {
     if (
         projectId === null ||
@@ -26,7 +23,6 @@ export const startScan = async (projectId) => {
     return response.data;
 };
 
-// Get details for one scan
 export const getScanResults = async (scanId) => {
     if (
         scanId === null ||
@@ -39,5 +35,22 @@ export const getScanResults = async (scanId) => {
     }
 
     const response = await api.get(`/scans/${Number(scanId)}`);
-    return response.data;
+
+    // Backend success_response wraps the actual scan object in `data`.
+    return response.data?.data ?? response.data;
+};
+
+export const retryScan = async (scanId) => {
+    if (
+        scanId === null ||
+        scanId === undefined ||
+        String(scanId).trim() === "" ||
+        !Number.isInteger(Number(scanId)) ||
+        Number(scanId) <= 0
+    ) {
+        throw new Error("A valid scan ID is required to retry a scan.");
+    }
+
+    const response = await api.post(`/scans/${Number(scanId)}/retry`);
+    return response.data?.data ?? response.data;
 };

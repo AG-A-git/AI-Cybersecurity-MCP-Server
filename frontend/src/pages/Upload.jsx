@@ -52,7 +52,7 @@ const Upload = () => {
         try {
             const data = await getProjectFiles(id);
 
-            // Ignore results from an older project selection.
+            // Ignore responses belonging to an older project selection.
             if (requestId !== requestIdRef.current) return;
 
             setUploadedFiles(
@@ -60,14 +60,16 @@ const Upload = () => {
                     ? data
                     : Array.isArray(data?.files)
                         ? data.files
-                        : []
+                        : Array.isArray(data?.data)
+                            ? data.data
+                            : []
             );
         } catch (err) {
             if (requestId !== requestIdRef.current) return;
 
             console.warn(
                 "Could not load project files:",
-                err.response?.status || err.message
+                err?.response?.status || err?.message
             );
             setUploadedFiles([]);
         } finally {
@@ -108,7 +110,7 @@ const Upload = () => {
                 await fetchProjectFiles(selectedId);
             } else {
                 localStorage.removeItem("selected_project_id");
-                setUploadedFiles([]);
+                await fetchProjectFiles("");
             }
         } catch (err) {
             console.error("Failed to load projects:", err);
@@ -251,7 +253,9 @@ const Upload = () => {
 
         try {
             const response = await startScan(projectId);
-            const result = response?.data ?? response;
+            const envelope = response?.data ?? response;
+            const result = envelope?.data ?? envelope;
+
             const scanId = result?.scan_id ?? result?.id;
 
             if (scanId == null) {
@@ -376,9 +380,7 @@ const Upload = () => {
                     <span className="upload-step">02</span>
                     <div>
                         <h2>Upload Source File</h2>
-                        <p>
-                            Select a supported file for your security scan.
-                        </p>
+                        <p>Select a supported file for your security scan.</p>
                     </div>
                 </div>
 
@@ -418,6 +420,7 @@ const Upload = () => {
                         >
                             {uploading ? "Uploading..." : "Upload File"}
                         </button>
+
                         {file && !uploading && (
                             <button
                                 type="button"
@@ -451,8 +454,16 @@ const Upload = () => {
                 ) : uploadedFiles.length > 0 ? (
                     <ul className="upload-file-list">
                         {uploadedFiles.map((uploaded, index) => (
-                            <li key={uploaded.id ?? `${uploaded.filename}-${index}`}>
-                                <span className="upload-listed-file-icon" aria-hidden="true">
+                            <li
+                                key={
+                                    uploaded.id ??
+                                    `${uploaded.filename || uploaded.file_name || uploaded.name || "file"}-${index}`
+                                }
+                            >
+                                <span
+                                    className="upload-listed-file-icon"
+                                    aria-hidden="true"
+                                >
                                     {"</>"}
                                 </span>
                                 <span className="upload-listed-file-name">
