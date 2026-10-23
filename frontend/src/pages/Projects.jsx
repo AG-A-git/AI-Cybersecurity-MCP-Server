@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -10,6 +10,44 @@ import {
 import LoadingState from "../components/LoadingState";
 import ErrorState from "../components/ErrorState";
 import EmptyState from "../components/EmptyState";
+import "../styles/Projects.css";
+
+function getProjectList(data) {
+    if (Array.isArray(data)) {
+        return data;
+    }
+
+    if (Array.isArray(data?.projects)) {
+        return data.projects;
+    }
+
+    if (Array.isArray(data?.data)) {
+        return data.data;
+    }
+
+    return null;
+}
+
+function getErrorMessage(err, fallback) {
+    const detail = err?.response?.data?.detail;
+
+    if (err?.userMessage) {
+        return err.userMessage;
+    }
+
+    if (typeof detail === "string") {
+        return detail;
+    }
+
+    if (Array.isArray(detail)) {
+        return detail
+            .map((item) => item?.msg)
+            .filter(Boolean)
+            .join(", ") || fallback;
+    }
+
+    return err?.message || fallback;
+}
 
 function Projects() {
     const navigate = useNavigate();
@@ -20,51 +58,56 @@ function Projects() {
 
     const [loading, setLoading] = useState(false);
     const [loadingProjects, setLoadingProjects] = useState(true);
-
     const [error, setError] = useState("");
+    const [projectsLoadError, setProjectsLoadError] = useState("");
     const [success, setSuccess] = useState("");
 
-    // Fetch all projects and support both backend response formats.
-    const fetchProjects = async () => {
+    const fetchProjects = useCallback(async () => {
+        setLoadingProjects(true);
+        setProjectsLoadError("");
+
         try {
-            setLoadingProjects(true);
-            setError("");
-
             const data = await getProjects();
+            const projectList = getProjectList(data);
 
-            const projectList = Array.isArray(data)
-                ? data
-                : Array.isArray(data?.projects)
-                    ? data.projects
-                    : [];
+            if (projectList === null) {
+                throw new Error(
+                    "Unexpected response while loading projects."
+                );
+            }
 
             setProjects(projectList);
         } catch (err) {
             console.error("Failed to fetch projects:", err);
 
-            setError(
-                err.userMessage ||
-                (typeof err.response?.data?.detail === "string"
-                    ? err.response.data.detail
-                    : "Failed to load projects.")
+            setProjectsLoadError(
+                getErrorMessage(
+                    err,
+                    "Failed to load projects. Please try again."
+                )
             );
         } finally {
             setLoadingProjects(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
         fetchProjects();
-    }, []);
+    }, [fetchProjects]);
 
-    // Create a new project.
-    const handleCreate = async (e) => {
-        e.preventDefault();
+    const handleCreate = async (event) => {
+        event.preventDefault();
+
+        if (loading) {
+            return;
+        }
 
         const trimmedName = projectName.trim();
+        const trimmedDescription = description.trim();
 
         if (!trimmedName) {
             setError("Please enter a project name.");
+            setSuccess("");
             return;
         }
 
@@ -73,227 +116,310 @@ function Projects() {
         setSuccess("");
 
         try {
-            const project = await createProject({
+            await createProject({
                 project_name: trimmedName,
-                description: description.trim(),
+                description: trimmedDescription,
             });
-
-            console.log("Project created:", project);
-
-            setSuccess("Project created successfully!");
 
             setProjectName("");
             setDescription("");
+            setSuccess("Project created successfully.");
 
             await fetchProjects();
         } catch (err) {
             console.error("Project creation failed:", err);
 
-            const detail = err.response?.data?.detail;
-
             setError(
-                err.userMessage ||
-                (typeof detail === "string"
-                    ? detail
-                    : Array.isArray(detail)
-                        ? detail
-                            .map((item) => item.msg)
-                            .join(", ")
-                        : "Failed to create project.")
+                getErrorMessage(
+                    err,
+                    "Failed to create project. Please try again."
+                )
             );
         } finally {
             setLoading(false);
         }
     };
 
-    // Save the selected project and open the upload page.
-    const handleOpenProject = (projectId) => {
-        if (projectId == null) {
-            setError("Unable to open this project because its ID is missing.");
+    const handleUpload = (project) => {
+        const projectId = project.id;
+
+        if (
+            projectId === null ||
+            projectId === undefined ||
+            String(projectId).trim() === ""
+        ) {
+            setError(
+                "This project does not have a valid ID. Unable to open upload."
+            );
+            setSuccess("");
             return;
         }
 
-        localStorage.setItem(
-            "selected_project_id",
-            String(projectId)
-        );
-
-        navigate("/upload");
-    };
-
-    // Navigate to upload for the selected project.
-    const handleUploadFile = (projectId) => {
-        handleOpenProject(projectId);
+        navigate("/upload", {
+            state: {
+                projectId,
+                projectName:
+                    project.project_name ||
+                    project.name ||
+                    "Unnamed Project",
+            },
+        });
     };
 
     return (
-        <div style={{ padding: "30px" }}>
-            <h1>Projects</h1>
+        <main className="projects-page">
+            <header className="projects-header">
+                <div>
+                    <p className="projects-eyebrow">
+                        SECURITY WORKSPACE
+                    </p>
+                    <h1>Projects</h1>
+                    <p className="projects-subtitle">
+                        Organize your applications and prepare source code
+                        for security scanning.
+                    </p>
+                </div>
 
-            {/* Create Project */}
-            <section>
-                <h2>Create Project</h2>
+                <div className="projects-header-summary">
+                    <span className="projects-summary-label">
+                        Total projects
+                    </span>
+                    <strong>
+                        {loadingProjects ? "—" : projects.length}
+                    </strong>
+                </div>
+            </header>
 
-                <form onSubmit={handleCreate}>
+            <section
+                className="projects-create-section projects-panel"
+                aria-labelledby="create-project-heading"
+            >
+                <div className="projects-section-heading">
                     <div>
-                        <label htmlFor="projectName">
-                            Project Name
-                        </label>
+                        <h2 id="create-project-heading">
+                            Create a project
+                        </h2>
+                        <p>
+                            Add an application to your security workspace.
+                        </p>
+                    </div>
+                </div>
 
-                        <br />
+                <form
+                    className="projects-form"
+                    onSubmit={handleCreate}
+                >
+                    <div className="projects-field">
+                        <label htmlFor="projectName">
+                            Project name
+                        </label>
 
                         <input
                             id="projectName"
+                            name="project_name"
                             type="text"
                             value={projectName}
-                            onChange={(e) =>
-                                setProjectName(e.target.value)
-                            }
-                            placeholder="Enter project name"
+                            onChange={(event) => {
+                                setProjectName(event.target.value);
+                                setError("");
+                                setSuccess("");
+                            }}
+                            placeholder="e.g. My Web Application"
+                            maxLength={150}
+                            autoComplete="off"
                             required
+                            disabled={loading}
                         />
+
+                        <span className="projects-field-hint">
+                            Use a clear name that identifies your application.
+                        </span>
                     </div>
 
-                    <br />
-
-                    <div>
-                        <label htmlFor="description">
+                    <div className="projects-field">
+                        <label htmlFor="projectDescription">
                             Description
+                            <span className="projects-optional">
+                                Optional
+                            </span>
                         </label>
 
-                        <br />
-
                         <textarea
-                            id="description"
+                            id="projectDescription"
+                            name="description"
                             value={description}
-                            onChange={(e) =>
-                                setDescription(e.target.value)
-                            }
-                            placeholder="Enter project description"
-                            rows={5}
+                            onChange={(event) => {
+                                setDescription(event.target.value);
+                                setError("");
+                                setSuccess("");
+                            }}
+                            placeholder="What does this application do?"
+                            rows={3}
+                            disabled={loading}
                         />
                     </div>
 
-                    <br />
+                    <div className="projects-form-footer">
+                        <p>
+                            Your project will appear in the list after
+                            it is successfully created.
+                        </p>
 
-                    <button
-                        type="submit"
-                        disabled={loading}
-                    >
-                        {loading
-                            ? "Creating..."
-                            : "Create Project"}
-                    </button>
+                        <button
+                            type="submit"
+                            className="projects-button"
+                            disabled={loading || loadingProjects}
+                        >
+                            {loading ? (
+                                <>
+                                    <span
+                                        className="projects-spinner"
+                                        aria-hidden="true"
+                                    />
+                                    Creating...
+                                </>
+                            ) : (
+                                <>
+                                    <span aria-hidden="true">+</span>
+                                    Create project
+                                </>
+                            )}
+                        </button>
+                    </div>
                 </form>
 
+                {error && (
+                    <div className="projects-form-message">
+                        <ErrorState message={error} />
+                    </div>
+                )}
+
                 {success && (
-                    <p style={{ color: "green" }}>
+                    <p
+                        className="projects-success"
+                        role="status"
+                        aria-live="polite"
+                    >
+                        <span aria-hidden="true">✓</span>
                         {success}
                     </p>
                 )}
             </section>
 
-            {error && (
-                <ErrorState
-                    message={error}
-                    onRetry={fetchProjects}
-                />
-            )}
+            <section
+                className="projects-list-section"
+                aria-labelledby="my-projects-heading"
+            >
+                <div className="projects-list-header">
+                    <div>
+                        <h2 id="my-projects-heading">
+                            Your projects
+                        </h2>
+                        <p>
+                            Select a project to upload source code and
+                            begin a security scan.
+                        </p>
+                    </div>
 
-            <hr />
-
-            {/* Project List */}
-            <section>
-                <h2>My Projects</h2>
+                    <button
+                        type="button"
+                        className="projects-button projects-button-secondary"
+                        onClick={fetchProjects}
+                        disabled={loadingProjects}
+                    >
+                        {loadingProjects ? "Refreshing..." : "Refresh"}
+                    </button>
+                </div>
 
                 {loadingProjects ? (
                     <LoadingState message="Loading projects..." />
-                ) : projects.length === 0 ? (
-                    <EmptyState
-                        title="No projects found"
-                        message="Create your first project to start uploading source code."
+                ) : projectsLoadError ? (
+                    <ErrorState
+                        message={projectsLoadError}
+                        onRetry={fetchProjects}
                     />
+                ) : projects.length === 0 ? (
+                    <div className="projects-empty">
+                        <EmptyState
+                            title="No projects yet"
+                            message="Create your first project above to start organizing security scans."
+                        />
+                    </div>
                 ) : (
-                    <div>
-                        {projects.map((project) => (
-                            <div
-                                key={project.id}
-                                style={{
-                                    border: "1px solid #ccc",
-                                    padding: "20px",
-                                    marginBottom: "15px",
-                                    borderRadius: "8px",
-                                }}
-                            >
-                                <h3>
-                                    {project.project_name ||
-                                        project.name ||
-                                        "Unnamed Project"}
-                                </h3>
+                    <div className="projects-grid">
+                        {projects.map((project, index) => {
+                            const projectId = project.id;
+                            const projectTitle =
+                                project.project_name ||
+                                project.name ||
+                                "Unnamed Project";
 
-                                <p>
-                                    <strong>Description:</strong>{" "}
-                                    {project.description ||
-                                        "No description"}
-                                </p>
-
-                                <p>
-                                    <strong>Project ID:</strong>{" "}
-                                    {project.id ?? "N/A"}
-                                </p>
-
-                                <p>
-                                    <strong>Owner ID:</strong>{" "}
-                                    {project.owner_id ?? "N/A"}
-                                </p>
-
-                                <p>
-                                    <strong>Created:</strong>{" "}
-                                    {project.created_at
-                                        ? new Date(
-                                              project.created_at
-                                          ).toLocaleString()
-                                        : "N/A"}
-                                </p>
-
-                                <div
-                                    style={{
-                                        display: "flex",
-                                        flexWrap: "wrap",
-                                        gap: "10px",
-                                        marginTop: "15px",
-                                    }}
+                            return (
+                                <article
+                                    className="project-card"
+                                    key={
+                                        projectId ??
+                                        `${projectTitle}-${index}`
+                                    }
                                 >
-                                    <button
-                                        type="button"
-                                        onClick={() =>
-                                            handleOpenProject(
-                                                project.id
-                                            )
-                                        }
-                                        disabled={project.id == null}
-                                    >
-                                        Open Project
-                                    </button>
+                                    <div className="project-card-top">
+                                        <div
+                                            className="project-card-icon"
+                                            aria-hidden="true"
+                                        >
+                                            {projectTitle
+                                                .trim()
+                                                .charAt(0)
+                                                .toUpperCase() || "P"}
+                                        </div>
 
-                                    <button
-                                        type="button"
-                                        onClick={() =>
-                                            handleUploadFile(
-                                                project.id
-                                            )
-                                        }
-                                        disabled={project.id == null}
-                                    >
-                                        Upload File
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
+                                        <span className="project-card-status">
+                                            Project
+                                        </span>
+                                    </div>
+
+                                    <h3>{projectTitle}</h3>
+
+                                    <p className="project-card-description">
+                                        {project.description ||
+                                            "No description provided."}
+                                    </p>
+
+                                    <div className="project-card-meta">
+                                        <span>
+                                            Project ID
+                                        </span>
+                                        <strong>
+                                            {projectId ?? "Unavailable"}
+                                        </strong>
+                                    </div>
+
+                                    <div className="project-card-actions">
+                                        <button
+                                            type="button"
+                                            className="projects-button"
+                                            onClick={() =>
+                                                handleUpload(project)
+                                            }
+                                            disabled={
+                                                projectId === null ||
+                                                projectId === undefined ||
+                                                String(projectId).trim() === ""
+                                            }
+                                        >
+                                            Upload source code
+                                            <span aria-hidden="true">
+                                                →
+                                            </span>
+                                        </button>
+                                    </div>
+                                </article>
+                            );
+                        })}
                     </div>
                 )}
             </section>
-        </div>
+        </main>
     );
 }
 

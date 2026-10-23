@@ -11,6 +11,7 @@ import {
 import LoadingState from "../components/LoadingState";
 import ErrorState from "../components/ErrorState";
 import EmptyState from "../components/EmptyState";
+import "../styles/Reports.css";
 
 const getFindings = (data) => {
     if (Array.isArray(data?.vulnerabilities)) {
@@ -509,8 +510,8 @@ function Reports() {
 
     if (loading) {
         return (
-            <main className="p-4 sm:p-6">
-                <h1 className="mb-4 text-2xl font-bold">Reports</h1>
+            <main className="reports-page">
+                <h1 className="reports-title">Reports</h1>
                 <LoadingState message="Loading report data..." />
             </main>
         );
@@ -518,8 +519,8 @@ function Reports() {
 
     if (error) {
         return (
-            <main className="mx-auto max-w-6xl p-4 sm:p-6">
-                <h1 className="mb-4 text-2xl font-bold">Reports</h1>
+            <main className="reports-page">
+                <h1 className="reports-title">Reports</h1>
                 <ErrorState
                     message={error}
                     onRetry={loadReports}
@@ -535,10 +536,10 @@ function Reports() {
     );
 
     return (
-        <main className="mx-auto max-w-6xl space-y-8 p-4 sm:p-6">
+        <main className="reports-page">
             <header>
-                <h1 className="text-2xl font-bold">Reports</h1>
-                <p className="mt-1 text-gray-600">
+                <h1 className="reports-title">Reports</h1>
+                <p className="reports-subtitle">
                     Review projects, scan activity, and export security findings.
                 </p>
             </header>
@@ -546,13 +547,13 @@ function Reports() {
             {exportError && (
                 <div
                     role="alert"
-                    className="rounded-lg border border-red-200 bg-red-50 p-3 text-red-700"
+                    className="reports-export-error"
                 >
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="reports-error-content">
                         <p>{exportError}</p>
                         <button
                             type="button"
-                            className="shrink-0 rounded border border-red-300 px-3 py-1 text-sm"
+                            className="reports-button"
                             onClick={() => setExportError("")}
                         >
                             Dismiss
@@ -561,7 +562,7 @@ function Reports() {
                 </div>
             )}
 
-            <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <section className="reports-stats">
                 {[
                     { label: "Total Projects", value: projects.length },
                     { label: "Total Scans", value: scans.length },
@@ -572,20 +573,20 @@ function Reports() {
                 ].map((item) => (
                     <article
                         key={item.label}
-                        className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
+                        className="reports-stat-card"
                     >
-                        <h2 className="text-sm font-medium text-gray-600">
+                        <h2 className="reports-stat-label">
                             {item.label}
                         </h2>
-                        <p className="mt-2 text-3xl font-bold">
+                        <p className="reports-stat-value">
                             {item.value}
                         </p>
                     </article>
                 ))}
             </section>
 
-            <section className="space-y-4">
-                <h2 className="text-xl font-semibold">Project Summary</h2>
+            <section className="reports-section">
+                <h2 className="reports-section-title">Project Summary</h2>
 
                 {projects.length === 0 ? (
                     <EmptyState
@@ -595,7 +596,7 @@ function Reports() {
                         onButtonClick={() => navigate("/projects")}
                     />
                 ) : (
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    <div className="reports-project-grid">
                         {projects.map((project, index) => {
                             const projectId =
                                 project.id ?? project.project_id;
@@ -611,30 +612,30 @@ function Reports() {
                             return (
                                 <article
                                     key={projectId ?? `project-${index}`}
-                                    className="overflow-hidden rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
+                                    className="reports-project-card"
                                 >
-                                    <h3 className="break-words text-lg font-semibold">
+                                    <h3 className="reports-project-name">
                                         {project.project_name ??
                                             project.name ??
                                             project.title ??
                                             `Project ${projectId}`}
                                     </h3>
 
-                                    <p className="mt-2 text-sm text-gray-600">
+                                    <p className="reports-muted">
                                         Project ID: {projectId ?? "Not available"}
                                     </p>
 
-                                    <p className="mt-2 break-words text-sm text-gray-600">
+                                    <p className="reports-muted">
                                         {project.description ?? "No description"}
                                     </p>
 
-                                    <p className="mt-3 text-sm">
+                                    <p className="reports-muted">
                                         Total scans: {projectScans.length}
                                     </p>
 
                                     <button
                                         type="button"
-                                        className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+                                        className="reports-button reports-button-primary"
                                         onClick={() => {
                                             localStorage.setItem(
                                                 "selected_project_id",
@@ -652,8 +653,8 @@ function Reports() {
                 )}
             </section>
 
-            <section className="space-y-4">
-                <h2 className="text-xl font-semibold">Scan Reports</h2>
+            <section className="reports-section">
+                <h2 className="reports-section-title">Scan Reports</h2>
 
                 {scans.length === 0 ? (
                     <EmptyState
@@ -663,9 +664,9 @@ function Reports() {
                         onButtonClick={() => navigate("/projects")}
                     />
                 ) : (
-                    <div className="overflow-x-auto rounded-xl border border-gray-200">
-                        <table className="w-full min-w-[650px] border-collapse text-left">
-                            <thead className="bg-gray-50">
+                    <div className="reports-table-wrap">
+                        <table className="reports-table">
+                            <thead >
                                 <tr>
                                     {[
                                         "Scan ID",
@@ -676,7 +677,7 @@ function Reports() {
                                     ].map((heading) => (
                                         <th
                                             key={heading}
-                                            className="border-b border-gray-200 p-3 text-sm font-semibold"
+
                                         >
                                             {heading}
                                         </th>
@@ -690,11 +691,11 @@ function Reports() {
 
                                     return (
                                         <tr key={scanId ?? index}>
-                                            <td className="border-b border-gray-100 p-3">
+                                            <td >
                                                 {scanId ?? "N/A"}
                                             </td>
 
-                                            <td className="border-b border-gray-100 p-3">
+                                            <td >
                                                 {getProjectName(
                                                     scan.project_id ??
                                                         scan.project?.id,
@@ -702,20 +703,20 @@ function Reports() {
                                                 )}
                                             </td>
 
-                                            <td className="border-b border-gray-100 p-3">
+                                            <td >
                                                 {getScanStatus(scan)}
                                             </td>
 
-                                            <td className="border-b border-gray-100 p-3">
+                                            <td >
                                                 {getFindingCount(scan)}
                                             </td>
 
-                                            <td className="border-b border-gray-100 p-3">
-                                                <div className="flex flex-wrap gap-2">
+                                            <td >
+                                                <div className="reports-button-row">
                                                     <button
                                                         type="button"
                                                         disabled={scanId == null}
-                                                        className="rounded-md border border-gray-300 px-3 py-2 text-sm disabled:opacity-50"
+                                                        className="reports-button"
                                                         onClick={() => {
                                                             navigate("/results", {
                                                                 state: {
@@ -734,7 +735,7 @@ function Reports() {
                                                             exportingScanId !== null ||
                                                             scanId == null
                                                         }
-                                                        className="rounded-md bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+                                                        className="reports-button reports-button-primary"
                                                         onClick={() =>
                                                             downloadReport(scan)
                                                         }
@@ -755,10 +756,10 @@ function Reports() {
                 )}
             </section>
 
-            <div className="flex flex-wrap gap-3">
+            <div className="reports-footer-actions">
                 <button
                     type="button"
-                    className="rounded-lg border border-gray-300 px-4 py-2"
+                    className="reports-button"
                     onClick={loadReports}
                 >
                     Refresh Reports
@@ -766,7 +767,7 @@ function Reports() {
 
                 <button
                     type="button"
-                    className="rounded-lg border border-gray-300 px-4 py-2"
+                    className="reports-button"
                     onClick={() => navigate("/projects")}
                 >
                     Go to Projects
@@ -774,7 +775,7 @@ function Reports() {
 
                 <button
                     type="button"
-                    className="rounded-lg border border-gray-300 px-4 py-2"
+                    className="reports-button"
                     onClick={() => navigate("/dashboard")}
                 >
                     Back to Dashboard

@@ -1,141 +1,147 @@
+
+/* Results page */
 .results-page {
-  padding: 30px;
-  font-family: Arial, sans-serif;
-  background: #f8fafc;
+  padding: var(--space-8);
+  font-family: var(--font-family-base);
+  background: var(--color-page);
+  color: var(--color-text);
   min-height: 100vh;
   box-sizing: border-box;
 }
 
 .results-page h1 {
-  margin: 0 0 10px;
-  font-size: 32px;
-  color: #1e293b;
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-4xl);
+  color: var(--color-text);
 }
 
 .subtitle {
-  color: #64748b;
-  margin-bottom: 25px;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-6);
 }
 
 /* Summary cards */
 .summary-container {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 18px;
-  margin-bottom: 30px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-8);
 }
 
 .summary-card {
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 20px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-md);
+  min-width: 0;
 }
 
 .summary-card h3 {
-  margin: 0 0 15px;
-  color: #475569;
-  font-size: 16px;
+  margin: 0 0 var(--space-3);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-base);
 }
 
 .summary-card p {
   margin: 0;
-  font-size: 30px;
-  font-weight: bold;
-  color: #1e293b;
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
 }
 
 /* Results table */
 .table-container {
-  background: white;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
   overflow-x: auto;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-md);
 }
 
-table {
+.table-container table {
   width: 100%;
   border-collapse: collapse;
   min-width: 1000px;
 }
 
-thead {
-  background: #f1f5f9;
+.table-container thead {
+  background: var(--color-surface-muted);
 }
 
-th {
+.table-container th {
   text-align: left;
-  padding: 16px;
-  color: #334155;
-  font-size: 14px;
-  border-bottom: 1px solid #e2e8f0;
+  padding: var(--space-4);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  border-bottom: 1px solid var(--color-border);
 }
 
-td {
-  padding: 16px;
-  color: #475569;
-  font-size: 14px;
-  border-bottom: 1px solid #e2e8f0;
+.table-container td {
+  padding: var(--space-4);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  border-bottom: 1px solid var(--color-border);
   vertical-align: top;
 }
 
-tbody tr:hover {
-  background: #f8fafc;
+.table-container tbody tr:hover {
+  background: var(--color-page);
 }
 
 .vulnerability-name {
-  font-weight: 600;
-  color: #1e293b;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
 }
 
 .risk-score {
-  font-weight: bold;
+  font-weight: var(--font-weight-bold);
 }
 
 /* Severity badges */
 .severity {
   display: inline-block;
-  padding: 5px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: bold;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full, 999px);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
 }
 
 .severity.critical {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
 }
 
 .severity.high {
-  background: #ffedd5;
-  color: #c2410c;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
 }
 
 .severity.medium {
-  background: #fef3c7;
-  color: #a16207;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
 }
 
 .severity.low {
-  background: #dcfce7;
-  color: #15803d;
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
 
 /* Smaller screens */
 @media (max-width: 900px) {
   .summary-container {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 600px) {
   .results-page {
-    padding: 15px;
+    padding: var(--space-4);
   }
 
   .summary-container {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }

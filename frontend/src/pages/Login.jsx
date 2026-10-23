@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { loginUser } from "../services/authService";
+import "../styles/Login.css";
 
 function Login() {
     const [email, setEmail] = useState("");
@@ -28,11 +29,7 @@ function Login() {
                 throw new Error("No access token received from server.");
             }
 
-            localStorage.setItem(
-                "access_token",
-                accessToken
-            );
-
+            localStorage.setItem("access_token", accessToken);
             navigate("/dashboard");
         } catch (error) {
             console.error("Login error:", error);
@@ -54,75 +51,59 @@ function Login() {
     };
 
     return (
-        <div>
-            <h1>Login</h1>
+        <main className="login-page">
+            <section className="login-card">
+                <h1 className="login-title">Login</h1>
 
-            <form onSubmit={handleSubmit}>
-                <div>
-                    <label htmlFor="email">
-                        Email
-                    </label>
+                <form className="login-form" onSubmit={handleSubmit}>
+                    <div className="login-field">
+                        <label htmlFor="email">Email</label>
+                        <input
+                            id="email"
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="Enter your email"
+                            autoComplete="email"
+                            required
+                        />
+                    </div>
 
-                    <br />
+                    <div className="login-field">
+                        <label htmlFor="password">Password</label>
+                        <input
+                            id="password"
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="Enter your password"
+                            autoComplete="current-password"
+                            required
+                        />
+                    </div>
 
-                    <input
-                        id="email"
-                        type="email"
-                        value={email}
-                        onChange={(e) =>
-                            setEmail(e.target.value)
-                        }
-                        placeholder="Enter your email"
-                        required
-                    />
-                </div>
+                    {error && (
+                        <p className="login-error" role="alert">
+                            {error}
+                        </p>
+                    )}
 
-                <br />
+                    <button
+                        className="login-button"
+                        type="submit"
+                        disabled={loading}
+                    >
+                        {loading ? "Logging in..." : "Login"}
+                    </button>
+                </form>
 
-                <div>
-                    <label htmlFor="password">
-                        Password
-                    </label>
-
-                    <br />
-
-                    <input
-                        id="password"
-                        type="password"
-                        value={password}
-                        onChange={(e) =>
-                            setPassword(e.target.value)
-                        }
-                        placeholder="Enter your password"
-                        required
-                    />
-                </div>
-
-                <br />
-
-                {error && (
-                    <p style={{ color: "red" }}>
-                        {error}
-                    </p>
-                )}
-
-                <button
-                    type="submit"
-                    disabled={loading}
-                >
-                    {loading ? "Logging in..." : "Login"}
-                </button>
-            </form>
-
-            <p>
-                Don't have an account?{" "}
-                <Link to="/register">
-                    Register
-                </Link>
-            </p>
-        </div>
+                <p className="login-register">
+                    Don't have an account?{" "}
+                    <Link to="/register">Register</Link>
+                </p>
+            </section>
+        </main>
     );
 }
 
 export default Login;
-

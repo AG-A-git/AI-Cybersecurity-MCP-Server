@@ -1,3 +1,6 @@
+
+import "../styles/StateComponents.css";
+
 function EmptyState({
     title = "No data found",
     message = "",
@@ -5,27 +8,21 @@ function EmptyState({
     onButtonClick,
 }) {
     return (
-        <div
-            style={{
-                padding: "30px",
-                textAlign: "center",
-                border: "1px solid #ddd",
-                borderRadius: "8px",
-            }}
-        >
+        <section className="state-container state-empty">
             <h3>{title}</h3>
 
             {message && <p>{message}</p>}
 
-            {buttonText && (
+            {buttonText && onButtonClick && (
                 <button
                     type="button"
+                    className="state-button"
                     onClick={onButtonClick}
                 >
                     {buttonText}
                 </button>
             )}
-        </div>
+        </section>
     );
 }
 

@@ -1,6 +1,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import "../styles/ScanResults.css";
+
 import { getScanResults } from "../services/scanService";
 import RiskSummary from "../components/RiskSummary";
 import FindingCard from "../components/FindingCard";
@@ -8,6 +10,7 @@ import { normalizeVulnerability } from "../utils/vulnerabilityUtils";
 import { deduplicateFindings } from "../utils/duplicateFindings";
 
 const STORAGE_KEY = "last_scan_data";
+const POLL_INTERVAL_MS = 5000;
 
 const getFindings = (data) => {
     if (Array.isArray(data?.vulnerabilities)) return data.vulnerabilities;
@@ -45,6 +48,9 @@ const getValidScanId = (value) => {
     return Number(value);
 };
 
+const getScanStatus = (data) =>
+    String(data?.status ?? "").trim().toLowerCase();
+
 function ScanResults() {
     const location = useLocation();
     const navigate = useNavigate();
@@ -81,10 +87,7 @@ function ScanResults() {
                     parsed?.result?.scan_id ?? parsed?.result?.id
                 );
 
-                if (
-                    savedScanId &&
-                    savedResultId === savedScanId
-                ) {
+                if (savedScanId && savedResultId === savedScanId) {
                     return {
                         scanId: savedScanId,
                         result: parsed.result,
@@ -125,7 +128,8 @@ function ScanResults() {
         resultRef.current = result;
     }, [result]);
 
-    const loadScanResults = useCallback(async () => {
+    const loadScanResults = useCallback(async (options = {}) => {
+        const { background = false } = options;
         const validScanId = getValidScanId(scanId);
 
         if (!validScanId) {
@@ -140,7 +144,6 @@ function ScanResults() {
 
         const currentRequest = ++requestNumber.current;
 
-        // Only retain existing data if it belongs to the requested scan.
         const currentResultId = getValidScanId(
             resultRef.current?.scan_id ?? resultRef.current?.id
         );
@@ -150,8 +153,10 @@ function ScanResults() {
             setResult(null);
         }
 
-        setLoading(true);
-        setError("");
+        if (!background) {
+            setLoading(true);
+            setError("");
+        }
 
         try {
             const data = await getScanResults(validScanId);
@@ -170,31 +175,47 @@ function ScanResults() {
 
             resultRef.current = data;
             setResult(data);
+            setError("");
 
-            sessionStorage.setItem(
-                STORAGE_KEY,
-                JSON.stringify({
-                    scanId: validScanId,
-                    result: data,
-                })
-            );
+            try {
+                sessionStorage.setItem(
+                    STORAGE_KEY,
+                    JSON.stringify({
+                        scanId: validScanId,
+                        result: data,
+                    })
+                );
+            } catch (storageError) {
+                console.warn(
+                    "Could not save scan results:",
+                    storageError
+                );
+            }
         } catch (err) {
             if (currentRequest !== requestNumber.current) return;
 
             console.error("Failed to load scan results:", err);
 
-            // Clear findings rather than showing stale data as current.
-            resultRef.current = null;
-            setResult(null);
+            // A background refresh failure should not erase valid findings.
+            if (!background) {
+                const currentResultId = getValidScanId(
+                    resultRef.current?.scan_id ?? resultRef.current?.id
+                );
 
-            setError(
-                err.userMessage ||
-                    err.response?.data?.detail ||
-                    err.message ||
-                    "Could not load scan results. Please try again."
-            );
+                if (currentResultId !== validScanId) {
+                    resultRef.current = null;
+                    setResult(null);
+                }
+
+                setError(
+                    err.userMessage ||
+                        err.response?.data?.detail ||
+                        err.message ||
+                        "Could not load scan results. Please try again."
+                );
+            }
         } finally {
-            if (currentRequest === requestNumber.current) {
+            if (currentRequest === requestNumber.current && !background) {
                 setLoading(false);
             }
         }
@@ -208,7 +229,6 @@ function ScanResults() {
                 navigationResult?.id
         );
 
-        // Accept navigation data only when it matches the requested scan.
         if (
             navigationResult &&
             navigationScanId &&
@@ -245,9 +265,33 @@ function ScanResults() {
         loadScanResults();
 
         return () => {
+            // Invalidate outstanding requests when the scan changes or page unmounts.
             requestNumber.current += 1;
         };
     }, [location.state, scanId, loadScanResults]);
+
+    // Poll every five seconds while the current scan is running.
+    useEffect(() => {
+        const status = getScanStatus(result);
+
+        if (!scanId || status !== "running") {
+            return undefined;
+        }
+
+        const timerId = setTimeout(() => {
+            loadScanResults({ background: true });
+        }, POLL_INTERVAL_MS);
+
+        return () => {
+            clearTimeout(timerId);
+        };
+    }, [
+        scanId,
+        result?.status,
+        result?.scan_id,
+        result?.id,
+        loadScanResults,
+    ]);
 
     // Normalize findings and remove duplicates.
     const vulnerabilities = useMemo(() => {
@@ -319,8 +363,7 @@ function ScanResults() {
                 .join(" ")
                 .toLowerCase();
 
-            const searchMatches =
-                !query || searchableText.includes(query);
+            const searchMatches = !query || searchableText.includes(query);
 
             return severityMatches && typeMatches && searchMatches;
         });
@@ -426,7 +469,7 @@ function ScanResults() {
 
                 <button
                     type="button"
-                    onClick={loadScanResults}
+                    onClick={() => loadScanResults()}
                     disabled={loading}
                     className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium disabled:opacity-50"
                 >
@@ -442,7 +485,7 @@ function ScanResults() {
                     <p>{error}</p>
                     <button
                         type="button"
-                        onClick={loadScanResults}
+                        onClick={() => loadScanResults()}
                         disabled={loading}
                         className="mt-2 font-semibold underline disabled:opacity-50"
                     >
@@ -459,7 +502,24 @@ function ScanResults() {
                         </h2>
                         <p>Scan ID: {result.id ?? scanId ?? "N/A"}</p>
                         <p>Project ID: {result.project_id ?? "N/A"}</p>
-                        <p>Status: {result.status ?? "Unknown"}</p>
+                        <p>
+                            Status:{" "}
+                            <span role="status">{result.status ?? "Unknown"}</span>
+                        </p>
+
+                        {getScanStatus(result) === "running" && (
+                            <p className="mt-2 text-sm text-blue-700">
+                                Scan in progress. Results refresh automatically
+                                every five seconds.
+                            </p>
+                        )}
+
+                        {getScanStatus(result) === "failed" && (
+                            <p className="mt-2 text-sm text-red-700">
+                                This scan failed. Check the error details or try
+                                starting a new scan.
+                            </p>
+                        )}
 
                         {result.created_at && (
                             <p>

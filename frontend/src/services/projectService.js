@@ -20,18 +20,21 @@ export const createProject = async (projectData) => {
 
 // Fetch files for a project.
 // The backend does not currently expose a GET endpoint for project files.
+
 export const getProjectFiles = async (projectId) => {
     if (
         projectId === null ||
         projectId === undefined ||
-        String(projectId).trim() === ""
+        String(projectId).trim() === "" ||
+        !Number.isInteger(Number(projectId)) ||
+        Number(projectId) <= 0
     ) {
-        throw new Error("Select a project before fetching uploaded files.");
+        throw new Error("A valid project ID is required to fetch uploaded files.");
     }
 
-    console.warn(
-        `Cannot list files for project ${projectId}: the backend does not currently provide a file-list endpoint.`
+    const response = await api.get(
+        `/projects/${Number(projectId)}/files`
     );
 
-    return [];
+    return response.data;
 };

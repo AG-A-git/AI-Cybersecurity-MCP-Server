@@ -1,36 +1,59 @@
 
-import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { getProjects, getProjectFiles } from "../services/projectService";
 import { uploadFile } from "../services/uploadService";
 import { startScan } from "../services/scanService";
+import "../styles/Upload.css";
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // Temporary 10 MB limit
-
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = [".py", ".js", ".java", ".html", ".zip"];
+
+const getProjectList = (data) => {
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.projects)) return data.projects;
+    if (Array.isArray(data?.data)) return data.data;
+    return [];
+};
+
+const getErrorMessage = (err, fallback) =>
+    err?.userMessage ||
+    err?.response?.data?.detail ||
+    fallback;
 
 const Upload = () => {
     const navigate = useNavigate();
+    const location = useLocation();
+    const fileInputRef = useRef(null);
+    const requestIdRef = useRef(0);
 
     const [projects, setProjects] = useState([]);
     const [projectId, setProjectId] = useState("");
     const [file, setFile] = useState(null);
     const [uploadedFiles, setUploadedFiles] = useState([]);
     const [loadingProjects, setLoadingProjects] = useState(true);
+    const [loadingFiles, setLoadingFiles] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [scanning, setScanning] = useState(false);
     const [error, setError] = useState("");
     const [message, setMessage] = useState("");
 
-    // Fetch uploaded files for the selected project.
     const fetchProjectFiles = useCallback(async (id) => {
+        const requestId = ++requestIdRef.current;
+
         if (!id) {
             setUploadedFiles([]);
+            setLoadingFiles(false);
             return;
         }
 
+        setLoadingFiles(true);
+
         try {
             const data = await getProjectFiles(id);
+
+            // Ignore results from an older project selection.
+            if (requestId !== requestIdRef.current) return;
 
             setUploadedFiles(
                 Array.isArray(data)
@@ -40,39 +63,40 @@ const Upload = () => {
                         : []
             );
         } catch (err) {
+            if (requestId !== requestIdRef.current) return;
+
             console.warn(
                 "Could not load project files:",
                 err.response?.status || err.message
             );
             setUploadedFiles([]);
+        } finally {
+            if (requestId === requestIdRef.current) {
+                setLoadingFiles(false);
+            }
         }
     }, []);
 
-    // Fetch projects and restore the selected project.
     const fetchProjects = useCallback(async () => {
         setLoadingProjects(true);
         setError("");
+        setMessage("");
 
         try {
             const data = await getProjects();
-
-            const projectList = Array.isArray(data)
-                ? data
-                : Array.isArray(data?.projects)
-                    ? data.projects
-                    : Array.isArray(data?.data)
-                        ? data.data
-                        : [];
+            const projectList = getProjectList(data);
 
             setProjects(projectList);
 
-            const savedId = localStorage.getItem("selected_project_id");
+            const preferredId =
+                location.state?.projectId ??
+                localStorage.getItem("selected_project_id");
 
-            const savedProject = projectList.find(
-                (project) => String(project.id) === String(savedId)
+            const preferredProject = projectList.find(
+                (project) => String(project.id) === String(preferredId)
             );
 
-            const selectedProject = savedProject || projectList[0];
+            const selectedProject = preferredProject || projectList[0];
             const selectedId = selectedProject
                 ? String(selectedProject.id)
                 : "";
@@ -88,22 +112,21 @@ const Upload = () => {
             }
         } catch (err) {
             console.error("Failed to load projects:", err);
-
             setError(
-                err.userMessage ||
-                err.response?.data?.detail ||
-                "Could not load projects. Check that the backend is running."
+                getErrorMessage(
+                    err,
+                    "Could not load projects. Check that the backend is running."
+                )
             );
         } finally {
             setLoadingProjects(false);
         }
-    }, [fetchProjectFiles]);
+    }, [fetchProjectFiles, location.state]);
 
     useEffect(() => {
         fetchProjects();
     }, [fetchProjects]);
 
-    // Change the selected project.
     const handleProjectChange = async (event) => {
         const id = event.target.value;
 
@@ -113,18 +136,19 @@ const Upload = () => {
         setError("");
         setUploadedFiles([]);
 
-        const fileInput = document.getElementById("source-file");
-        if (fileInput) fileInput.value = "";
+        if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+        }
 
         if (id) {
             localStorage.setItem("selected_project_id", id);
             await fetchProjectFiles(id);
         } else {
             localStorage.removeItem("selected_project_id");
+            await fetchProjectFiles("");
         }
     };
 
-    // Validate the selected file.
     const handleFileChange = (event) => {
         const selectedFile = event.target.files?.[0];
 
@@ -137,7 +161,6 @@ const Upload = () => {
         }
 
         const fileName = selectedFile.name.toLowerCase();
-
         const isAllowed = ALLOWED_EXTENSIONS.some((extension) =>
             fileName.endsWith(extension)
         );
@@ -145,18 +168,13 @@ const Upload = () => {
         if (!isAllowed) {
             setFile(null);
             event.target.value = "";
-
-            setError(
-                "Choose a .py, .js, .java, .html, or .zip file."
-            );
+            setError("Choose a .py, .js, .java, .html, or .zip file.");
             return;
         }
 
-        // Temporary frontend size check; confirm the backend limit.
         if (selectedFile.size > MAX_FILE_SIZE) {
             setFile(null);
             event.target.value = "";
-
             setError("File size must be 10 MB or less.");
             return;
         }
@@ -164,9 +182,10 @@ const Upload = () => {
         setFile(selectedFile);
     };
 
-    // Upload the selected file.
     const handleUpload = async (event) => {
         event.preventDefault();
+
+        if (uploading || scanning) return;
 
         setError("");
         setMessage("");
@@ -181,13 +200,10 @@ const Upload = () => {
             return;
         }
 
-        // Recheck size immediately before uploading.
         if (file.size > MAX_FILE_SIZE) {
             setError("File size must be 10 MB or less.");
             return;
         }
-
-        if (uploading || scanning) return;
 
         setUploading(true);
 
@@ -202,42 +218,40 @@ const Upload = () => {
 
             setFile(null);
 
-            const fileInput = document.getElementById("source-file");
-            if (fileInput) fileInput.value = "";
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
 
             await fetchProjectFiles(projectId);
         } catch (err) {
             console.error("Upload failed:", err);
-
             setError(
-                err.userMessage ||
-                err.response?.data?.detail ||
-                "Upload failed. Check the backend upload endpoint."
+                getErrorMessage(
+                    err,
+                    "Upload failed. Check the backend upload endpoint."
+                )
             );
         } finally {
             setUploading(false);
         }
     };
 
-    // Start scanning and navigate to the Results page.
     const handleStartScan = async () => {
+        if (uploading || scanning) return;
+
+        setError("");
+        setMessage("");
+
         if (!projectId) {
             setError("Please select a project first.");
             return;
         }
 
-        if (uploading || scanning) return;
-
-        setError("");
-        setMessage("");
         setScanning(true);
 
         try {
             const response = await startScan(projectId);
             const result = response?.data ?? response;
-
-            console.log("Scan response:", result);
-
             const scanId = result?.scan_id ?? result?.id;
 
             if (scanId == null) {
@@ -255,11 +269,11 @@ const Upload = () => {
             });
         } catch (err) {
             console.error("Scan failed:", err);
-
             setError(
-                err.userMessage ||
-                err.response?.data?.detail ||
-                "Could not start the scan. Check the backend scan endpoint."
+                getErrorMessage(
+                    err,
+                    "Could not start the scan. Check the backend scan endpoint."
+                )
             );
         } finally {
             setScanning(false);
@@ -269,58 +283,68 @@ const Upload = () => {
     const busy = loadingProjects || uploading || scanning;
 
     return (
-        <main className="upload-page" style={styles.page}>
-            <div style={styles.header}>
+        <main className="upload-page">
+            <header className="upload-header">
                 <div>
-                    <h1 style={styles.heading}>Upload Source Code</h1>
-                    <p style={styles.subtitle}>
-                        Select a project, upload source code, and start a scan.
+                    <p className="upload-eyebrow">SECURITY WORKSPACE</p>
+                    <h1>Upload Source Code</h1>
+                    <p className="upload-subtitle">
+                        Choose a project, upload your source files, and launch
+                        a security scan.
                     </p>
                 </div>
 
                 <button
                     type="button"
+                    className="upload-button upload-button-secondary"
                     onClick={fetchProjects}
-                    disabled={loadingProjects}
-                    style={{
-                        ...styles.secondaryButton,
-                        opacity: loadingProjects ? 0.6 : 1,
-                    }}
+                    disabled={loadingProjects || uploading || scanning}
                 >
                     {loadingProjects ? "Loading..." : "Reload Projects"}
                 </button>
-            </div>
+            </header>
 
             {error && (
-                <div role="alert" style={styles.error}>
-                    {String(error)}
+                <div className="upload-alert upload-alert-error" role="alert">
+                    <strong>Something went wrong</strong>
+                    <span>{String(error)}</span>
                 </div>
             )}
 
             {message && (
-                <div role="status" style={styles.success}>
+                <div
+                    className="upload-alert upload-alert-success"
+                    role="status"
+                >
                     {String(message)}
                 </div>
             )}
 
-            {/* Project selection */}
-            <section style={styles.card}>
-                <label htmlFor="project-select" style={styles.label}>
-                    Select Project
+            <section className="upload-card">
+                <div className="upload-section-heading">
+                    <span className="upload-step">01</span>
+                    <div>
+                        <h2>Select Project</h2>
+                        <p>Choose where this source code belongs.</p>
+                    </div>
+                </div>
+
+                <label className="upload-label" htmlFor="project-select">
+                    Project
                 </label>
 
                 <select
                     id="project-select"
+                    className="upload-control"
                     value={projectId}
                     onChange={handleProjectChange}
                     disabled={loadingProjects || projects.length === 0 || busy}
-                    style={styles.input}
                 >
                     <option value="">
                         {loadingProjects
                             ? "Loading projects..."
                             : projects.length === 0
-                                ? "No projects found - create a project first"
+                                ? "No projects available"
                                 : "Choose a project"}
                     </option>
 
@@ -334,215 +358,143 @@ const Upload = () => {
                 </select>
 
                 {!loadingProjects && projects.length === 0 && (
-                    <p style={styles.hint}>
+                    <p className="upload-hint">
                         Create a project first, then reload this page.
+                        <button
+                            type="button"
+                            className="upload-text-button"
+                            onClick={() => navigate("/projects")}
+                        >
+                            Go to Projects
+                        </button>
                     </p>
                 )}
             </section>
 
-            {/* File upload */}
-            <section style={styles.card}>
-                <h2 style={styles.subheading}>Choose a File</h2>
+            <section className="upload-card">
+                <div className="upload-section-heading">
+                    <span className="upload-step">02</span>
+                    <div>
+                        <h2>Upload Source File</h2>
+                        <p>
+                            Select a supported file for your security scan.
+                        </p>
+                    </div>
+                </div>
 
-                <p style={styles.hint}>
-                    Supported files: .py, .js, .java, .html, and .zip.
-                    Maximum size: 10 MB (temporary limit).
-                </p>
+                <div className="upload-file-rules">
+                    <span>Supported: .py, .js, .java, .html, .zip</span>
+                    <span>Maximum file size: 10 MB</span>
+                </div>
 
                 <form onSubmit={handleUpload}>
-                    <input
-                        id="source-file"
-                        type="file"
-                        accept=".py,.js,.java,.html,.zip"
-                        onChange={handleFileChange}
-                        disabled={busy || !projectId}
-                        style={styles.fileInput}
-                    />
+                    <label className="upload-dropzone" htmlFor="source-file">
+                        <span className="upload-file-icon" aria-hidden="true">
+                            ↑
+                        </span>
+                        <strong>
+                            {file ? file.name : "Choose a source file"}
+                        </strong>
+                        <span>
+                            {file
+                                ? `${(file.size / 1024).toFixed(1)} KB selected`
+                                : "Browse files from your computer"}
+                        </span>
+                        <input
+                            ref={fileInputRef}
+                            id="source-file"
+                            type="file"
+                            accept=".py,.js,.java,.html,.zip"
+                            onChange={handleFileChange}
+                            disabled={busy || !projectId}
+                        />
+                    </label>
 
-                    {file && (
-                        <p style={styles.fileName}>
-                            Selected: {file.name} (
-                            {(file.size / 1024).toFixed(1)} KB)
-                        </p>
-                    )}
-
-                    <button
-                        type="submit"
-                        disabled={!projectId || !file || busy}
-                        style={{
-                            ...styles.primaryButton,
-                            opacity: !projectId || !file || busy ? 0.6 : 1,
-                        }}
-                    >
-                        {uploading ? "Uploading..." : "Upload File"}
-                    </button>
+                    <div className="upload-actions">
+                        <button
+                            type="submit"
+                            className="upload-button upload-button-primary"
+                            disabled={!projectId || !file || busy}
+                        >
+                            {uploading ? "Uploading..." : "Upload File"}
+                        </button>
+                        {file && !uploading && (
+                            <button
+                                type="button"
+                                className="upload-button upload-button-secondary"
+                                onClick={() => {
+                                    setFile(null);
+                                    setError("");
+                                    if (fileInputRef.current) {
+                                        fileInputRef.current.value = "";
+                                    }
+                                }}
+                            >
+                                Remove File
+                            </button>
+                        )}
+                    </div>
                 </form>
             </section>
 
-            {/* Uploaded files */}
-            <section style={styles.card}>
-                <h2 style={styles.subheading}>Uploaded Files</h2>
+            <section className="upload-card">
+                <div className="upload-section-heading">
+                    <span className="upload-step">03</span>
+                    <div>
+                        <h2>Project Files</h2>
+                        <p>Files currently reported for the selected project.</p>
+                    </div>
+                </div>
 
-                {uploadedFiles.length > 0 ? (
-                    <ul style={styles.fileList}>
+                {loadingFiles ? (
+                    <p className="upload-hint">Loading project files...</p>
+                ) : uploadedFiles.length > 0 ? (
+                    <ul className="upload-file-list">
                         {uploadedFiles.map((uploaded, index) => (
-                            <li key={uploaded.id ?? index}>
-                                {uploaded.filename ||
-                                    uploaded.file_name ||
-                                    uploaded.name ||
-                                    `File ${uploaded.id ?? index + 1}`}
+                            <li key={uploaded.id ?? `${uploaded.filename}-${index}`}>
+                                <span className="upload-listed-file-icon" aria-hidden="true">
+                                    {"</>"}
+                                </span>
+                                <span className="upload-listed-file-name">
+                                    {uploaded.filename ||
+                                        uploaded.file_name ||
+                                        uploaded.name ||
+                                        `File ${uploaded.id ?? index + 1}`}
+                                </span>
                             </li>
                         ))}
                     </ul>
                 ) : (
-                    <p style={styles.hint}>
-                        No files to display, or the backend file-list
-                        endpoint is not available yet.
+                    <p className="upload-empty-state">
+                        No files are listed for this project. Upload a file to
+                        continue. If the file-list endpoint is unavailable,
+                        this list may remain empty.
                     </p>
                 )}
             </section>
 
-            {/* Security scan */}
-            <section style={styles.card}>
-                <h2 style={styles.subheading}>Security Scan</h2>
-
-                <p style={styles.hint}>
-                    Upload your code first, then start a scan for the
-                    selected project. The backend will verify that files
-                    are available.
-                </p>
+            <section className="upload-scan-card">
+                <div>
+                    <p className="upload-eyebrow">READY WHEN YOU ARE</p>
+                    <h2>Run Security Scan</h2>
+                    <p>
+                        Start a scan for the selected project after uploading
+                        the source files you want analyzed.
+                    </p>
+                </div>
 
                 <button
                     type="button"
+                    className="upload-button upload-button-scan"
                     onClick={handleStartScan}
                     disabled={!projectId || busy}
-                    style={{
-                        ...styles.primaryButton,
-                        opacity: !projectId || busy ? 0.6 : 1,
-                    }}
                 >
-                    {scanning ? "Scanning..." : "Start Scan"}
+                    {scanning ? "Starting scan..." : "Start Scan"}
+                    {!scanning && <span aria-hidden="true"> →</span>}
                 </button>
             </section>
         </main>
     );
-};
-
-const styles = {
-    page: {
-        width: "100%",
-        maxWidth: "1000px",
-        margin: "0 auto",
-        padding: "24px",
-        boxSizing: "border-box",
-        color: "var(--text-primary, #1f2937)",
-    },
-    header: {
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        flexWrap: "wrap",
-        gap: "16px",
-        marginBottom: "24px",
-    },
-    heading: {
-        margin: "0 0 8px",
-        fontSize: "28px",
-        overflowWrap: "anywhere",
-    },
-    subtitle: {
-        margin: 0,
-        color: "var(--text-secondary, #6b7280)",
-        lineHeight: 1.5,
-    },
-    card: {
-        padding: "20px",
-        marginBottom: "20px",
-        border: "1px solid var(--border-color, #e5e7eb)",
-        borderRadius: "12px",
-        background: "var(--card-background, #ffffff)",
-        boxSizing: "border-box",
-        minWidth: 0,
-    },
-    subheading: {
-        marginTop: 0,
-        fontSize: "19px",
-    },
-    label: {
-        display: "block",
-        fontWeight: 600,
-        marginBottom: "8px",
-    },
-    input: {
-        width: "100%",
-        maxWidth: "100%",
-        padding: "12px",
-        border: "1px solid #d1d5db",
-        borderRadius: "8px",
-        boxSizing: "border-box",
-        background: "#ffffff",
-        color: "#111827",
-    },
-    fileInput: {
-        display: "block",
-        width: "100%",
-        maxWidth: "100%",
-        margin: "12px 0 16px",
-        padding: "8px 0",
-        boxSizing: "border-box",
-    },
-    fileName: {
-        overflowWrap: "anywhere",
-        fontSize: "14px",
-        lineHeight: 1.5,
-    },
-    hint: {
-        color: "var(--text-secondary, #6b7280)",
-        fontSize: "14px",
-        lineHeight: 1.5,
-        overflowWrap: "anywhere",
-    },
-    primaryButton: {
-        padding: "11px 18px",
-        border: "none",
-        borderRadius: "8px",
-        background: "#2563eb",
-        color: "#ffffff",
-        cursor: "pointer",
-        fontWeight: 600,
-        maxWidth: "100%",
-    },
-    secondaryButton: {
-        padding: "10px 14px",
-        border: "1px solid #d1d5db",
-        borderRadius: "8px",
-        background: "#ffffff",
-        color: "#111827",
-        cursor: "pointer",
-    },
-    error: {
-        padding: "12px 14px",
-        marginBottom: "16px",
-        borderRadius: "8px",
-        background: "#fef2f2",
-        color: "#b91c1c",
-        overflowWrap: "anywhere",
-        lineHeight: 1.5,
-    },
-    success: {
-        padding: "12px 14px",
-        marginBottom: "16px",
-        borderRadius: "8px",
-        background: "#ecfdf5",
-        color: "#065f46",
-        overflowWrap: "anywhere",
-        lineHeight: 1.5,
-    },
-    fileList: {
-        paddingLeft: "20px",
-        overflowWrap: "anywhere",
-        lineHeight: 1.7,
-    },
 };
 
 export default Upload;

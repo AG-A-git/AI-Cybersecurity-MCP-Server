@@ -1,41 +1,16 @@
-function LoadingState({
-    message = "Loading...",
-}) {
+
+import "../styles/StateComponents.css";
+
+function LoadingState({ message = "Loading..." }) {
     return (
-        <div
-            style={{
-                padding: "40px",
-                textAlign: "center",
-            }}
-        >
+        <div className="state-container state-loading">
             <div
-                style={{
-                    width: "40px",
-                    height: "40px",
-                    border: "4px solid #ddd",
-                    borderTop: "4px solid #333",
-                    borderRadius: "50%",
-                    margin: "0 auto 20px",
-                    animation:
-                        "spin 1s linear infinite",
-                }}
+                className="state-spinner"
+                aria-hidden="true"
             />
-
-            <p>{message}</p>
-
-            <style>
-                {`
-                    @keyframes spin {
-                        0% {
-                            transform: rotate(0deg);
-                        }
-
-                        100% {
-                            transform: rotate(360deg);
-                        }
-                    }
-                `}
-            </style>
+            <p role="status" aria-live="polite">
+                {message}
+            </p>
         </div>
     );
 }

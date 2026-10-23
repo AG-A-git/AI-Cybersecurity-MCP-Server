@@ -1,7 +1,7 @@
-
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
+import "../styles/Layout.css";
 
 function Layout({ children }) {
     const [menuOpen, setMenuOpen] = useState(false);
@@ -39,26 +39,13 @@ function Layout({ children }) {
     const closeMenu = () => setMenuOpen(false);
 
     return (
-        <div
-            style={{
-                display: "flex",
-                minHeight: "100vh",
-                width: "100%",
-                maxWidth: "100%",
-                position: "relative",
-            }}
-        >
+        <div className="app-shell">
             <Sidebar
                 mobileOpen={menuOpen}
                 onNavigate={closeMenu}
             />
 
-            <div
-                style={{
-                    flex: 1,
-                    minWidth: 0,
-                }}
-            >
+            <div className="app-shell__content">
                 <Navbar
                     menuOpen={menuOpen}
                     onMenuClick={() => setMenuOpen((open) => !open)}
@@ -67,12 +54,7 @@ function Layout({ children }) {
                 <main
                     id="main-content"
                     tabIndex={-1}
-                    style={{
-                        padding: "20px",
-                        width: "100%",
-                        boxSizing: "border-box",
-                        overflowWrap: "anywhere",
-                    }}
+                    className="app-shell__main"
                 >
                     {children}
                 </main>
@@ -83,16 +65,7 @@ function Layout({ children }) {
                     type="button"
                     aria-label="Close navigation menu"
                     onClick={closeMenu}
-                    style={{
-                        position: "fixed",
-                        inset: 0,
-                        zIndex: 9,
-                        background: "rgba(0,0,0,0.35)",
-                        border: "none",
-                        width: "100%",
-                        height: "100%",
-                        cursor: "default",
-                    }}
+                    className="app-shell__backdrop"
                 />
             )}
         </div>
