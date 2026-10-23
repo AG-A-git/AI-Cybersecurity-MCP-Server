@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import "../styles/ScanResults.css";
-import { getScanResults, retryScan } from "../services/scanService";
+import { getScanResults } from "../services/scanService";
 import RiskSummary from "../components/RiskSummary";
 import FindingCard from "../components/FindingCard";
 import ScanStatus from "../components/ScanStatus";
@@ -115,7 +115,6 @@ function ScanResults() {
     });
 
     const [loading, setLoading] = useState(false);
-    const [retrying, setRetrying] = useState(false);
     const [error, setError] = useState("");
     const [searchTerm, setSearchTerm] = useState("");
     const [severityFilter, setSeverityFilter] = useState("All");
@@ -430,61 +429,6 @@ function ScanResults() {
         });
     };
 
-    const handleRetryScan = async () => {
-        const validScanId = getValidScanId(scanId);
-        const status = getScanStatus(result);
-
-        if (
-            !validScanId ||
-            !["failed", "error"].includes(status) ||
-            retrying ||
-            loading
-        ) {
-            return;
-        }
-
-        setRetrying(true);
-        setError("");
-
-        try {
-            const retryResult = await retryScan(validScanId);
-            const returnedId = getValidScanId(
-                retryResult?.scan_id ?? retryResult?.id
-            );
-
-            if (returnedId && returnedId !== validScanId) {
-                throw new Error("The backend returned a different scan ID.");
-            }
-
-            const updatedResult = {
-                ...resultRef.current,
-                status: retryResult?.status || "pending",
-            };
-
-            resultRef.current = updatedResult;
-            setResult(updatedResult);
-
-            try {
-                await loadScanResults();
-            } catch (refreshError) {
-                console.error(
-                    "Retry accepted, but refresh failed:",
-                    refreshError
-                );
-            }
-        } catch (err) {
-            console.error("Failed to submit scan retry:", err);
-            setError(
-                err.userMessage ||
-                    err.response?.data?.detail ||
-                    err.message ||
-                    "Could not submit the scan retry. Please try again."
-            );
-        } finally {
-            setRetrying(false);
-        }
-    };
-
     const handleResetFilters = () => {
         setSearchTerm("");
         setSeverityFilter("All");
@@ -547,28 +491,24 @@ function ScanResults() {
                         <h2 className="mb-3 text-lg font-semibold">
                             Scan Information
                         </h2>
-                        <p>Scan ID: {result.scan_id ?? result.id ?? scanId ?? "N/A"}</p>
+                        <p>
+                            Scan ID:{" "}
+                            {result.scan_id ?? result.id ?? scanId ?? "N/A"}
+                        </p>
                         <p>Project ID: {result.project_id ?? "N/A"}</p>
 
                         <ScanStatus status={result.status} />
 
                         {["failed", "error"].includes(getScanStatus(result)) && (
-                            <>
-                                <button
-                                    type="button"
-                                    onClick={handleRetryScan}
-                                    disabled={retrying || loading}
-                                    className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    {retrying
-                                        ? "Retrying scan..."
-                                        : "Retry Failed Scan"}
-                                </button>
-                                <p className="mt-2 text-sm text-red-700">
-                                    This scan failed. Check the error details or
-                                    retry the scan.
-                                </p>
-                            </>
+                            <p
+                                role="status"
+                                className="mt-3 text-sm text-red-700"
+                            >
+                                This scan failed. Automatic retry is not
+                                available because the backend does not
+                                currently provide a retry endpoint. Return to
+                                Projects to start a new scan.
+                            </p>
                         )}
 
                         {["pending", "running", "in_progress"].includes(
