@@ -122,17 +122,15 @@ def run_all_rules(file_path):
 
 def deduplicate_findings(findings):
     """
-    Remove duplicate vulnerability findings.
-
-    Two findings are considered duplicates when they have the same:
-        vulnerability_type
-        file_name
-        line_number
-        code
-
-    If duplicate findings have different confidence values,
-    keep the finding with the highest confidence.
+    Remove duplicate findings, preferring higher confidence.
+    For equal confidence, prefer the more severe finding.
     """
+    severity_rank = {
+        "Critical": 4,
+        "High": 3,
+        "Medium": 2,
+        "Low": 1,
+    }
     unique = {}
 
     for finding in findings:
@@ -143,14 +141,24 @@ def deduplicate_findings(findings):
             finding["code"],
         )
 
-        if key not in unique:
+        current = unique.get(key)
+        if current is None:
             unique[key] = finding
+            continue
 
-        elif finding["confidence"] > unique[key]["confidence"]:
+        new_priority = (
+            finding["confidence"],
+            severity_rank.get(finding["severity"], 0),
+        )
+        current_priority = (
+            current["confidence"],
+            severity_rank.get(current["severity"], 0),
+        )
+
+        if new_priority > current_priority:
             unique[key] = finding
 
     return list(unique.values())
-
 
 def remove_duplicates(results):
     """
