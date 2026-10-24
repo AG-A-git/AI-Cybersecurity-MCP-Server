@@ -2,9 +2,7 @@ from scanner.rules.sql import scan_sql
 
 
 def test_sql_vulnerable():
-    findings = scan_sql(
-        "scanner/test_files/sql_accuracy_test.py"
-    )
+    findings = scan_sql("scanner/test_files/sql_accuracy_test.py")
 
     sql_findings = [
         finding
@@ -16,9 +14,7 @@ def test_sql_vulnerable():
 
 
 def test_sql_safe():
-    findings = scan_sql(
-        "test_files/safe/sql_safe.py"
-    )
+    findings = scan_sql("test_files/safe/sql_safe.py")
 
     sql_findings = [
         finding
@@ -51,6 +47,7 @@ query = "SELECT * FROM users WHERE name='" + user
     assert sql_findings
     assert sql_findings[0]["confidence"] == 90
 
+
 def test_sql_detects_concatenation_inside_execute(tmp_path):
     test_file = tmp_path / "sql_execute.py"
 
@@ -70,6 +67,7 @@ cursor.execute("SELECT * FROM users WHERE id=" + user_id)
     ]
 
     assert sql_findings
+
 
 def test_sql_helper_built_query_not_detected(tmp_path):
     test_file = tmp_path / "sql_helper_safe.py"
@@ -92,6 +90,7 @@ query = build_query()
     ]
 
     assert not sql_findings
+
 
 def test_sql_multi_hop_username_gets_tracked_confidence(tmp_path):
     test_file = tmp_path / "sql_username_flow.py"
@@ -118,6 +117,7 @@ query = "SELECT * FROM users WHERE name='" + user
 
 def test_sql_detects_f_string_with_user_input(tmp_path):
     test_file = tmp_path / "sql_fstring.py"
+
     test_file.write_text(
         '''username = request.args.get("username")
 query = f"SELECT * FROM users WHERE name='{username}'"
@@ -127,8 +127,10 @@ cursor.execute(query)
     )
 
     findings = scan_sql(str(test_file))
+
     sql_findings = [
-        finding for finding in findings
+        finding
+        for finding in findings
         if finding["vulnerability_type"] == "SQL Injection"
     ]
 
@@ -137,6 +139,7 @@ cursor.execute(query)
 
 def test_sql_detects_format_query_with_user_input(tmp_path):
     test_file = tmp_path / "sql_format.py"
+
     test_file.write_text(
         '''username = request.args.get("username")
 query = "SELECT * FROM users WHERE name='{}'".format(username)
@@ -146,8 +149,10 @@ cursor.execute(query)
     )
 
     findings = scan_sql(str(test_file))
+
     sql_findings = [
-        finding for finding in findings
+        finding
+        for finding in findings
         if finding["vulnerability_type"] == "SQL Injection"
     ]
 
@@ -156,6 +161,7 @@ cursor.execute(query)
 
 def test_sql_parameterized_query_is_not_flagged(tmp_path):
     test_file = tmp_path / "sql_parameterized.py"
+
     test_file.write_text(
         '''username = request.args.get("username")
 cursor.execute(
@@ -167,9 +173,35 @@ cursor.execute(
     )
 
     findings = scan_sql(str(test_file))
+
     sql_findings = [
-        finding for finding in findings
+        finding
+        for finding in findings
         if finding["vulnerability_type"] == "SQL Injection"
     ]
 
     assert not sql_findings
+
+
+def test_sql_dynamic_query_without_confirmed_user_input_has_lower_confidence(
+    tmp_path,
+):
+    test_file = tmp_path / "sql_unknown_source.py"
+
+    test_file.write_text(
+        '''query = "SELECT * FROM users WHERE name='" + local_name
+''',
+        encoding="utf-8",
+    )
+
+    findings = scan_sql(str(test_file))
+
+    sql_findings = [
+        finding
+        for finding in findings
+        if finding["vulnerability_type"] == "SQL Injection"
+    ]
+
+    assert sql_findings
+    assert sql_findings[0]["confidence"] == 85
+    assert sql_findings[0]["severity"] == "Critical"
