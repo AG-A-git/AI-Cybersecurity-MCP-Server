@@ -160,11 +160,24 @@ def generate_report(db_path: str, scan_id: int, format: str = "markdown") -> dic
         if not findings:
             lines.append("No findings were recorded.")
         for index, finding in enumerate(findings, start=1):
+            vulnerability_type = finding.get(
+                "vulnerability_type",
+                finding.get("type", finding.get("name", "Finding")),
+            )
+            file_name = finding.get(
+                "file_name",
+                finding.get("file", finding.get("file_path", "Unknown")),
+            )
+            line_number = finding.get(
+                "line_number",
+                finding.get("line", "Unknown"),
+            )
+
             lines.extend([
-                f"### {index}. {finding.get('type', finding.get('name', 'Finding'))}",
+                f"### {index}. {vulnerability_type}",
                 f"- Severity: {finding.get('severity', 'Info')}",
-                f"- File: {finding.get('file', finding.get('file_path', 'Unknown'))}",
-                f"- Line: {finding.get('line', 'Unknown')}",
+                f"- File: {file_name}",
+                f"- Line: {line_number}",
                 "",
             ])
         content = "\n".join(lines)

@@ -1,6 +1,12 @@
+
+import ast
 import re
 
-from scanner.context import build_rule_context, get_source_context, is_variable_derived_from
+from scanner.context import (
+    build_rule_context,
+    get_source_context,
+    is_variable_derived_from,
+)
 from scanner.finding import create_finding
 
 
@@ -55,6 +61,11 @@ XSS_SINK_PATTERNS = [
     r"\bdocument\.write\s*\(",
 ]
 
+# Common parameter markers used by database drivers.
+SQL_PLACEHOLDER_PATTERN = re.compile(
+    r"%s|\?|:\w+|\$\d+|%\(\w+\)s"
+)
+
 
 def _matches_any(patterns, text):
     """Return True when any supplied regex matches the text."""
@@ -65,15 +76,7 @@ def _matches_any(patterns, text):
 
 
 def _extract_assigned_variable(line):
-    """
-    Extract a simple assigned variable.
-
-    Examples:
-        user_id = request.args.get("id")
-        query = "SELECT ..." + user_id
-        const name = location.search
-    """
-
+    """Extract a simple assigned variable."""
     match = re.match(
         r"\s*(?:const|let|var)?\s*"
         r"([A-Za-z_][A-Za-z0-9_]*)\s*=",
@@ -95,6 +98,55 @@ def _contains_variable(variable, line):
     ) is not None
 
 
+def _parameterized_sql_execute_lines(lines):
+    """
+    Identify execute/executemany calls whose SQL is a literal containing
+    a parameter placeholder and whose parameter values are separate args.
+
+    AST line ranges handle multiline calls. Dynamic SQL expressions are
+    not considered safe by this helper.
+    """
+    try:
+        tree = ast.parse("".join(lines))
+    except (SyntaxError, ValueError, TypeError):
+        return set()
+
+    parameterized_lines = set()
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+
+        if not isinstance(node.func, ast.Attribute):
+            continue
+
+        if node.func.attr not in {"execute", "executemany"}:
+            continue
+
+        if len(node.args) < 2:
+            continue
+
+        query_node = node.args[0]
+
+        # Accept only a literal SQL string, not dynamically built SQL.
+        if not isinstance(query_node, ast.Constant):
+            continue
+
+        if not isinstance(query_node.value, str):
+            continue
+
+        if not SQL_PLACEHOLDER_PATTERN.search(query_node.value):
+            continue
+
+        # The SQL call is safe from this rule's taint-based SQL finding.
+        # Include all lines of the call to support multiline formatting.
+        start = node.lineno
+        end = getattr(node, "end_lineno", node.lineno)
+        parameterized_lines.update(range(start, end + 1))
+
+    return parameterized_lines
+
+
 def _add_finding(
     findings,
     file_path,
@@ -106,7 +158,6 @@ def _add_finding(
     context=None,
 ):
     """Create a standardized vulnerability finding."""
-
     finding = create_finding(
         file_name=file_path,
         line_number=line_number,
@@ -121,7 +172,7 @@ def _add_finding(
     if context is not None:
         finding["source_context"] = get_source_context(
             context,
-            line_number
+            line_number,
         )
 
     findings.append(finding)
@@ -129,25 +180,12 @@ def _add_finding(
 
 def scan_input_validation(file_path):
     """
-    Supporting input-flow analysis.
+    Track simple user-controlled input flows to sensitive sinks.
 
-    Tracks obvious user-controlled input and follows simple
-    source -> variable -> variable -> sink relationships.
-
-    This is intentionally lightweight rule-based analysis.
-    It does not attempt full taint analysis.
-
-    Validation evidence lowers confidence but does not claim
-    that the code is completely safe.
-
-    This rule does NOT create a new vulnerability category.
-    Findings remain existing categories such as:
-
-        - SQL Injection
-        - Command Injection
-        - Cross-Site Scripting (XSS)
+    Parameterized SQL calls with a literal query and separate parameter
+    arguments are excluded from SQL injection findings. This does not
+    treat dynamically constructed SQL as safe.
     """
-
     findings = []
 
     try:
@@ -158,18 +196,16 @@ def scan_input_validation(file_path):
             errors="ignore",
         ) as file:
             lines = file.readlines()
-
     except (FileNotFoundError, OSError):
         return findings
 
     try:
         context = build_rule_context(file_path)
-
     except (
         SyntaxError,
         ValueError,
         OSError,
-        UnicodeError
+        UnicodeError,
     ):
         context = {
             "lines": [
@@ -178,49 +214,28 @@ def scan_input_validation(file_path):
             ]
         }
 
-    # Variables directly assigned from user input.
+    parameterized_sql_lines = _parameterized_sql_execute_lines(lines)
+
     user_input_variables = set()
-
-    # Variables derived from already-tainted variables.
     tainted_variables = set()
-
-    # Variables for which an obvious validation step was seen.
     validated_variables = set()
 
     for line_number, line in enumerate(lines, start=1):
-
         stripped = line.strip()
 
         if not stripped:
             continue
 
-        # ---------------------------------------------------------
-        # 1. Detect variables assigned directly from user input.
-        # ---------------------------------------------------------
-
         assigned_variable = _extract_assigned_variable(stripped)
 
+        # 1. Detect variables assigned directly from user input.
         if _matches_any(USER_INPUT_PATTERNS, stripped):
-
             if assigned_variable:
                 user_input_variables.add(assigned_variable)
                 tainted_variables.add(assigned_variable)
 
-        # ---------------------------------------------------------
-        # 2. Track simple variable-to-variable propagation.
-        #
-        # Example:
-        #
-        # user_id = request.args.get("id")
-        # query = "SELECT ..." + user_id
-        #
-        # This records:
-        #
-        # user_id -> query
-        # ---------------------------------------------------------
-
+        # 2. Track variable propagation.
         if assigned_variable:
-
             if is_variable_derived_from(
                 context,
                 assigned_variable,
@@ -235,153 +250,104 @@ def scan_input_validation(file_path):
             ):
                 validated_variables.add(assigned_variable)
 
-        # ---------------------------------------------------------
-        # 3. Detect obvious validation.
-        #
-        # Examples:
-        #
-        # user_id.isdigit()
-        # re.match(...)
-        # command in ["date", "uptime"]
-        #
-        # This is evidence of validation/constraint only.
-        # ---------------------------------------------------------
-
+        # 3. Detect obvious validation evidence.
         if _matches_any(VALIDATION_PATTERNS, stripped):
-
             for variable in list(tainted_variables):
-
                 if _contains_variable(variable, stripped):
                     validated_variables.add(variable)
 
-        # ---------------------------------------------------------
-        # 4. Detect direct source -> sink flows.
-        #
-        # Example:
-        #
-        # cursor.execute(request.args.get("id"))
-        # os.system(request.args.get("cmd"))
-        # element.innerHTML = location.search
-        # ---------------------------------------------------------
+        # 4. Detect direct source-to-sink flows.
+        is_parameterized_sql_line = (
+            line_number in parameterized_sql_lines
+        )
 
-        if _matches_any(SQL_SINK_PATTERNS, stripped):
+        if (
+            _matches_any(SQL_SINK_PATTERNS, stripped)
+            and not is_parameterized_sql_line
+            and _matches_any(USER_INPUT_PATTERNS, stripped)
+        ):
+            _add_finding(
+                findings=findings,
+                file_path=file_path,
+                line_number=line_number,
+                vulnerability_type="SQL Injection",
+                confidence=90,
+                code=stripped,
+                cwe="CWE-89",
+                context=context,
+            )
 
-            if _matches_any(USER_INPUT_PATTERNS, stripped):
+        if (
+            _matches_any(COMMAND_SINK_PATTERNS, stripped)
+            and _matches_any(USER_INPUT_PATTERNS, stripped)
+        ):
+            _add_finding(
+                findings=findings,
+                file_path=file_path,
+                line_number=line_number,
+                vulnerability_type="Command Injection",
+                confidence=90,
+                code=stripped,
+                cwe="CWE-78",
+                context=context,
+            )
 
-                _add_finding(
-                    findings=findings,
-                    file_path=file_path,
-                    line_number=line_number,
-                    vulnerability_type="SQL Injection",
-                    confidence=90,
-                    code=stripped,
-                    cwe="CWE-89",
-                    context=context,
-                )
+        if (
+            _matches_any(XSS_SINK_PATTERNS, stripped)
+            and _matches_any(USER_INPUT_PATTERNS, stripped)
+        ):
+            _add_finding(
+                findings=findings,
+                file_path=file_path,
+                line_number=line_number,
+                vulnerability_type="Cross-Site Scripting (XSS)",
+                confidence=85,
+                code=stripped,
+                cwe="CWE-79",
+                context=context,
+            )
 
-        if _matches_any(COMMAND_SINK_PATTERNS, stripped):
-
-            if _matches_any(USER_INPUT_PATTERNS, stripped):
-
-                _add_finding(
-                    findings=findings,
-                    file_path=file_path,
-                    line_number=line_number,
-                    vulnerability_type="Command Injection",
-                    confidence=90,
-                    code=stripped,
-                    cwe="CWE-78",
-                    context=context,
-                )
-
-        if _matches_any(XSS_SINK_PATTERNS, stripped):
-
-            if _matches_any(USER_INPUT_PATTERNS, stripped):
-
-                _add_finding(
-                    findings=findings,
-                    file_path=file_path,
-                    line_number=line_number,
-                    vulnerability_type="Cross-Site Scripting (XSS)",
-                    confidence=85,
-                    code=stripped,
-                    cwe="CWE-79",
-                    context=context,
-                )
-
-        # ---------------------------------------------------------
         # 5. Detect tainted variables reaching sinks.
-        #
-        # Example:
-        #
-        # user_id = request.args.get("id")
-        # query = "SELECT ..." + user_id
-        # cursor.execute(query)
-        #
-        # The scanner follows:
-        #
-        # user_id -> query -> execute()
-        # ---------------------------------------------------------
-
         for variable in list(tainted_variables):
-
             if not _contains_variable(variable, stripped):
                 continue
 
             is_validated = variable in validated_variables
 
-            # -----------------------------------------------------
-            # SQL Injection
-            # -----------------------------------------------------
-
-            if _matches_any(SQL_SINK_PATTERNS, stripped):
-
-                confidence = 65 if is_validated else 90
-
+            if (
+                _matches_any(SQL_SINK_PATTERNS, stripped)
+                and not is_parameterized_sql_line
+            ):
                 _add_finding(
                     findings=findings,
                     file_path=file_path,
                     line_number=line_number,
                     vulnerability_type="SQL Injection",
-                    confidence=confidence,
+                    confidence=65 if is_validated else 90,
                     code=stripped,
                     cwe="CWE-89",
                     context=context,
                 )
 
-            # -----------------------------------------------------
-            # Command Injection
-            # -----------------------------------------------------
-
             if _matches_any(COMMAND_SINK_PATTERNS, stripped):
-
-                confidence = 65 if is_validated else 90
-
                 _add_finding(
                     findings=findings,
                     file_path=file_path,
                     line_number=line_number,
                     vulnerability_type="Command Injection",
-                    confidence=confidence,
+                    confidence=65 if is_validated else 90,
                     code=stripped,
                     cwe="CWE-78",
                     context=context,
                 )
 
-            # -----------------------------------------------------
-            # Cross-Site Scripting
-            # -----------------------------------------------------
-
             if _matches_any(XSS_SINK_PATTERNS, stripped):
-
-                confidence = 60 if is_validated else 85
-
                 _add_finding(
                     findings=findings,
                     file_path=file_path,
                     line_number=line_number,
                     vulnerability_type="Cross-Site Scripting (XSS)",
-                    confidence=confidence,
+                    confidence=60 if is_validated else 85,
                     code=stripped,
                     cwe="CWE-79",
                     context=context,
