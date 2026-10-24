@@ -1,4 +1,4 @@
-
+﻿
 import json
 import ntpath
 import os
@@ -208,6 +208,7 @@ def scan_zip(zip_path):
 
     Rejects:
       - Invalid ZIP files
+      - Duplicate member names
       - Symbolic-link entries
       - Absolute or traversal paths
       - Archives with excessive entry counts
@@ -246,6 +247,14 @@ def scan_zip(zip_path):
 
                 # Limit the number of archive entries.
                 if len(members) > max_files:
+                    return []
+
+                # Reject duplicate member names before extraction.
+                member_names = [
+                    member.filename for member in members
+                ]
+
+                if len(member_names) != len(set(member_names)):
                     return []
 
                 # Reject unsafe paths and Unix symbolic links

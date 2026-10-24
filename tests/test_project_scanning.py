@@ -151,7 +151,9 @@ def test_scan_project_rejects_integer_path():
     assert scan_project(123) == []
 
 
+# ============================================================
 # Adversarial ZIP regression tests
+# ============================================================
 
 def test_zip_rejects_path_traversal(tmp_path):
     zip_path = tmp_path / "malicious.zip"
@@ -246,6 +248,21 @@ def test_zip_rejects_oversized_uncompressed_content(tmp_path):
     assert scan_project(str(zip_path)) == []
 
 
+def test_scan_zip_rejects_duplicate_member_names(tmp_path):
+    """The direct ZIP scanner must reject duplicate entry names."""
+    from scanner.scan import scan_zip
+
+    zip_path = tmp_path / "duplicate_members_direct.zip"
+
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.writestr("app.py", "print('first')")
+
+        with pytest.warns(UserWarning, match="Duplicate name"):
+            archive.writestr("app.py", "print('second')")
+
+    assert scan_zip(zip_path) == []
+
+
 def test_engine_scans_project_inside_ancestor_named_venv(tmp_path):
     project_path = tmp_path / "venv" / "project"
     project_path.mkdir(parents=True)
@@ -298,10 +315,18 @@ def test_zip_rejects_negative_declared_file_size(tmp_path, monkeypatch):
         def extractall(self, path):
             return self.archive.extractall(path)
 
-    monkeypatch.setattr(scan_module.zipfile, "ZipFile", FakeArchive)
+    monkeypatch.setattr(
+        scan_module.zipfile,
+        "ZipFile",
+        FakeArchive,
+    )
 
     assert scan_module.scan_zip(zip_path) == []
 
+
+# ============================================================
+# JSON report regression tests
+# ============================================================
 
 def test_json_report_round_trip_preserves_findings(tmp_path, monkeypatch):
     from scanner import scan
@@ -380,7 +405,9 @@ def test_deduplicated_findings_remain_consistent_after_json_round_trip():
     assert app_finding["confidence"] == 90
 
 
+# ============================================================
 # Allowed-root security regression tests
+# ============================================================
 
 def test_scan_denied_when_no_allowed_roots_configured(tmp_path, monkeypatch):
     from scanner.path_security import ALLOWED_ROOTS_ENV
@@ -437,7 +464,9 @@ def test_scan_denies_symlink_escape(tmp_path, monkeypatch):
         scan_project(str(link))
 
 
+# ============================================================
 # ZIP status reporting regression tests
+# ============================================================
 
 def test_zip_status_valid_archive_completes(tmp_path):
     zip_path = tmp_path / "valid.zip"
@@ -479,7 +508,9 @@ def test_zip_status_duplicate_member_names(tmp_path):
 
     with zipfile.ZipFile(zip_path, "w") as archive:
         archive.writestr("app.py", "print('first')")
-        archive.writestr("app.py", "print('second')")
+
+        with pytest.warns(UserWarning, match="Duplicate name"):
+            archive.writestr("app.py", "print('second')")
 
     result = scan_zip_with_status(zip_path, lambda path: [])
 
