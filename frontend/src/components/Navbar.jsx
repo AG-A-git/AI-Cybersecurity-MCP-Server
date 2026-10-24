@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { useNavigate } from "react-router-dom";
 import "../styles/Navbar.css";
 
@@ -8,7 +8,7 @@ function Navbar({ onMenuClick, menuOpen = false }) {
     const handleLogout = () => {
         localStorage.removeItem("access_token");
         localStorage.removeItem("selected_project_id");
-        navigate("/login");
+        navigate("/login", { replace: true });
     };
 
     return (

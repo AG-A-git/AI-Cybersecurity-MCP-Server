@@ -9,69 +9,77 @@ import "../styles/Upload.css";
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = [".py", ".js", ".java", ".html", ".zip"];
 
-const getProjectList = (data) => {
-    if (Array.isArray(data)) return data;
-    if (Array.isArray(data?.projects)) return data.projects;
-    if (Array.isArray(data?.data)) return data.data;
-    return [];
+const getErrorMessage = (error, fallback) => {
+    if (error?.userMessage) return error.userMessage;
+
+    const detail = error?.response?.data?.detail;
+
+    if (typeof detail === "string" && detail.trim()) {
+        return detail;
+    }
+
+    return fallback;
 };
 
-const getErrorMessage = (err, fallback) =>
-    err?.userMessage ||
-    err?.response?.data?.detail ||
-    fallback;
-
-const Upload = () => {
+function Upload() {
     const navigate = useNavigate();
     const location = useLocation();
+
     const fileInputRef = useRef(null);
     const requestIdRef = useRef(0);
+
+    // Synchronously prevents duplicate scan submissions.
+    const scanInFlightRef = useRef(false);
+    const uploadInFlightRef = useRef(false);
 
     const [projects, setProjects] = useState([]);
     const [projectId, setProjectId] = useState("");
     const [file, setFile] = useState(null);
-    const [uploadedFiles, setUploadedFiles] = useState([]);
+    const [projectFiles, setProjectFiles] = useState([]);
+
     const [loadingProjects, setLoadingProjects] = useState(true);
     const [loadingFiles, setLoadingFiles] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [scanning, setScanning] = useState(false);
+
     const [error, setError] = useState("");
     const [message, setMessage] = useState("");
+    const [filesError, setFilesError] = useState("");
 
-    const fetchProjectFiles = useCallback(async (id) => {
-        const requestId = ++requestIdRef.current;
-
-        if (!id) {
-            setUploadedFiles([]);
-            setLoadingFiles(false);
+    const fetchProjectFiles = useCallback(async (selectedProjectId) => {
+        if (!selectedProjectId) {
+            setProjectFiles([]);
+            setFilesError("");
             return;
         }
 
+        const requestId = ++requestIdRef.current;
+
         setLoadingFiles(true);
+        setFilesError("");
 
         try {
-            const data = await getProjectFiles(id);
+            const response = await getProjectFiles(selectedProjectId);
 
-            // Ignore responses belonging to an older project selection.
             if (requestId !== requestIdRef.current) return;
 
-            setUploadedFiles(
-                Array.isArray(data)
-                    ? data
-                    : Array.isArray(data?.files)
-                        ? data.files
-                        : Array.isArray(data?.data)
-                            ? data.data
-                            : []
-            );
+            const data = response?.data ?? response;
+            const files = Array.isArray(data)
+                ? data
+                : data?.files ?? data?.uploaded_files ?? [];
+
+            setProjectFiles(Array.isArray(files) ? files : []);
         } catch (err) {
             if (requestId !== requestIdRef.current) return;
 
-            console.warn(
-                "Could not load project files:",
-                err?.response?.status || err?.message
+            console.error("Failed to load project files:", err);
+            setProjectFiles([]);
+            setFilesError(
+                getErrorMessage(
+                    err,
+                    "Could not load this project's uploaded files."
+                )
             );
-            setUploadedFiles([]);
         } finally {
             if (requestId === requestIdRef.current) {
                 setLoadingFiles(false);
@@ -82,95 +90,101 @@ const Upload = () => {
     const fetchProjects = useCallback(async () => {
         setLoadingProjects(true);
         setError("");
-        setMessage("");
 
         try {
-            const data = await getProjects();
-            const projectList = getProjectList(data);
+            const response = await getProjects();
+            const data = response?.data ?? response;
+            const list = Array.isArray(data)
+                ? data
+                : data?.projects ?? [];
 
-            setProjects(projectList);
+            setProjects(Array.isArray(list) ? list : []);
 
-            const preferredId =
-                location.state?.projectId ??
+            const savedProjectId =
                 localStorage.getItem("selected_project_id");
 
-            const preferredProject = projectList.find(
-                (project) => String(project.id) === String(preferredId)
+            const requestedProjectId =
+                location.state?.projectId ??
+                savedProjectId ??
+                "";
+
+            const matchingProject = list.find(
+                (project) =>
+                    String(project.id) === String(requestedProjectId)
             );
 
-            const selectedProject = preferredProject || projectList[0];
-            const selectedId = selectedProject
-                ? String(selectedProject.id)
-                : "";
-
-            setProjectId(selectedId);
-
-            if (selectedId) {
-                localStorage.setItem("selected_project_id", selectedId);
-                await fetchProjectFiles(selectedId);
+            if (matchingProject) {
+                setProjectId(String(matchingProject.id));
+            } else if (list.length === 1) {
+                setProjectId(String(list[0].id));
             } else {
-                localStorage.removeItem("selected_project_id");
-                await fetchProjectFiles("");
+                setProjectId("");
             }
         } catch (err) {
             console.error("Failed to load projects:", err);
+            setProjects([]);
             setError(
                 getErrorMessage(
                     err,
-                    "Could not load projects. Check that the backend is running."
+                    "Could not load projects. Please try again."
                 )
             );
         } finally {
             setLoadingProjects(false);
         }
-    }, [fetchProjectFiles, location.state]);
+    }, [location.state]);
 
     useEffect(() => {
-        fetchProjects();
+        void fetchProjects();
     }, [fetchProjects]);
 
-    const handleProjectChange = async (event) => {
-        const id = event.target.value;
+    useEffect(() => {
+        if (projectId) {
+            localStorage.setItem("selected_project_id", projectId);
+            void fetchProjectFiles(projectId);
+        } else {
+            ++requestIdRef.current;
+            setProjectFiles([]);
+            setFilesError("");
+            setLoadingFiles(false);
+        }
+    }, [projectId, fetchProjectFiles]);
 
-        setProjectId(id);
+    const handleProjectChange = (event) => {
+        const nextProjectId = event.target.value;
+
+        setProjectId(nextProjectId);
         setFile(null);
-        setMessage("");
         setError("");
-        setUploadedFiles([]);
+        setMessage("");
 
         if (fileInputRef.current) {
             fileInputRef.current.value = "";
         }
-
-        if (id) {
-            localStorage.setItem("selected_project_id", id);
-            await fetchProjectFiles(id);
-        } else {
-            localStorage.removeItem("selected_project_id");
-            await fetchProjectFiles("");
-        }
     };
 
     const handleFileChange = (event) => {
-        const selectedFile = event.target.files?.[0];
-
         setError("");
         setMessage("");
+
+        const selectedFile = event.target.files?.[0];
 
         if (!selectedFile) {
             setFile(null);
             return;
         }
 
-        const fileName = selectedFile.name.toLowerCase();
-        const isAllowed = ALLOWED_EXTENSIONS.some((extension) =>
-            fileName.endsWith(extension)
+        const lowerName = selectedFile.name.toLowerCase();
+        const extension = ALLOWED_EXTENSIONS.find((ext) =>
+            lowerName.endsWith(ext)
         );
 
-        if (!isAllowed) {
+        if (!extension) {
             setFile(null);
             event.target.value = "";
-            setError("Choose a .py, .js, .java, .html, or .zip file.");
+            setError(
+                "Unsupported file type. Choose a .py, .js, .java, .html, or .zip file."
+            );
             return;
         }
 
@@ -187,7 +201,14 @@ const Upload = () => {
     const handleUpload = async (event) => {
         event.preventDefault();
 
-        if (uploading || scanning) return;
+        if (
+            uploadInFlightRef.current ||
+            scanInFlightRef.current ||
+            uploading ||
+            scanning
+        ) {
+            return;
+        }
 
         setError("");
         setMessage("");
@@ -207,6 +228,7 @@ const Upload = () => {
             return;
         }
 
+        uploadInFlightRef.current = true;
         setUploading(true);
 
         try {
@@ -234,12 +256,21 @@ const Upload = () => {
                 )
             );
         } finally {
+            uploadInFlightRef.current = false;
             setUploading(false);
         }
     };
 
     const handleStartScan = async () => {
-        if (uploading || scanning) return;
+        // Ref guard works immediately, before React rerenders.
+        if (
+            uploadInFlightRef.current ||
+            scanInFlightRef.current ||
+            uploading ||
+            scanning
+        ) {
+            return;
+        }
 
         setError("");
         setMessage("");
@@ -249,6 +280,7 @@ const Upload = () => {
             return;
         }
 
+        scanInFlightRef.current = true;
         setScanning(true);
 
         try {
@@ -258,7 +290,10 @@ const Upload = () => {
 
             const scanId = result?.scan_id ?? result?.id;
 
-            if (scanId == null) {
+            if (
+                scanId == null ||
+                String(scanId).trim() === ""
+            ) {
                 setError(
                     "The backend did not return a scan ID. Check the scan response."
                 );
@@ -280,6 +315,7 @@ const Upload = () => {
                 )
             );
         } finally {
+            scanInFlightRef.current = false;
             setScanning(false);
         }
     };
@@ -291,10 +327,10 @@ const Upload = () => {
             <header className="upload-header">
                 <div>
                     <p className="upload-eyebrow">SECURITY WORKSPACE</p>
-                    <h1>Upload Source Code</h1>
-                    <p className="upload-subtitle">
-                        Choose a project, upload your source files, and launch
-                        a security scan.
+                    <h1>Upload &amp; Scan</h1>
+                    <p>
+                        Select a project, upload source code, and start a
+                        vulnerability scan.
                     </p>
                 </div>
 
@@ -309,37 +345,24 @@ const Upload = () => {
             </header>
 
             {error && (
-                <div className="upload-alert upload-alert-error" role="alert">
-                    <strong>Something went wrong</strong>
-                    <span>{String(error)}</span>
+                <div className="upload-error" role="alert">
+                    {error}
                 </div>
             )}
 
             {message && (
-                <div
-                    className="upload-alert upload-alert-success"
-                    role="status"
-                >
-                    {String(message)}
+                <div className="upload-success" role="status">
+                    {message}
                 </div>
             )}
 
-            <section className="upload-card">
-                <div className="upload-section-heading">
-                    <span className="upload-step">01</span>
-                    <div>
-                        <h2>Select Project</h2>
-                        <p>Choose where this source code belongs.</p>
-                    </div>
-                </div>
+            <section className="upload-section">
+                <h2>Select a project</h2>
 
-                <label className="upload-label" htmlFor="project-select">
-                    Project
-                </label>
+                <label htmlFor="project-select">Project</label>
 
                 <select
                     id="project-select"
-                    className="upload-control"
                     value={projectId}
                     onChange={handleProjectChange}
                     disabled={loadingProjects || projects.length === 0 || busy}
@@ -348,151 +371,132 @@ const Upload = () => {
                         {loadingProjects
                             ? "Loading projects..."
                             : projects.length === 0
-                                ? "No projects available"
-                                : "Choose a project"}
+                              ? "No projects available"
+                              : "Choose a project"}
                     </option>
 
                     {projects.map((project) => (
                         <option key={project.id} value={String(project.id)}>
-                            {project.project_name ||
-                                project.name ||
-                                `Project ${project.id}`}
+                            {project.name ?? project.title ?? `Project ${project.id}`}
                         </option>
                     ))}
                 </select>
 
                 {!loadingProjects && projects.length === 0 && (
-                    <p className="upload-hint">
-                        Create a project first, then reload this page.
-                        <button
-                            type="button"
-                            className="upload-text-button"
-                            onClick={() => navigate("/projects")}
-                        >
-                            Go to Projects
-                        </button>
+                    <p role="status">
+                        Create a project before uploading files.
                     </p>
                 )}
             </section>
 
-            <section className="upload-card">
-                <div className="upload-section-heading">
-                    <span className="upload-step">02</span>
-                    <div>
-                        <h2>Upload Source File</h2>
-                        <p>Select a supported file for your security scan.</p>
-                    </div>
-                </div>
-
-                <div className="upload-file-rules">
-                    <span>Supported: .py, .js, .java, .html, .zip</span>
-                    <span>Maximum file size: 10 MB</span>
-                </div>
+            <section className="upload-section">
+                <h2>Upload source code</h2>
 
                 <form onSubmit={handleUpload}>
-                    <label className="upload-dropzone" htmlFor="source-file">
-                        <span className="upload-file-icon" aria-hidden="true">
-                            ↑
-                        </span>
-                        <strong>
-                            {file ? file.name : "Choose a source file"}
-                        </strong>
-                        <span>
-                            {file
-                                ? `${(file.size / 1024).toFixed(1)} KB selected`
-                                : "Browse files from your computer"}
-                        </span>
-                        <input
-                            ref={fileInputRef}
-                            id="source-file"
-                            type="file"
-                            accept=".py,.js,.java,.html,.zip"
-                            onChange={handleFileChange}
-                            disabled={busy || !projectId}
-                        />
-                    </label>
+                    <label htmlFor="source-file">Choose a file</label>
 
-                    <div className="upload-actions">
-                        <button
-                            type="submit"
-                            className="upload-button upload-button-primary"
-                            disabled={!projectId || !file || busy}
-                        >
-                            {uploading ? "Uploading..." : "Upload File"}
-                        </button>
+                    <input
+                        ref={fileInputRef}
+                        id="source-file"
+                        name="file"
+                        type="file"
+                        accept=".py,.js,.java,.html,.zip"
+                        onChange={handleFileChange}
+                        disabled={busy || !projectId}
+                    />
 
-                        {file && !uploading && (
-                            <button
-                                type="button"
-                                className="upload-button upload-button-secondary"
-                                onClick={() => {
-                                    setFile(null);
-                                    setError("");
-                                    if (fileInputRef.current) {
-                                        fileInputRef.current.value = "";
-                                    }
-                                }}
-                            >
-                                Remove File
-                            </button>
-                        )}
-                    </div>
+                    <p>
+                        Supported formats: .py, .js, .java, .html, .zip.
+                        Maximum size: 10 MB.
+                    </p>
+
+                    {file && (
+                        <p role="status">
+                            Selected: {file.name}
+                        </p>
+                    )}
+
+                    <button
+                        type="submit"
+                        className="upload-button upload-button-primary"
+                        disabled={!projectId || !file || busy}
+                    >
+                        {uploading ? "Uploading..." : "Upload File"}
+                    </button>
                 </form>
             </section>
 
-            <section className="upload-card">
+            <section className="upload-section">
                 <div className="upload-section-heading">
-                    <span className="upload-step">03</span>
-                    <div>
-                        <h2>Project Files</h2>
-                        <p>Files currently reported for the selected project.</p>
-                    </div>
+                    <h2>Project files</h2>
+
+                    <button
+                        type="button"
+                        className="upload-button upload-button-secondary"
+                        onClick={() => fetchProjectFiles(projectId)}
+                        disabled={
+                            !projectId ||
+                            loadingFiles ||
+                            uploading ||
+                            scanning
+                        }
+                    >
+                        {loadingFiles ? "Loading files..." : "Refresh Files"}
+                    </button>
                 </div>
 
-                {loadingFiles ? (
-                    <p className="upload-hint">Loading project files...</p>
-                ) : uploadedFiles.length > 0 ? (
-                    <ul className="upload-file-list">
-                        {uploadedFiles.map((uploaded, index) => (
+                {filesError && (
+                    <div className="upload-error" role="alert">
+                        <p>{filesError}</p>
+
+                        <button
+                            type="button"
+                            className="upload-button upload-button-secondary"
+                            onClick={() => fetchProjectFiles(projectId)}
+                            disabled={!projectId || loadingFiles || busy}
+                        >
+                            Retry
+                        </button>
+                    </div>
+                )}
+
+                {!filesError && loadingFiles && (
+                    <p role="status">Loading project files...</p>
+                )}
+
+                {!filesError && !loadingFiles && projectId &&
+                    projectFiles.length === 0 && (
+                        <p role="status">
+                            No uploaded files found for this project yet.
+                        </p>
+                    )}
+
+                {!filesError && projectFiles.length > 0 && (
+                    <ul>
+                        {projectFiles.map((item, index) => (
                             <li
                                 key={
-                                    uploaded.id ??
-                                    `${uploaded.filename || uploaded.file_name || uploaded.name || "file"}-${index}`
+                                    item.id ??
+                                    `${item.filename ?? item.file_name ?? "file"}-${index}`
                                 }
                             >
-                                <span
-                                    className="upload-listed-file-icon"
-                                    aria-hidden="true"
-                                >
-                                    {"</>"}
-                                </span>
-                                <span className="upload-listed-file-name">
-                                    {uploaded.filename ||
-                                        uploaded.file_name ||
-                                        uploaded.name ||
-                                        `File ${uploaded.id ?? index + 1}`}
-                                </span>
+                                {item.filename ??
+                                    item.file_name ??
+                                    item.name ??
+                                    "Uploaded file"}
                             </li>
                         ))}
                     </ul>
-                ) : (
-                    <p className="upload-empty-state">
-                        No files are listed for this project. Upload a file to
-                        continue. If the file-list endpoint is unavailable,
-                        this list may remain empty.
-                    </p>
                 )}
             </section>
 
-            <section className="upload-scan-card">
-                <div>
-                    <p className="upload-eyebrow">READY WHEN YOU ARE</p>
-                    <h2>Run Security Scan</h2>
-                    <p>
-                        Start a scan for the selected project after uploading
-                        the source files you want analyzed.
-                    </p>
-                </div>
+            <section className="upload-section">
+                <h2>Start security scan</h2>
+
+                <p>
+                    The scanner will analyze uploaded files associated with
+                    the selected project.
+                </p>
 
                 <button
                     type="button"
@@ -506,6 +510,6 @@ const Upload = () => {
             </section>
         </main>
     );
-};
+}
 
 export default Upload;

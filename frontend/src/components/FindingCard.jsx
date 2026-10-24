@@ -2,6 +2,11 @@
 import SeverityBadge from "./SeverityBadge";
 import RiskBadge from "./RiskBadge";
 import FindingMetadata from "./FindingMetadata";
+import {
+    getFindingGuidance,
+    getAnalysisSource,
+    getRemediation,
+} from "../utils/findingGuidance";
 
 function FindingCard({ finding, onViewDetails }) {
     const vulnerabilityType =
@@ -10,16 +15,26 @@ function FindingCard({ finding, onViewDetails }) {
         finding.type ||
         "Unknown Vulnerability";
 
-    const explanation =
+    const guidance = getFindingGuidance(finding);
+    const remediation = getRemediation(finding);
+    const analysisSource = getAnalysisSource(finding);
+
+    const backendExplanation = String(
         finding.explanation ||
         finding.description ||
-        "No explanation available.";
+        ""
+    ).trim();
 
-    const recommendation =
-        finding.recommendation ||
-        finding.remediation ||
-        finding.ai_recommendation ||
-        "";
+    const genericExplanation =
+        !backendExplanation ||
+        backendExplanation ===
+            "The scanner detected a potentially risky code pattern. Review the reported line and surrounding code to determine whether it is exploitable.";
+
+    const explanation = genericExplanation
+        ? guidance.explanation
+        : backendExplanation;
+
+    const recommendation = remediation.recommendation;
 
     const riskScore = finding.risk_score;
 
@@ -37,6 +52,12 @@ function FindingCard({ finding, onViewDetails }) {
         finding.id ??
         finding.finding_id ??
         `${vulnerabilityType}-${finding.file || finding.file_name || "unknown"}-${finding.line || finding.line_number || "unknown"}`;
+
+    const backendAnalysis = String(
+        finding.ai_analysis ||
+        finding.aiAnalysis ||
+        ""
+    ).trim();
 
     return (
         <article
@@ -89,14 +110,37 @@ function FindingCard({ finding, onViewDetails }) {
             <section className="finding-card__section">
                 <h4>Explanation</h4>
                 <p>{explanation}</p>
+                <small>
+                    {genericExplanation
+                        ? "Source: rule-based guidance"
+                        : "Source: backend finding description"}
+                </small>
             </section>
 
             {recommendation && (
                 <section className="finding-card__section finding-card__recommendation">
                     <h4>Recommendation</h4>
                     <p>{recommendation}</p>
+                    <small>
+                        Source: {remediation.source === "backend"
+                            ? "backend"
+                            : "rule-based guidance"}
+                    </small>
                 </section>
             )}
+
+            <section className="finding-card__section">
+                <h4>Analysis</h4>
+
+                {analysisSource.available && backendAnalysis ? (
+                    <>
+                        <p>{backendAnalysis}</p>
+                        <small>{analysisSource.message}</small>
+                    </>
+                ) : (
+                    <p>{analysisSource.message}</p>
+                )}
+            </section>
 
             {onViewDetails && (
                 <div className="finding-card__actions">
