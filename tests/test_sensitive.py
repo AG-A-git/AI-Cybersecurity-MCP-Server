@@ -34,17 +34,26 @@ logger.info(secret)
     assert len(findings) == 1
 
 
-def test_api_key_returned_is_detected(tmp_path):
+def test_api_key_assignment_alone_is_not_reported(tmp_path):
     code = """
-api_key = "abc123"
+api_key = "SYNTHETIC_TEST_KEY_123"
 return_value = api_key
 """
     file_path = write_test_file(tmp_path, code)
-
     findings = scan_sensitive_data_exposure(file_path)
+    assert findings == []
 
-    assert len(findings) == 0
 
+def test_api_key_logged_is_detected(tmp_path):
+    code = """
+api_key = "SYNTHETIC_TEST_KEY_123"
+logger.info(api_key)
+"""
+    file_path = write_test_file(tmp_path, code)
+    findings = scan_sensitive_data_exposure(file_path)
+    assert len(findings) == 1
+    assert findings[0]["vulnerability_type"] == "Sensitive Data Exposure"
+    assert findings[0]["severity"] == "High"
 
 def test_token_count_is_safe(tmp_path):
     code = """

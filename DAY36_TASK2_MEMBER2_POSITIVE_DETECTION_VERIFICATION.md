@@ -1,4 +1,4 @@
-﻿# Day 36 — Task 2: Positive Vulnerability Detection Verification
+# Day 36 � Task 2: Positive Vulnerability Detection Verification
 
 - **Verification date:** 2026-10-25
 - **Project:** AI-Cybersecurity-MCP-Server
@@ -8,11 +8,11 @@
 
 ## Summary
 
-The selected category-focused regression suite completed with **91 passed in 4.03 seconds** and zero test failures.
+The selected category-focused regression suite completed with **92 passed in 3.44 seconds** and zero test failures.
 
 Positive detection assertions were identified for all 12 agreed vulnerability categories. This verifies the specific test cases represented in the suite; it does not establish comprehensive detector coverage or prove the absence of false positives and false negatives.
 
-**Overall status: POSITIVE TESTS PASSED — COVERAGE REMAINS PARTIAL.**
+**Overall status: POSITIVE TESTS PASSED � COVERAGE REMAINS PARTIAL.**
 
 ## Results by Category
 
@@ -28,7 +28,7 @@ Positive detection assertions were identified for all 12 agreed vulnerability ca
 | 8 | Security Misconfiguration | `tests/test_security_misconfiguration.py`: `test_app_run_debug_true`, `test_variable_based_debug_true_is_detected` | PASS |
 | 9 | Insecure Authentication | `tests/test_authentication_access_control.py`: `test_weak_password_123456`, `test_weak_password_password`, `test_weak_password_admin` | PASS |
 | 10 | Insecure Deserialization | `tests/test_insecure_deserialization.py`: `test_pickle_loads_untrusted_data`, `test_direct_request_data_to_pickle_detected`, `test_pickle_loads_multi_hop_untrusted_data` | PASS |
-| 11 | Sensitive Data Exposure | `tests/test_sensitive.py`: `test_password_printed_is_detected`, `test_secret_logged_is_detected`, `test_credit_card_printed_is_detected` | PASS — limited coverage |
+| 11 | Sensitive Data Exposure | `tests/test_sensitive.py`: `test_password_printed_is_detected`, `test_secret_logged_is_detected`, `test_credit_card_printed_is_detected`, `test_api_key_logged_is_detected` | PASS - limited coverage |
 | 12 | Server-Side Request Forgery (SSRF) | `tests/test_ssrf.py`: `test_request_args_to_get_detected`, `test_request_args_multi_hop_to_get_detected`, `test_request_json_indexed_access_detected`, `test_request_get_json_url_field_to_get_detected` | PASS |
 
 ## Verification Command and Result
@@ -49,20 +49,24 @@ The focused pytest command included these test files:
 - `tests/test_sensitive.py`
 - `tests/test_ssrf.py`
 
-**Observed result:** `91 passed in 4.03s`
+**Observed result:** `92 passed in 3.44s`
 
 Safe-code regression cases were included in the run. These provide evidence for the specific safe examples tested, not a general guarantee that false positives will not occur.
 
-## Known Limitation: Sensitive Data Exposure Test
+## Sensitive Data Exposure - Updated Verification (2026-10-25)
 
-In `tests/test_sensitive.py`, the test named `test_api_key_returned_is_detected` uses this assertion:
+The original test `test_api_key_returned_is_detected` was misleading: its code assigned an API key to another variable without actually returning or logging it, and its assertion expected zero findings.
 
-`assert len(findings) == 0`
+The test has been replaced with two clearly named regression tests in `tests/test_sensitive.py`:
 
-Consequently, the test passing does **not** demonstrate that API-key exposure through assignment is detected. The test name and assertion are inconsistent. This case should be reviewed separately before treating API-key exposure as positively verified.
+- `test_api_key_assignment_alone_is_not_reported`: verifies that assignment alone is not flagged by this exposure rule.
+- `test_api_key_logged_is_detected`: verifies that logging an `api_key` produces a Sensitive Data Exposure finding.
 
-Other positive sensitive-data cases in the same file assert findings for a printed password, a logged secret, and a printed credit-card-like value.
+**Observed result:** `python -m pytest .\tests\test_sensitive.py -q` � **7 passed**.
 
+The full suite was subsequently run and reported **309 passed, 1 skipped**. The focused-category suite was rerun after this test update and completed with 92 passed in 3.44 seconds.
+
+This rule currently detects sensitive variables passed to printing and common logging calls. It does not establish detection of every possible exposure mechanism, such as returning sensitive values from functions.
 ## Scope and Limitations
 
 1. Results apply to the specific regression tests run on the local working repository.
@@ -73,6 +77,6 @@ Other positive sensitive-data cases in the same file assert findings for a print
 
 ## Conclusion
 
-Positive regression tests passed for the 12 team-agreed categories. Sensitive Data Exposure has a documented test inconsistency concerning API-key assignment. All categories should continue to be described as partially implemented until broader coverage and limitations are evaluated.
+Positive regression tests passed for the 12 team-agreed categories. Sensitive Data Exposure has positive tests for printing and logging, plus a regression test confirming assignment alone is not flagged; other exposure mechanisms remain unverified. All categories should continue to be described as partially implemented until broader coverage and limitations are evaluated.
 
-**Task 2 verification status: POSITIVE TESTS PASSED — PARTIAL COVERAGE.**
+**Task 2 verification status: POSITIVE TESTS PASSED � PARTIAL COVERAGE.**
