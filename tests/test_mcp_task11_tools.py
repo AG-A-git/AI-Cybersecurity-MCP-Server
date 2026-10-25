@@ -2,7 +2,7 @@ import asyncio
 import json
 
 import pytest
-import mcp_server_task11_working as server
+import mcp_server as server
 
 
 def test_all_six_mcp_tools_are_registered():
@@ -107,3 +107,29 @@ def test_analyze_vulnerability_accepts_canonical_vulnerability_type():
     assert "parameterized queries" in result["recommendation"]
     assert result["analysis_method"] == "deterministic_rule_based"
     assert result["ai_provider_used"] is False
+
+def test_analyze_vulnerability_legacy_type_fallback():
+    result = server.analyze_vulnerability({"type": "SQL Injection"})
+
+    assert result["finding"] == "SQL Injection"
+    assert "parameterized queries" in result["recommendation"]
+
+
+def test_analyze_vulnerability_legacy_name_fallback():
+    result = server.analyze_vulnerability({"name": "SQL Injection"})
+
+    assert result["finding"] == "SQL Injection"
+    assert "parameterized queries" in result["recommendation"]
+
+
+def test_analyze_vulnerability_canonical_field_takes_precedence():
+    result = server.analyze_vulnerability({
+        "vulnerability_type": "SQL Injection",
+        "type": "Cross-Site Scripting",
+        "name": "Command Injection",
+        "severity": "High",
+    })
+
+    assert result["finding"] == "SQL Injection"
+    assert result["finding"] != "Unknown finding"
+    assert "parameterized queries" in result["recommendation"]
