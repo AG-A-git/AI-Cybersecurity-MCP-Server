@@ -16,6 +16,7 @@ Verify that malformed, empty, unsupported, oversized, and problematic input file
   - The skipped test required symlink permissions unavailable in the Windows environment.
 - Additional direct checks confirmed that directory input, binary bytes disguised as Python, Unicode source, and source without a final newline did not cause uncaught exceptions.
 - Separate detection checks confirmed that Unicode source and source without a final newline each produced one Insecure Deserialization finding.
+- A simulated PermissionError from read_file() was handled without an uncaught exception; real Windows access denial was not confirmed.
 
 ## Scenario Results
 
@@ -28,7 +29,7 @@ Verify that malformed, empty, unsupported, oversized, and problematic input file
 | 5 | Invalid encoding | Parser test expects UnicodeDecodeError; scan_file catches Unicode errors and returns an empty list | PASS |
 | 6 | Missing path | Missing-file checks exist; scan_project intentionally raises FileNotFoundError | PASS |
 | 7 | Directory passed to scan_file | Returned an empty list | PASS |
-| 8 | Unreadable file | `chmod(0)` test returned an empty findings list, but Windows may still permit reading the file | PARTIAL |
+| 8 | Unreadable file | Simulated PermissionError was handled safely; real Windows access denial was not confirmed | PARTIAL |
 | 9 | Oversized file | Parser tests cover rejection and scan_file skipping | PASS |
 | 10 | Unusual Unicode | Detected Insecure Deserialization; one finding | PASS |
 | 11 | No final newline | Detected Insecure Deserialization; one finding | PASS |
@@ -45,6 +46,6 @@ Verify that malformed, empty, unsupported, oversized, and problematic input file
 
 ## Conclusion
 
-The scanner passed the executed regression tests and the tested Unicode and no-final-newline detection checks. Binary handling is partially verified, and unreadable-file handling remains inconclusive because the Windows test did not confirm that read access was denied.
+The scanner passed the executed regression tests and the tested Unicode and no-final-newline detection checks. Binary handling is partially verified, and unreadable-file handling is partially verified through a simulated PermissionError; explicit binary rejection and real OS-level access denial remain unconfirmed.
 
 Task 8 should be considered substantially verified but not fully closed until the binary-handling and unreadable-file limitations are either tested further or explicitly accepted by the integration lead.
