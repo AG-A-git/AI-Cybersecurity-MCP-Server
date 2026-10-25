@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import json
 
 import pytest
@@ -91,3 +91,19 @@ def test_token_verifier_rejects_invalid_tokens(monkeypatch):
         assert "scanner" in token.scopes
 
     asyncio.run(check())
+
+
+def test_analyze_vulnerability_accepts_canonical_vulnerability_type():
+    result = server.analyze_vulnerability({
+        "vulnerability_type": "SQL Injection",
+        "severity": "High",
+        "file_name": "app.py",
+        "line_number": 12,
+        "confidence": 90,
+        "code": "SELECT * FROM users",
+    })
+    assert result["finding"] == "SQL Injection"
+    assert result["severity"] == "High"
+    assert "parameterized queries" in result["recommendation"]
+    assert result["analysis_method"] == "deterministic_rule_based"
+    assert result["ai_provider_used"] is False

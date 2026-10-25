@@ -245,7 +245,7 @@ def analyze_vulnerability(finding: dict) -> dict:
     if not isinstance(finding, dict):
         raise TypeError("finding must be a dictionary")
 
-    name = str(finding.get("type") or finding.get("name") or "Unknown finding")
+    name = str(finding.get("vulnerability_type") or finding.get("type") or finding.get("name") or "Unknown finding")
     severity = str(finding.get("severity") or "Info").title()
     guidance = {
         "SQL Injection": "Use parameterized queries; never concatenate untrusted input into SQL.",
