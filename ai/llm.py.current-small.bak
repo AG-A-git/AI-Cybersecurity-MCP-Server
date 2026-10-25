@@ -1,0 +1,31 @@
+
+def normalize_vulnerability(
+    vulnerability: VulnerabilityInput | dict[str, Any],
+) -> VulnerabilityInput:
+    """Normalize scanner data and bound source-code size."""
+
+    if isinstance(vulnerability, dict):
+        vulnerability = VulnerabilityInput(**vulnerability)
+
+    elif not isinstance(vulnerability, VulnerabilityInput):
+        if hasattr(vulnerability, "model_dump"):
+            vulnerability = VulnerabilityInput(
+                **vulnerability.model_dump()
+            )
+        elif hasattr(vulnerability, "dict"):
+            vulnerability = VulnerabilityInput(
+                **vulnerability.dict()
+            )
+        else:
+            raise TypeError(
+                "vulnerability must be a dictionary or VulnerabilityInput."
+            )
+
+    return VulnerabilityInput(
+        file=vulnerability.file.strip(),
+        line=vulnerability.line,
+        vulnerability=vulnerability.vulnerability.strip(),
+        severity=vulnerability.severity.strip(),
+        confidence=float(vulnerability.confidence),
+        code=limit_code_context(vulnerability.code.strip()),
+    )

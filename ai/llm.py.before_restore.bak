@@ -1,0 +1,264 @@
+
+import json
+import re
+from typing import Any
+
+import requests
+from pydantic import ValidationError
+
+from .config import (
+    OLLAMA_URL,
+    OLLAMA_MODEL,
+    OLLAMA_TIMEOUT,
+    OLLAMA_TEMPERATURE,
+    OLLAMA_TOP_P,
+    OLLAMA_NUM_CTX,
+    OLLAMA_NUM_PREDICT,
+    MAX_CODE_LENGTH,
+)
+
+from .models import VulnerabilityInput, AIAnalysisResponse
+from .vulnerability_mapping import get_vulnerability_mapping
+from .prompts import build_security_prompt
+
+class OllamaClient:
+    """
+    Client for communicating with the Ollama API.
+    """
+
+    def __init__(
+        self,
+        url: str | None = None,
+        model: str | None = None,
+        timeout: int | None = None,
+    ):
+        # Resolve configuration when the client is created so tests
+        # can override ai.llm.OLLAMA_URL dynamically.
+        self.url = url if url is not None else OLLAMA_URL
+        self.model = model if model is not None else OLLAMA_MODEL
+        self.timeout = (
+            timeout if timeout is not None else OLLAMA_TIMEOUT
+        )
+
+    def generate(self, prompt: str) -> str:
+        """Send a prompt to Ollama and return the generated response."""
+
+        if not isinstance(prompt, str):
+            raise TypeError("prompt must be a string")
+
+        prompt = prompt.strip()
+
+        if not prompt:
+            raise ValueError("prompt cannot be empty")
+
+        payload = {
+            "model": self.model,
+            "prompt": prompt,
+            "stream": False,
+            "format": "json",
+            "options": {
+                "temperature": OLLAMA_TEMPERATURE,
+                "top_p": OLLAMA_TOP_P,
+                "num_ctx": OLLAMA_NUM_CTX,
+                "num_predict": OLLAMA_NUM_PREDICT,
+            },
+        }
+
+        response = requests.post(
+            self.url,
+            json=payload,
+            timeout=self.timeout,
+        )
+
+        response.raise_for_status()
+
+        data = response.json()
+
+        if not isinstance(data, dict):
+            raise ValueError(
+                "Ollama returned an invalid response object"
+            )
+
+        result = data.get("response")
+
+        if not isinstance(result, str):
+            raise ValueError(
+                "Ollama response field is missing or invalid"
+            )
+
+        result = result.strip()
+
+        if not result:
+            raise ValueError("Ollama returned an empty response")
+
+        return result
+
+    def health_check(self) -> str:
+        """
+        Check whether Ollama is reachable and the configured model
+        is available.
+
+        Returns:
+            "ok", "unavailable", or "model_unavailable".
+        """
+
+        try:
+            tags_url = self.url.replace(
+                "/api/generate",
+                "/api/tags",
+            )
+
+            response = requests.get(
+                tags_url,
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+
+            data = response.json()
+
+            if not isinstance(data, dict):
+                return "unavailable"
+
+            models = data.get("models", [])
+
+            if not isinstance(models, list):
+                return "unavailable"
+
+            for item in models:
+                if not isinstance(item, dict):
+                    continue
+
+                model_name = item.get("name")
+
+                if model_name == self.model:
+                    return "ok"
+
+                if (
+                    isinstance(model_name, str)
+                    and model_name.split(":")[0]
+                    == self.model.split(":")[0]
+                ):
+                    return "ok"
+
+            return "model_unavailable"
+
+        except requests.exceptions.RequestException:
+            return "unavailable"
+
+        except (ValueError, TypeError):
+            return "unavailable"
+
+def generate_explanation(
+    vulnerability_name,
+    severity,
+    confidence,
+    file,
+    line,
+    code,
+):
+    """Generate a JSON security analysis using Ollama."""
+    import json
+
+    prompt = f"""
+You are a cybersecurity vulnerability analyst.
+
+Analyze this scanner finding:
+- Vulnerability: {vulnerability_name}
+- Severity: {severity}
+- Confidence: {confidence}
+- File: {file}
+- Line: {line}
+- Code: {code}
+
+Return ONLY a valid JSON object with these non-empty string fields:
+{{
+  "explanation": "Explain the vulnerability and why it matters.",
+  "impact": "Describe the potential security impact.",
+  "recommendation": "Give concrete remediation steps.",
+  "secure_practice": "Describe the secure coding practice.",
+  "owasp": "Relevant OWASP category, if identifiable.",
+  "cwe": "Relevant CWE identifier, if identifiable."
+}}
+Do not include Markdown fences or text outside the JSON.
+"""
+
+    return OllamaClient().generate(prompt)
+
+
+def analyze_vulnerability(vulnerability):
+    """Analyze one vulnerability and safely handle AI failures."""
+    import json
+
+    def get_value(obj, key, default=""):
+        if isinstance(obj, dict):
+            return obj.get(key, default)
+        return getattr(obj, key, default)
+
+    vulnerability_name = get_value(
+        vulnerability, "vulnerability", "Unknown vulnerability"
+    )
+    severity = get_value(vulnerability, "severity", "Unknown")
+    confidence = get_value(vulnerability, "confidence", 0)
+    file = get_value(vulnerability, "file", "Unknown")
+    line = get_value(vulnerability, "line", 0)
+    code = get_value(vulnerability, "code", "")
+
+    failure_result = {
+        "ai_status": "failed",
+        "ai_analysis": None,
+        "error": None,
+    }
+
+    try:
+        raw_response = generate_explanation(
+            vulnerability_name,
+            severity,
+            confidence,
+            file,
+            line,
+            code,
+        )
+
+        if not isinstance(raw_response, str):
+            raise ValueError("AI response was not text.")
+
+        # Support responses wrapped in Markdown code fences.
+        cleaned = raw_response.strip()
+        if cleaned.startswith("```"):
+            lines = cleaned.splitlines()
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            cleaned = "\n".join(lines).strip()
+
+        analysis = json.loads(cleaned)
+
+        if not isinstance(analysis, dict):
+            raise ValueError("AI response must be a JSON object.")
+
+        required_fields = (
+            "explanation",
+            "impact",
+            "recommendation",
+        )
+
+        for field in required_fields:
+            if not isinstance(analysis.get(field), str):
+                raise ValueError(
+                    f"AI response is missing a valid '{field}' field."
+                )
+            if not analysis[field].strip():
+                raise ValueError(
+                    f"AI response contains an empty '{field}' field."
+                )
+
+        return {
+            "ai_status": "completed",
+            "ai_analysis": analysis,
+            "error": None,
+        }
+
+    except Exception as exc:
+        failure_result["error"] = str(exc)
+        return failure_result

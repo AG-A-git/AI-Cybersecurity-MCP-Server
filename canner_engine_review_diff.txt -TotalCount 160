@@ -1,0 +1,320 @@
+[1mdiff --git a/scanner/engine.py b/scanner/engine.py[m
+[1mindex b9a1fd8..853fff3 100644[m
+[1m--- a/scanner/engine.py[m
+[1m+++ b/scanner/engine.py[m
+[36m@@ -1,54 +1,159 @@[m
+ [m
+ import os[m
+ import re[m
+[31m-[m
+[31m-[m
+[31m-def scan_project(project_path):[m
+[31m-    findings = [][m
+[32m+[m[32mimport time[m
+[32m+[m
+[32m+[m
+[32m+[m[32mDEFAULT_MAX_FILE_SIZE_BYTES = 1024 * 1024  # 1 MiB[m
+[32m+[m[32mDEFAULT_MAX_FILES = 10_000[m
+[32m+[m[32mDEFAULT_TIMEOUT_SECONDS = 60.0[m
+[32m+[m
+[32m+[m
+[32m+[m[32mdef scan_project([m
+[32m+[m[32m    project_path,[m
+[32m+[m[32m    *,[m
+[32m+[m[32m    max_file_size_bytes=DEFAULT_MAX_FILE_SIZE_BYTES,[m
+[32m+[m[32m    max_files=DEFAULT_MAX_FILES,[m
+[32m+[m[32m    timeout_seconds=DEFAULT_TIMEOUT_SECONDS,[m
+[32m+[m[32m):[m
+[32m+[m[32m    """Scan Python files while enforcing basic resource limits.[m
+[32m+[m
+[32m+[m[32m    Files exceeding the size limit are skipped. Scanning stops when the[m
+[32m+[m[32m    file-count or duration limit is reached. The returned findings can[m
+[32m+[m[32m    therefore be partial when a project exceeds either limit.[m
+[32m+[m[32m    """[m
+[32m+[m[32m    if max_file_size_bytes < 0:[m
+[32m+[m[32m        raise ValueError("max_file_size_bytes must be non-negative")[m
+[32m+[m[32m    if max_files < 0:[m
+[32m+[m[32m        raise ValueError("max_files must be non-negative")[m
+[32m+[m[32m    if timeout_seconds <= 0:[m
+[32m+[m[32m        raise ValueError("timeout_seconds must be positive")[m
+ [m
+     if not os.path.isdir(project_path):[m
+         raise FileNotFoundError([m
+             f"Project path does not exist: {project_path}"[m
+         )[m
+ [m
+[31m-    for root, _, files in os.walk(project_path):[m
+[32m+[m[32m    findings = [][m
+[32m+[m[32m    started_at = time.monotonic()[m
+[32m+[m[32m    project_root = os.path.realpath(project_path)[m
+[32m+[m[32m    files_considered = 0[m
+[32m+[m
+[32m+[m[32m    multiline_pattern = ([m
+[32m+[m[32m        r"(?is)\bf(?P<quote>\x27{3}|\x22{3})"[m
+[32m+[m[32m        r"(?:(?!(?P=quote)).)*?"[m
+[32m+[m[32m        r"\b(?:SELECT|INSERT|UPDATE|DELETE)\b"[m
+[32m+[m[32m        r"(?:(?!(?P=quote)).)*?"[m
+[32m+[m[32m        r"\{[^{}]+\}"[m
+[32m+[m[32m        r"(?:(?!(?P=quote)).)*?(?P=quote)"[m
+[32m+[m[32m    )[m
+[32m+[m
+[32m+[m[32m    def time_limit_reached():[m
+[32m+[m[32m        return time.monotonic() - started_at >= timeout_seconds[m
+[32m+[m
+[32m+[m[32m    def add_finding(relative_path, line_number, vulnerability,[m
+[32m+[m[32m                    severity, confidence, code):[m
+[32m+[m[32m        findings.append([m
+[32m+[m[32m            {[m
+[32m+[m[32m                "file": relative_path,[m
+[32m+[m[32m                "line": line_number,[m
+[32m+[m[32m                "vulnerability": vulnerability,[m
+[32m+[m[32m                "severity": severity,[m
+[32m+[m[32m                "confidence": confidence,[m
+[32m+[m[32m                "code": code,[m
+[32m+[m[32m            }[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m    for root, dirs, files in os.walk([m
+[32m+[m[32m        project_root,[m
+[32m+[m[32m        followlinks=False,[m
+[32m+[m[32m    ):[m
+[32m+[m[32m        if time_limit_reached() or files_considered >= max_files:[m
+[32m+[m[32m            break[m
+[32m+[m
+[32m+[m[32m        # Do not traverse symlinked directories.[m
+[32m+[m[32m        dirs[:] = [[m
+[32m+[m[32m            dirname[m
+[32m+[m[32m            for dirname in dirs[m
+[32m+[m[32m            if not os.path.islink(os.path.join(root, dirname))[m
+[32m+[m[32m        ][m
+[32m+[m
+         for filename in files:[m
+[32m+[m[32m            if time_limit_reached() or files_considered >= max_files:[m
+[32m+[m[32m                break[m
+[32m+[m
+             if not filename.endswith(".py"):[m
+                 continue[m
+ [m
+             file_path = os.path.join(root, filename)[m
+ [m
+[32m+[m[32m            # Skip symlinked files.[m
+[32m+[m[32m            if os.path.islink(file_path):[m
+[32m+[m[32m                continue[m
+[32m+[m
+[32m+[m[32m            # Ensure the resolved file remains inside the project root.[m
+[32m+[m[32m            resolved_file = os.path.realpath(file_path)[m
+[32m+[m[32m            try:[m
+[32m+[m[32m                if os.path.commonpath([m
+[32m+[m[32m                    [project_root, resolved_file][m
+[32m+[m[32m                ) != project_root:[m
+[32m+[m[32m                    continue[m
+[32m+[m[32m            except ValueError:[m
+[32m+[m[32m                continue[m
+[32m+[m
+             try:[m
+[31m-                with open(file_path, "r", encoding="utf-8") as file:[m
+[32m+[m[32m                # Check size before loading file contents.[m
+[32m+[m[32m                if os.path.getsize(resolved_file) > max_file_size_bytes:[m
+[32m+[m[32m                    files_considered += 1[m
+[32m+[m[32m                    continue[m
+[32m+[m
+[32m+[m[32m                with open([m
+[32m+[m[32m                    resolved_file,[m
+[32m+[m[32m                    "r",[m
+[32m+[m[32m                    encoding="utf-8",[m
+[32m+[m[32m                ) as file:[m
+                     lines = file.readlines()[m
+             except (OSError, UnicodeDecodeError):[m
+                 continue[m
+ [m
+[31m-            # Detect SQL f-strings spanning multiple source lines.[m
+[32m+[m[32m            files_considered += 1[m
+[32m+[m[32m            relative_path = os.path.relpath([m
+[32m+[m[32m                resolved_file,[m
+[32m+[m[32m                project_root,[m
+[32m+[m[32m            )[m
+             source_text = "".join(lines)[m
+[31m-            multiline_pattern = r"(?is)\bf(?P<quote>\x27{3}|\x22{3})(?:(?!(?P=quote)).)*?\b(?:SELECT|INSERT|UPDATE|DELETE)\b(?:(?!(?P=quote)).)*?\{[^{}]+\}(?:(?!(?P=quote)).)*?(?P=quote)"[m
+[32m+[m
+[32m+[m[32m            # Detect SQL f-strings spanning multiple source lines.[m
+             for match in re.finditer(multiline_pattern, source_text):[m
+[32m+[m[32m                if time_limit_reached():[m
+[32m+[m[32m                    return findings[m
+[32m+[m
+                 matched_code = match.group(0)[m
+                 if "\n" not in matched_code:[m
+                     continue[m
+[31m-                start_line = source_text.count("\n", 0, match.start()) + 1[m
+[31m-                findings.append([m
+[31m-                    {[m
+[31m-                        "file": os.path.relpath(file_path, project_path),[m
+[31m-                        "line": start_line,[m
+[31m-                        "vulnerability": "SQL Injection",[m
+[31m-                        "severity": "Critical",[m
+[31m-                        "confidence": 95,[m
+[31m-                        "code": matched_code.strip(),[m
+[31m-                    }[m
+[32m+[m
+[32m+[m[32m                start_line = source_text.count([m
+[32m+[m[32m                    "\n", 0, match.start()[m
+[32m+[m[32m                ) + 1[m
+[32m+[m
+[32m+[m[32m                add_finding([m
+[32m+[m[32m                    relative_path,[m
+[32m+[m[32m                    start_line,[m
+[32m+[m[32m                    "SQL Injection",[m
+[32m+[m[32m                    "Critical",[m
+[32m+[m[32m                    95,[m
+[32m+[m[32m                    matched_code.strip(),[m
+                 )[m
+ [m
+             for line_number, line in enumerate(lines, start=1):[m
+[32m+[m[32m                if time_limit_reached():[m
+[32m+[m[32m                    return findings[m
+[32m+[m
+                 stripped_line = line.strip()[m
+ [m
+[31m-                # SQL Injection detection[m
+[32m+[m[32m                # SQL Injection detection.[m
+                 sql_injection = ([m
+                     re.search([m
+                         r"\.execute\s*\(\s*[A-Za-z_][A-Za-z0-9_]*\s*\)",[m
+                         stripped_line,[m
+                     )[m
+[36m@@ -60,97 +165,76 @@[m [mdef scan_project(project_path):[m
+                     or re.search([m
+                         r"""["'].*\bWHERE\b.*["']\s*\+\s*[A-Za-z_][A-Za-z0-9_]*""",[m
+                         stripped_line,[m
+                         re.IGNORECASE,[m
+                     )[m
+[31m-                    # Detect common SQL statements using Python f-strings[m
+                     or re.search([m
+                         r"""(?i)\bf["'].*\b(?:SELECT|INSERT|UPDATE|DELETE)\b.*\{[^{}]+\}.*["']""",[m
+                         stripped_line,[m
+                     )[m
+                 )[m
+ [m
+                 if sql_injection:[m
+[31m-                    findings.append([m
+[31m-                        {[m
+[31m-                            "file": os.path.relpath([m
+[31m-                                file_path, project_path[m
+[31m-                            ),[m
+[31m-                            "line": line_number,[m
+[31m-                            "vulnerability": "SQL Injection",[m
+[31m-                            "severity": "Critical",[m
+[31m-                            "confidence": 95,[m
+[31m-                            "code": stripped_line,[m
+[31m-                        }[m
+[32m+[m[32m                    add_finding([m
+[32m+[m[32m                        relative_path,[m
+[32m+[m[32m                        line_number,[m
+[32m+[m[32m                        "SQL Injection",[m
+[32m+[m[32m                        "Critical",[m
+[32m+[m[32m                        95,[m
+[32m+[m[32m                        stripped_line,[m
+                     )[m
+                     continue[m
+ [m
+[31m-                # Hardcoded credential detection[m
+[32m+[m[32m                # Hardcoded credential detection.[m
+                 hardcoded_credential = re.search([m
+                     r"""^\s*(password|passwd|pwd|secret|api_key|apikey)\s*=\s*["'][^"']+["']""",[m
+                     stripped_line,[m
+                     re.IGNORECASE,[m
+                 )[m
+ [m
+                 if hardcoded_credential:[m
+[31m-                    findings.append([m
+[31m-                        {[m
+[31m-                            "file": os.path.relpath([m
+[31m-                                file_path, project_path[m
+[31m-                            ),[m
+[31m-                            "line": line_number,[m
+[31m-                            "vulnerability": "Hardcoded Credentials",[m
+[31m-                            "severity": "High",[m
+[31m-                            "confidence": 95,[m
+[31m-                            "code": stripped_line,[m
+[31m-                        }[m
+[32m+[m[32m                    add_finding([m
+[32m+[m[32m                        relative_path,[m
+[32m+[m[32m                        line_number,[m
+[32m+[m[32m                        "Hardcoded Credentials",[m
+[32m+[m[32m                        "High",[m
+[32m+[m[32m                        95,[m
+[32m+[m[32m                        stripped_line,[m
+                     )[m
+ [m
+[31m-                # Python eval() detection[m
+[32m+[m[32m                # Python eval() detection.[m
+                 if re.search(r"\beval\s*\(", stripped_line):[m
+[31m-                    findings.append([m
+[31m-                        {[m
+[31m-                            "file": os.path.relpath([m
+[31m-                                file_path, project_path[m
+[31m-                            ),[m
+[31m-                            "line": line_number,[m
+[31m-                            "vulnerability": "Code Injection",[m
+[31m-                            "severity": "High",[m
+[31m-                            "confidence": 90,[m
+[31m-                            "code": stripped_line,[m
+[31m-                        }[m
+[32m+[m[32m                    add_finding([m
+[32m+[m[32m                        relative_path,[m
+[32m+[m[32m                        line_number,[m
+[32m+[m[32m                        "Code Injection",[m
+[32m+[m[32m                        "High",[m
+[32m+[m[32m                        90,[m
+[32m+[m[32m                        stripped_line,[m
+                     )[m
+ [m
+[31m-                # os.system() command injection detection[m
+[32m+[m[32m                # os.system() command injection detection.[m
+                 if re.search(r"\bos\.system\s*\(", stripped_line):[m
+[31m-                    findings.append([m
+[31m-                        {[m
+[31m-                            "file": os.path.relpath([m
+[31m-                                file_path, project_path[m
+[31m-                            ),[m
+[31m-                            "line": line_number,[m
+[31m-                            "vulnerability": "Command Injection",[m
+[31m-                            "severity": "High",[m
+[31m-                            "confidence": 90,[m
+[31m-                            "code": stripped_line,[m
+[31m-                        }[m
+[32m+[m[32m                    add_finding([m
+[32m+[m[32m                        relative_path,[m
+[32m+[m[32m                        line_number,[m
+[32m+[m[32m                        "Command Injection",[m
+[32m+[m[32m                        "High",[m
+[32m+[m[32m                        90,[m
+[32m+[m[32m                        stripped_line,[m
+                     )[m
+ [m
+[31m-                # subprocess shell=True command injection detection[m
+[32m+[m[32m                # subprocess shell=True command injection detection.[m
+                 if ([m
+                     "subprocess." in stripped_line[m
+                     and "shell=True" in stripped_line[m
+                 ):[m
+[31m-                    findings.append([m
+[31m-                        {[m
+[31m-                            "file": os.path.relpath([m
+[31m-                                file_path, project_path[m
+[31m-                            ),[m
+[31m-                            "line": line_number,[m
+[31m-                            "vulnerability": "Command Injection",[m
+[31m-                            "severity": "High",[m
+[31m-                            "confidence": 90,[m
+[31m-                            "code": stripped_line,[m
+[31m-                        }[m
+[32m+[m[32m                    add_finding([m
+[32m+[m[32m                        relative_path,[m
+[32m+[m[32m                        line_number,[m
+[32m+[m[32m                        "Command Injection",[m
+[32m+[m[32m                        "High",[m
+[32m+[m[32m                        90,[m
+[32m+[m[32m                        stripped_line,[m
+                     )[m
+ [m
+     return findings[m

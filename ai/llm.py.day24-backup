@@ -1,0 +1,236 @@
+import json
+import logging
+import re
+
+import requests
+
+from .config import (
+    OLLAMA_URL,
+    OLLAMA_MODEL,
+    OLLAMA_TIMEOUT,
+    OLLAMA_TEMPERATURE,
+    OLLAMA_TOP_P,
+    OLLAMA_NUM_CTX,
+    OLLAMA_NUM_PREDICT,
+    MAX_CODE_LENGTH,
+)
+from .models import AIAnalysisResponse
+
+logger = logging.getLogger(__name__)
+
+
+class OllamaClient:
+    """Client for generating responses through Ollama."""
+
+    def __init__(
+        self,
+        url: str | None = None,
+        model: str | None = None,
+        timeout: int | None = None,
+    ):
+        self.url = url if url is not None else OLLAMA_URL
+        self.model = model if model is not None else OLLAMA_MODEL
+        self.timeout = (
+            timeout if timeout is not None else OLLAMA_TIMEOUT
+        )
+
+    def generate(self, prompt: str) -> str:
+        """Send a prompt to Ollama and return generated text."""
+        if not isinstance(prompt, str):
+            raise TypeError("prompt must be a string")
+
+        prompt = prompt.strip()
+        if not prompt:
+            raise ValueError("prompt cannot be empty")
+
+        payload = {
+            "model": self.model,
+            "prompt": prompt,
+            "stream": False,
+            "format": "json",
+            "options": {
+                "temperature": OLLAMA_TEMPERATURE,
+                "top_p": OLLAMA_TOP_P,
+                "num_ctx": OLLAMA_NUM_CTX,
+                "num_predict": OLLAMA_NUM_PREDICT,
+            },
+        }
+
+        response = requests.post(
+            self.url,
+            json=payload,
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+
+        data = response.json()
+        if not isinstance(data, dict):
+            raise ValueError("Ollama returned an invalid response object")
+
+        result = data.get("response")
+        if not isinstance(result, str) or not result.strip():
+            raise ValueError("Ollama response is missing or empty")
+
+        return result.strip()
+
+    def health_check(self) -> str:
+        """Return ok, model_unavailable, or unavailable."""
+        try:
+            base_url = self.url.rsplit("/api/generate", 1)[0]
+            response = requests.get(
+                base_url + "/api/tags",
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+
+            data = response.json()
+            models = data.get("models", [])
+            if not isinstance(models, list):
+                return "unavailable"
+
+            names = [
+                item.get("name", "")
+                for item in models
+                if isinstance(item, dict)
+            ]
+
+            if any(
+                name == self.model
+                or name.startswith(self.model + ":")
+                for name in names
+            ):
+                return "ok"
+
+            return "model_unavailable"
+
+        except (requests.exceptions.RequestException, ValueError, TypeError):
+            return "unavailable"
+
+
+def extract_json(text: str) -> dict:
+    """Extract a JSON object from a model response."""
+    if not isinstance(text, str) or not text.strip():
+        raise ValueError("AI response is empty")
+
+    try:
+        data = json.loads(text)
+        if isinstance(data, dict):
+            return data
+    except json.JSONDecodeError:
+        pass
+
+    match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+    if not match:
+        raise ValueError("AI response does not contain a JSON object")
+
+    data = json.loads(match.group(0))
+    if not isinstance(data, dict):
+        raise ValueError("AI response must be a JSON object")
+
+    return data
+
+
+def classify_ai_error(error: Exception) -> str:
+    """Classify common AI-service errors for reporting."""
+    if isinstance(error, requests.exceptions.Timeout):
+        return "timeout"
+
+    if isinstance(error, requests.exceptions.ConnectionError):
+        return "connection_error"
+
+    if isinstance(error, requests.exceptions.HTTPError):
+        return "http_error"
+
+    if isinstance(error, (ValueError, json.JSONDecodeError)):
+        return "invalid_response"
+
+    return "failed"
+
+
+def generate_explanation(
+    vulnerability_name: str,
+    severity: str,
+    confidence: float,
+    file: str,
+    line: int,
+    code: str,
+) -> str:
+    """Generate a structured security explanation using Ollama."""
+    safe_code = (code or "")[:MAX_CODE_LENGTH]
+
+    prompt = f"""
+You are a cybersecurity code analysis assistant.
+Analyze the finding below. Return only a valid JSON object with these
+required string fields: explanation, impact, recommendation.
+Also include owasp and cwe when known.
+
+Vulnerability: {vulnerability_name}
+Severity: {severity}
+Confidence: {confidence}
+File: {file}
+Line: {line}
+Code:
+{safe_code}
+
+Do not invent facts that cannot be inferred from the supplied finding.
+""".strip()
+
+    return OllamaClient().generate(prompt)
+
+
+def analyze_vulnerability(vulnerability) -> dict:
+    """Analyze one finding and return a JSON-serializable dictionary."""
+    def field(name, default=""):
+        if isinstance(vulnerability, dict):
+            return vulnerability.get(name, default)
+        return getattr(vulnerability, name, default)
+
+    name = field("vulnerability", field("name", "Unknown vulnerability"))
+    severity = field("severity", "Unknown")
+    confidence = field("confidence", 0)
+    file = field("file", "")
+    line = field("line", 0)
+    code = field("code", "")
+
+    try:
+        raw = generate_explanation(
+            str(name),
+            str(severity),
+            float(confidence or 0),
+            str(file),
+            int(line or 0),
+            str(code or ""),
+        )
+
+        parsed = extract_json(raw)
+
+        explanation = parsed.get("explanation")
+        recommendation = parsed.get("recommendation")
+
+        if not isinstance(explanation, str) or not explanation.strip():
+            raise ValueError("AI response is missing explanation")
+
+        if not isinstance(recommendation, str) or not recommendation.strip():
+            raise ValueError("AI response is missing recommendation")
+
+        ai_response = AIAnalysisResponse(
+            explanation=explanation.strip(),
+            impact=str(parsed.get("impact", "") or ""),
+            recommendation=recommendation.strip(),
+            owasp=parsed.get("owasp"),
+            cwe=parsed.get("cwe"),
+        )
+
+        return {
+            "ai_status": "success",
+            "ai_analysis": ai_response.model_dump(),
+        }
+
+    except Exception as exc:
+        logger.warning("AI vulnerability analysis failed: %s", exc)
+
+        return {
+            "ai_status": "failed",
+            "ai_error": classify_ai_error(exc),
+            "ai_analysis": None,
+        }

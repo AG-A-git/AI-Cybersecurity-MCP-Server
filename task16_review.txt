@@ -1,0 +1,1080 @@
+﻿diff --git a/ai/analysis.py b/ai/analysis.py
+index 3bbb932..47e9aba 100644
+--- a/ai/analysis.py
++++ b/ai/analysis.py
+@@ -1,16 +1,15 @@
++∩╗┐
+ import requests
++
+ from .input import validate_vulnerability
+ from ._location_safeguard import remove_unverified_code_locations
+-from .risk_score import (
+-    calculate_risk,
+-    classify_risk
+-)
++from .risk_score import calculate_risk, classify_risk
+ from .mapping import get_mapping
+ from .response import parse_ai_response
+ from .llm import OllamaClient
+ from .prompts import (
+     build_ai_input,
+-    build_structured_analysis_prompt
++    build_structured_analysis_prompt,
+ )
+ 
+ 
+@@ -22,13 +21,8 @@ def analyze_findings(findings):
+     """
+     Analyze multiple scanner findings.
+ 
+-    Args:
+-        findings: List of scanner vulnerability dictionaries.
+-
+-    Returns:
+-        List of structured AI analysis results.
++    Returns a list of structured AI analysis results.
+     """
+-
+     results = []
+ 
+     for finding in findings:
+@@ -44,26 +38,22 @@ def analyze_findings(findings):
+ 
+ def analyze_finding(vulnerability, client=None):
+     """
+-    Central orchestrator for analyzing one scanner finding.
++    Analyze one scanner finding.
+ 
+-    Args:
+-        vulnerability: Scanner vulnerability finding.
+-        client: Optional Ollama client, primarily useful for testing.
+-
+-    Returns:
+-        Structured security analysis result.
++    Scanner metadata, deterministic risk, and vulnerability
++    mappings remain authoritative outside the AI client.
+     """
+ 
+     # 1. Validate scanner input
+     finding = validate_vulnerability(vulnerability)
+ 
+-    # 2. Convert validated finding to dictionary
++    # 2. Convert validated finding to a dictionary
+     scanner_data = finding.model_dump()
+ 
+     # 3. Build focused AI input
+     ai_input = build_ai_input(scanner_data)
+ 
+-    # 4. Get deterministic vulnerability mapping
++    # 4. Determine vulnerability mapping
+     vulnerability_name = finding.vulnerability
+     mapping = get_mapping(vulnerability_name)
+ 
+@@ -71,13 +61,13 @@ def analyze_finding(vulnerability, client=None):
+     risk_score = calculate_risk(
+         finding.severity,
+         finding.confidence,
+-        finding.vulnerability
++        finding.vulnerability,
+     )
+ 
+-    # 6. Classify deterministic risk level
++    # 6. Classify deterministic risk
+     risk_level = classify_risk(risk_score)
+ 
+-    # 7. Build base result
++    # 7. Build the base response
+     result = {
+         "file": finding.file,
+         "line": finding.line,
+@@ -85,25 +75,17 @@ def analyze_finding(vulnerability, client=None):
+         "vulnerability": vulnerability_name,
+         "severity": finding.severity,
+         "confidence": finding.confidence,
+-
+-        # Deterministic risk information
+         "risk_score": risk_score,
+         "risk_level": risk_level,
+-
+-        # Deterministic vulnerability mapping
+         "owasp": mapping["owasp"],
+         "cwe": mapping["cwe"],
+-
+-        # AI lifecycle status
+         "ai_status": "pending",
+-
+-        # AI-generated information
+         "explanation": None,
+         "impact": None,
+-        "recommendation": None
++        "recommendation": None,
+     }
+ 
+-    # 8. Build structured AI prompt
++    # 8. Build the structured prompt
+     try:
+         prompt = build_structured_analysis_prompt(ai_input)
+     except Exception:
+@@ -113,39 +95,26 @@ def analyze_finding(vulnerability, client=None):
+         )
+         return result
+ 
+-    # 9. Create AI client
++    # 9. Create the AI client
+     if client is None:
+         client = OllamaClient()
+ 
+-    # 10. Mark AI analysis as running
+     result["ai_status"] = "analyzing"
+ 
+-    # 11. Call Ollama with one controlled retry
++    # 10. Generate a response with one controlled retry
+     try:
+         try:
+             raw_response = client.generate(prompt)
++
+         except (
+             requests.exceptions.Timeout,
++            requests.exceptions.ConnectionError,
+             TimeoutError,
+             RuntimeError,
+         ):
+-            # One controlled retry only
++            # One retry for transient request/service failures.
+             raw_response = client.generate(prompt)
+ 
+-    except TimeoutError:
+-        result["ai_status"] = "failed"
+-        result["recommendation"] = (
+-            "AI analysis service unavailable."
+-        )
+-        return result
+-
+-    except RuntimeError:
+-        result["ai_status"] = "failed"
+-        result["recommendation"] = (
+-            "AI analysis service unavailable."
+-        )
+-        return result
+-
+     except Exception:
+         result["ai_status"] = "failed"
+         result["recommendation"] = (
+@@ -153,7 +122,7 @@ def analyze_finding(vulnerability, client=None):
+         )
+         return result
+ 
+-    # 12. Validate AI response
++    # 11. Validate the AI response
+     try:
+         ai_result = parse_ai_response(raw_response)
+     except Exception:
+@@ -163,40 +132,38 @@ def analyze_finding(vulnerability, client=None):
+         )
+         return result
+ 
+-    # 13. Mark AI analysis successful
++    # 12. Mark the analysis as successful
+     result["ai_status"] = "completed"
++
+     result["explanation"] = remove_unverified_code_locations(
+-        ai_result.explanation, finding.file, finding.line
++        ai_result.explanation,
++        finding.file,
++        finding.line,
+     )
++
+     result["impact"] = remove_unverified_code_locations(
+-        ai_result.impact, finding.file, finding.line
++        ai_result.impact,
++        finding.file,
++        finding.line,
+     )
++
+     result["recommendation"] = remove_unverified_code_locations(
+-        ai_result.recommendation, finding.file, finding.line
++        ai_result.recommendation,
++        finding.file,
++        finding.line,
+     )
+ 
+-    # AI output must not modify:
+-    # - risk_score
+-    # - risk_level
+-    # - owasp
+-    # - cwe
+-    # - scanner evidence
+-
++    # AI output cannot override scanner metadata,
++    # deterministic risk values, or vulnerability mappings.
+     return result
+ 
+-
+-# ======================================================
+-# Backward-Compatible Alias
+-# ======================================================
++# Backward-compatible aliases
+ 
+ def analyze_vulnerability(vulnerability):
+-    """
+-    Backward-compatible wrapper for the previous
+-    function name.
+-    """
++    """Analyze one finding using the current analysis pipeline."""
+     return analyze_finding(vulnerability)
+ 
+ 
+ def analyze_vulnerabilities(findings):
+-    """Analyze a list of scanner findings."""
++    """Analyze multiple findings using the current analysis pipeline."""
+     return analyze_findings(findings)
+diff --git a/ai/risk_score.py b/ai/risk_score.py
+index abe610c..488f6b4 100644
+--- a/ai/risk_score.py
++++ b/ai/risk_score.py
+@@ -1,3 +1,6 @@
++
++import math
++
+ # ======================================================
+ # Deterministic Risk Scoring Model
+ # ======================================================
+@@ -6,47 +9,27 @@ SEVERITY_WEIGHTS = {
+     "Critical": 90,
+     "High": 75,
+     "Medium": 50,
+-    "Low": 25
++    "Low": 25,
+ }
+ 
+ 
+ # ======================================================
+ # Vulnerability Impact Factors
+ # ======================================================
+-#
+-# These are initial project factors.
+-# They are intentionally simple and can be refined later.
+-#
+-# 1.00 = normal impact
+-# >1.00 = higher impact
+-# <1.00 = lower impact
+-#
+ 
+ VULNERABILITY_IMPACT_FACTORS = {
+-
+     "SQL Injection": 1.15,
+-
+     "XSS": 1.05,
+-
+     "Command Injection": 1.15,
+-
+     "LDAP Injection": 1.10,
+-
+     "Hardcoded Credentials/Secrets": 1.15,
+-
+     "Weak Cryptography": 1.05,
+-
+     "Broken Access Control": 1.15,
+-
+     "Security Misconfiguration": 1.00,
+-
+     "Insecure Authentication": 1.10,
+-
+     "Insecure Deserialization": 1.15,
+-
+     "Sensitive Data Exposure": 1.10,
+-
+-    "SSRF": 1.15
++    "SSRF": 1.15,
+ }
+ 
+ 
+@@ -59,24 +42,17 @@ def normalize_severity(severity):
+     Normalize a severity value.
+ 
+     Examples:
+-
+-        "high"  -> "High"
++        "high"   -> "High"
+         " HIGH " -> "High"
+     """
+ 
+     if not isinstance(severity, str):
+-        raise ValueError(
+-            "Severity must be a string."
+-        )
++        raise ValueError("Severity must be a string.")
+ 
+-    normalized_severity = (
+-        severity.strip().capitalize()
+-    )
++    normalized_severity = severity.strip().capitalize()
+ 
+     if normalized_severity not in SEVERITY_WEIGHTS:
+-        raise ValueError(
+-            f"Invalid severity: {severity}"
+-        )
++        raise ValueError(f"Invalid severity: {severity}")
+ 
+     return normalized_severity
+ 
+@@ -89,22 +65,21 @@ def validate_confidence(confidence):
+     """
+     Validate scanner confidence.
+ 
+-    Confidence must be between 0 and 100.
++    Confidence must be finite and between 0 and 100.
+     """
+ 
+     try:
+         confidence = float(confidence)
+-
+-    except (TypeError, ValueError):
+-
++    except (TypeError, ValueError, OverflowError) as exc:
++        raise ValueError("Confidence must be a number.") from exc
++
++    if (
++        not math.isfinite(confidence)
++        or confidence < 0
++        or confidence > 100
++    ):
+         raise ValueError(
+-            "Confidence must be a number."
+-        )
+-
+-    if confidence < 0 or confidence > 100:
+-
+-        raise ValueError(
+-            "Confidence must be between 0 and 100."
++            "Confidence must be a finite number between 0 and 100."
+         )
+ 
+     return confidence
+@@ -114,24 +89,19 @@ def validate_confidence(confidence):
+ # Get Vulnerability Impact Factor
+ # ======================================================
+ 
+-def get_vulnerability_impact(
+-    vulnerability_type
+-):
++def get_vulnerability_impact(vulnerability_type):
+     """
+-    Return the initial impact factor for a
+-    canonical vulnerability type.
++    Return the impact factor for a canonical vulnerability type.
+ 
+-    Unknown vulnerability types use 1.00,
+-    which means no additional impact adjustment.
++    Unknown vulnerability types use 1.00.
+     """
+ 
+     if not vulnerability_type:
+-
+         return 1.00
+ 
+     return VULNERABILITY_IMPACT_FACTORS.get(
+         vulnerability_type,
+-        1.00
++        1.00,
+     )
+ 
+ 
+@@ -142,94 +112,45 @@ def get_vulnerability_impact(
+ def calculate_risk(
+     severity,
+     confidence,
+-    vulnerability_type=None
++    vulnerability_type=None,
+ ):
+     """
+     Calculate the deterministic risk score.
+ 
+-    Initial Risk Model ΓÇö Subject to refinement.
+-
+     Formula:
+-
+         Base Severity Score
+-                ├ù
+-        Confidence Factor
+-                ├ù
+-        Vulnerability Impact Factor
+-                Γåô
+-        Risk Score
+-
+-    Example:
++        * Confidence Factor
++        * Vulnerability Impact Factor
+ 
+-        High = 75
+-        Confidence = 90%
+-        SQL Injection Impact = 1.15
+-
+-        75 ├ù 0.90 ├ù 1.15
+-        = 77.625
+-
+-        Final Score = 77.63
++    The final score is bounded between 0 and 100
++    and rounded to two decimal places.
+     """
+ 
+-    # --------------------------------------------------
+-    # Normalize and validate severity
+-    # --------------------------------------------------
+-
+-    normalized_severity = normalize_severity(
+-        severity
+-    )
+-
+-    base_score = SEVERITY_WEIGHTS[
+-        normalized_severity
+-    ]
+-
+-    # --------------------------------------------------
+-    # Validate confidence
+-    # --------------------------------------------------
+-
+-    confidence = validate_confidence(
+-        confidence
+-    )
+-
+-    # --------------------------------------------------
+-    # Confidence factor
+-    # --------------------------------------------------
++    # Normalize and validate severity.
++    normalized_severity = normalize_severity(severity)
+ 
+-    confidence_factor = (
+-        confidence / 100
+-    )
++    base_score = SEVERITY_WEIGHTS[normalized_severity]
+ 
+-    # --------------------------------------------------
+-    # Vulnerability impact factor
+-    # --------------------------------------------------
++    # Validate confidence.
++    confidence = validate_confidence(confidence)
+ 
+-    impact_factor = get_vulnerability_impact(
+-        vulnerability_type
+-    )
++    # Calculate confidence factor.
++    confidence_factor = confidence / 100
+ 
+-    # --------------------------------------------------
+-    # Calculate risk
+-    # --------------------------------------------------
++    # Get vulnerability impact factor.
++    impact_factor = get_vulnerability_impact(vulnerability_type)
+ 
++    # Calculate risk.
+     risk_score = (
+         base_score
+         * confidence_factor
+         * impact_factor
+     )
+ 
+-    # --------------------------------------------------
+-    # Keep score between 0 and 100
+-    # --------------------------------------------------
+-
+-    risk_score = max(
+-        0,
+-        min(risk_score, 100)
+-    )
++    # Keep score between 0 and 100.
++    risk_score = max(0, min(risk_score, 100))
+ 
+-    return round(
+-        risk_score,
+-        2
+-    )
++    return round(risk_score, 2)
+ 
+ 
+ # ======================================================
+@@ -238,43 +159,30 @@ def calculate_risk(
+ 
+ def classify_risk(risk_score):
+     """
+-    Convert numeric risk score into a risk level.
++    Convert a finite numeric risk score into a risk level.
+     """
+ 
+     try:
+-
+-        risk_score = float(
+-            risk_score
+-        )
+-
+-    except (TypeError, ValueError):
+-
+-        raise ValueError(
+-            "Risk score must be numeric."
+-        )
+-
+-    if risk_score < 0 or risk_score > 100:
+-
++        risk_score = float(risk_score)
++    except (TypeError, ValueError, OverflowError) as exc:
++        raise ValueError("Risk score must be numeric.") from exc
++
++    if (
++        not math.isfinite(risk_score)
++        or risk_score < 0
++        or risk_score > 100
++    ):
+         raise ValueError(
+-            "Risk score must be between 0 and 100."
++            "Risk score must be a finite number between 0 and 100."
+         )
+ 
+     if risk_score >= 90:
+-
+         return "Critical"
+-
+     elif risk_score >= 75:
+-
+         return "High"
+-
+     elif risk_score >= 50:
+-
+         return "Medium"
+-
+     elif risk_score >= 25:
+-
+         return "Low"
+-
+     else:
+-
+         return "Informational"
+diff --git a/ai/test_risk_validation.py b/ai/test_risk_validation.py
+index ce6f0b4..3b9a24d 100644
+--- a/ai/test_risk_validation.py
++++ b/ai/test_risk_validation.py
+@@ -1,3 +1,4 @@
++
+ import pytest
+ 
+ from ai.risk_score import (
+@@ -84,3 +85,21 @@ def test_invalid_risk_score():
+ 
+     with pytest.raises(ValueError):
+         classify_risk(-1)
++
++
++@pytest.mark.parametrize(
++    "value",
++    [float("nan"), float("inf"), float("-inf")],
++)
++def test_non_finite_confidence_is_rejected(value):
++    with pytest.raises(ValueError):
++        validate_confidence(value)
++
++
++@pytest.mark.parametrize(
++    "value",
++    [float("nan"), float("inf"), float("-inf")],
++)
++def test_non_finite_risk_score_is_rejected(value):
++    with pytest.raises(ValueError):
++        classify_risk(value)
+diff --git a/scanner/engine.py b/scanner/engine.py
+index 7cfd2a9..fac5b14 100644
+--- a/scanner/engine.py
++++ b/scanner/engine.py
+@@ -1,16 +1,9 @@
++
+ import os
+ import re
+ 
+ 
+ def scan_project(project_path):
+-    """
+-    Scan a project directory for common security vulnerabilities.
+-
+-    Returns:
+-        List of vulnerability dictionaries compatible with
+-        VulnerabilityInput.
+-    """
+-
+     findings = []
+ 
+     if not os.path.isdir(project_path):
+@@ -19,172 +12,125 @@ def scan_project(project_path):
+         )
+ 
+     for root, _, files in os.walk(project_path):
+-
+         for filename in files:
+-
+             if not filename.endswith(".py"):
+                 continue
+ 
+             file_path = os.path.join(root, filename)
+ 
+             try:
+-                with open(
+-                    file_path,
+-                    "r",
+-                    encoding="utf-8"
+-                ) as file:
++                with open(file_path, "r", encoding="utf-8") as file:
+                     lines = file.readlines()
+-
+             except (OSError, UnicodeDecodeError):
+                 continue
+ 
+-            for line_number, line in enumerate(
+-                lines,
+-                start=1
+-            ):
+-
++            for line_number, line in enumerate(lines, start=1):
+                 stripped_line = line.strip()
+ 
+-                # ==================================================
+-                # SQL Injection
+-                # ==================================================
+-
++                # SQL Injection detection
+                 sql_injection = (
+                     re.search(
+                         r"\.execute\s*\(\s*[A-Za-z_][A-Za-z0-9_]*\s*\)",
+-                        stripped_line
++                        stripped_line,
+                     )
+-                    or
+-                    re.search(
++                    or re.search(
+                         r"""["']SELECT\b.*["']\s*\+\s*[A-Za-z_][A-Za-z0-9_]*""",
+                         stripped_line,
+-                        re.IGNORECASE
++                        re.IGNORECASE,
+                     )
+-                    or
+-                    re.search(
++                    or re.search(
+                         r"""["'].*\bWHERE\b.*["']\s*\+\s*[A-Za-z_][A-Za-z0-9_]*""",
+                         stripped_line,
+-                        re.IGNORECASE
++                        re.IGNORECASE,
++                    )
++                    # Detect common SQL statements using Python f-strings
++                    or re.search(
++                        r"""(?i)\bf["'].*\b(?:SELECT|INSERT|UPDATE|DELETE)\b.*\{[^{}]+\}.*["']""",
++                        stripped_line,
+                     )
+                 )
+ 
+                 if sql_injection:
+-
+                     findings.append(
+                         {
+                             "file": os.path.relpath(
+-                                file_path,
+-                                project_path
++                                file_path, project_path
+                             ),
+                             "line": line_number,
+                             "vulnerability": "SQL Injection",
+                             "severity": "Critical",
+                             "confidence": 95,
+-                            "code": stripped_line
++                            "code": stripped_line,
+                         }
+                     )
+-
+                     continue
+ 
+-                # ==================================================
+-                # Hardcoded Credentials
+-                # ==================================================
+-
++                # Hardcoded credential detection
+                 hardcoded_credential = re.search(
+-                    r"^\s*(password|passwd|pwd|secret|api_key|apikey)"
+-                    r"\s*=\s*[\"'][^\"']+[\"']",
++                    r"""^\s*(password|passwd|pwd|secret|api_key|apikey)\s*=\s*["'][^"']+["']""",
+                     stripped_line,
+-                    re.IGNORECASE
++                    re.IGNORECASE,
+                 )
+ 
+                 if hardcoded_credential:
+-
+                     findings.append(
+                         {
+                             "file": os.path.relpath(
+-                                file_path,
+-                                project_path
++                                file_path, project_path
+                             ),
+                             "line": line_number,
+                             "vulnerability": "Hardcoded Credentials",
+                             "severity": "High",
+                             "confidence": 95,
+-                            "code": stripped_line
++                            "code": stripped_line,
+                         }
+                     )
+ 
+-                    continue
+-
+-                # ==================================================
+-                # Code Injection - eval()
+-                # ==================================================
+-
+-                if re.search(
+-                    r"\beval\s*\(",
+-                    stripped_line
+-                ):
+-
++                # Python eval() detection
++                if re.search(r"\beval\s*\(", stripped_line):
+                     findings.append(
+                         {
+                             "file": os.path.relpath(
+-                                file_path,
+-                                project_path
++                                file_path, project_path
+                             ),
+                             "line": line_number,
+                             "vulnerability": "Code Injection",
+                             "severity": "High",
+                             "confidence": 90,
+-                            "code": stripped_line
++                            "code": stripped_line,
+                         }
+                     )
+ 
+-                    continue
+-
+-                # ==================================================
+-                # Command Injection - os.system()
+-                # ==================================================
+-
+-                if re.search(
+-                    r"\bos\.system\s*\(",
+-                    stripped_line
+-                ):
+-
++                # os.system() command injection detection
++                if re.search(r"\bos\.system\s*\(", stripped_line):
+                     findings.append(
+                         {
+                             "file": os.path.relpath(
+-                                file_path,
+-                                project_path
++                                file_path, project_path
+                             ),
+                             "line": line_number,
+                             "vulnerability": "Command Injection",
+                             "severity": "High",
+                             "confidence": 90,
+-                            "code": stripped_line
++                            "code": stripped_line,
+                         }
+                     )
+ 
+-                    continue
+-
+-                # ==================================================
+-                # Command Injection - subprocess shell=True
+-                # ==================================================
+-
++                # subprocess shell=True command injection detection
+                 if (
+                     "subprocess." in stripped_line
+                     and "shell=True" in stripped_line
+                 ):
+-
+                     findings.append(
+                         {
+                             "file": os.path.relpath(
+-                                file_path,
+-                                project_path
++                                file_path, project_path
+                             ),
+                             "line": line_number,
+                             "vulnerability": "Command Injection",
+                             "severity": "High",
+                             "confidence": 90,
+-                            "code": stripped_line
++                            "code": stripped_line,
+                         }
+                     )
+ 
+diff --git a/tests/test_analysis_response_contract.py b/tests/test_analysis_response_contract.py
+index 9af6acd..40c8f1a 100644
+--- a/tests/test_analysis_response_contract.py
++++ b/tests/test_analysis_response_contract.py
+@@ -1,4 +1,6 @@
+-∩╗┐import json
++
++import json
++import requests
+ 
+ from ai.analysis import analyze_finding
+ from ai.mapping import get_mapping
+@@ -50,9 +52,14 @@ def test_analysis_preserves_scanner_metadata():
+     )
+ 
+     assert result["ai_status"] == "completed"
++
+     for field in (
+-        "file", "line", "code", "vulnerability",
+-        "severity", "confidence",
++        "file",
++        "line",
++        "code",
++        "vulnerability",
++        "severity",
++        "confidence",
+     ):
+         assert result[field] == finding[field]
+ 
+@@ -114,3 +121,139 @@ def test_malformed_ai_response_preserves_finding_metadata():
+     )
+     assert result["explanation"] is None
+     assert result["impact"] is None
++
++
++def test_timeout_retries_once_then_succeeds():
++    class RetryClient:
++        def __init__(self):
++            self.calls = 0
++
++        def generate(self, prompt):
++            self.calls += 1
++
++            if self.calls == 1:
++                raise requests.exceptions.Timeout()
++
++            return make_ai_response()
++
++    client = RetryClient()
++    result = analyze_finding(make_finding(), client=client)
++
++    assert client.calls == 2
++    assert result["ai_status"] == "completed"
++
++
++def test_repeated_timeout_fails_after_one_retry():
++    class TimeoutClient:
++        def __init__(self):
++            self.calls = 0
++
++        def generate(self, prompt):
++            self.calls += 1
++            raise requests.exceptions.Timeout()
++
++    client = TimeoutClient()
++    result = analyze_finding(make_finding(), client=client)
++
++    assert client.calls == 2
++    assert result["ai_status"] == "failed"
++    assert result["recommendation"] == (
++        "AI analysis service unavailable."
++    )
++    assert result["file"] == "app.py"
++    assert result["line"] == 10
++
++
++def test_connection_error_retries_once_then_succeeds():
++    class ConnectionErrorClient:
++        def __init__(self):
++            self.calls = 0
++
++        def generate(self, prompt):
++            self.calls += 1
++
++            if self.calls == 1:
++                raise requests.exceptions.ConnectionError(
++                    "Ollama is temporarily unavailable"
++                )
++
++            return make_ai_response()
++
++    client = ConnectionErrorClient()
++    result = analyze_finding(make_finding(), client=client)
++
++    assert client.calls == 2
++    assert result["ai_status"] == "completed"
++
++
++def test_repeated_connection_error_fails_after_one_retry():
++    class ConnectionErrorClient:
++        def __init__(self):
++            self.calls = 0
++
++        def generate(self, prompt):
++            self.calls += 1
++            raise requests.exceptions.ConnectionError(
++                "Ollama is unavailable"
++            )
++
++    client = ConnectionErrorClient()
++    result = analyze_finding(make_finding(), client=client)
++
++    assert client.calls == 2
++    assert result["ai_status"] == "failed"
++    assert result["recommendation"] == (
++        "AI analysis service unavailable."
++    )
++    assert result["file"] == "app.py"
++    assert result["line"] == 10
++
++def test_repeated_analyses_do_not_leak_state():
++    first_finding = make_finding()
++    first_finding["file"] = "first.py"
++    first_finding["severity"] = "Critical"
++    first_finding["confidence"] = 95
++
++    second_finding = make_finding()
++    second_finding["file"] = "second.py"
++    second_finding["severity"] = "Low"
++    second_finding["confidence"] = 40
++    second_finding["vulnerability"] = "XSS"
++    second_finding["code"] = "render(user_input)"
++
++    first_result = analyze_finding(
++        first_finding,
++        client=FakeAIClient(
++            make_ai_response(
++                explanation="First finding explanation.",
++                recommendation="First finding recommendation.",
++            )
++        ),
++    )
++
++    second_result = analyze_finding(
++        second_finding,
++        client=FakeAIClient(
++            make_ai_response(
++                explanation="Second finding explanation.",
++                recommendation="Second finding recommendation.",
++            )
++        ),
++    )
++
++    assert first_result["ai_status"] == "completed"
++    assert second_result["ai_status"] == "completed"
++
++    assert first_result["file"] == "first.py"
++    assert first_result["severity"] == "Critical"
++    assert first_result["explanation"] == "First finding explanation."
++    assert first_result["recommendation"] == "First finding recommendation."
++
++    assert second_result["file"] == "second.py"
++    assert second_result["severity"] == "Low"
++    assert second_result["vulnerability"] == "XSS"
++    assert second_result["explanation"] == "Second finding explanation."
++    assert second_result["recommendation"] == "Second finding recommendation."
++
++    assert first_result["explanation"] != second_result["explanation"]
++    assert first_result["risk_score"] != second_result["risk_score"]
+diff --git a/tests/test_repeat_call_isolation.py b/tests/test_repeat_call_isolation.py
+index fc77dac..a544ba3 100644
+--- a/tests/test_repeat_call_isolation.py
++++ b/tests/test_repeat_call_isolation.py
+@@ -1,4 +1,6 @@
+-∩╗┐from ai.mapping import get_mapping
++∩╗┐from concurrent.futures import ThreadPoolExecutor
++from threading import Barrier
++from ai.mapping import get_mapping
+ import json
+ 
+ from ai.analysis import analyze_finding
+@@ -380,3 +382,90 @@ def test_distinct_ai_responses_and_mappings_stay_with_each_finding():
+     assert alpha_result["ai_status"] == "completed"
+     assert beta_result["ai_status"] == "completed"
+     assert client.call_count == 2
++def test_concurrent_analyses_keep_results_isolated():
++    barrier = Barrier(2, timeout=5)
++
++    class ConcurrentClient:
++        def __init__(self, response):
++            self.response = response
++
++        def generate(self, prompt):
++            barrier.wait()
++            return self.response
++
++    alpha = make_finding(
++        "alpha.py",
++        11,
++        "SQL Injection",
++        "Critical",
++        95,
++        "cursor.execute(query)",
++    )
++
++    beta = make_finding(
++        "beta.py",
++        24,
++        "XSS",
++        "Low",
++        70,
++        "element.innerHTML = value",
++    )
++
++    alpha_response = json.dumps({
++        "explanation": "Alpha-specific explanation.",
++        "impact": "Alpha-specific impact.",
++        "recommendation": "Use parameterized SQL queries.",
++        "secure_practice": "Separate SQL commands from user data.",
++    })
++
++    beta_response = json.dumps({
++        "explanation": "Beta-specific explanation.",
++        "impact": "Beta-specific impact.",
++        "recommendation": "Encode untrusted output.",
++        "secure_practice": "Use context-aware output encoding.",
++    })
++
++    with ThreadPoolExecutor(max_workers=2) as executor:
++        alpha_future = executor.submit(
++            analyze_finding,
++            alpha,
++            ConcurrentClient(alpha_response),
++        )
++        beta_future = executor.submit(
++            analyze_finding,
++            beta,
++            ConcurrentClient(beta_response),
++        )
++
++        alpha_result = alpha_future.result(timeout=10)
++        beta_result = beta_future.result(timeout=10)
++
++    assert alpha_result["ai_status"] == "completed"
++    assert beta_result["ai_status"] == "completed"
++
++    assert alpha_result["file"] == "alpha.py"
++    assert alpha_result["line"] == 11
++    assert alpha_result["explanation"] == (
++        "Alpha-specific explanation."
++    )
++    assert alpha_result["impact"] == "Alpha-specific impact."
++    assert alpha_result["recommendation"] == (
++        "Use parameterized SQL queries."
++    )
++
++    assert beta_result["file"] == "beta.py"
++    assert beta_result["line"] == 24
++    assert beta_result["explanation"] == (
++        "Beta-specific explanation."
++    )
++    assert beta_result["impact"] == "Beta-specific impact."
++    assert beta_result["recommendation"] == (
++        "Encode untrusted output."
++    )
++
++    assert alpha_result["risk_score"] == calculate_risk(
++        "Critical", 95, "SQL Injection"
++    )
++    assert beta_result["risk_score"] == calculate_risk(
++        "Low", 70, "XSS"
++    )
+\ No newline at end of file

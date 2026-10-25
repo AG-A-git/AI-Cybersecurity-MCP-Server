@@ -1,0 +1,307 @@
+
+"""
+Prompt templates and recommendation helpers for AI security analysis.
+"""
+
+import json
+
+
+# ======================================================
+# System Prompt
+# ======================================================
+
+SECURITY_SYSTEM_PROMPT = """
+You are an expert application security analyst and secure-coding assistant.
+
+Analyze security findings accurately and explain them in practical language.
+
+Rules:
+1. Use the supplied vulnerability details and code as evidence.
+2. Do not invent facts that are not supported by the input.
+3. Explain why the finding may be a security issue.
+4. Describe realistic security consequences.
+5. Provide actionable remediation steps.
+6. Explain the secure coding practice that prevents the issue.
+7. State uncertainty when the supplied information is insufficient.
+8. Return valid JSON when requested.
+9. Do not surround JSON with Markdown fences or extra commentary.
+"""
+
+
+# ======================================================
+# Recommendation Mapping
+# ======================================================
+
+RECOMMENDATION_MAP = {
+    "sql injection": (
+        "Use parameterized queries or prepared statements. "
+        "Never construct SQL queries by concatenating untrusted input."
+    ),
+    "cross-site scripting": (
+        "Apply context-appropriate output encoding and sanitize untrusted HTML "
+        "where necessary. Avoid inserting untrusted input into HTML."
+    ),
+    "xss": (
+        "Apply context-appropriate output encoding and sanitize untrusted HTML. "
+        "Avoid unsafe DOM operations."
+    ),
+    "command injection": (
+        "Avoid passing untrusted input to operating-system commands. "
+        "Prefer safe library APIs and strict input validation."
+    ),
+    "path traversal": (
+        "Normalize and validate file paths, restrict access to an approved "
+        "base directory, and reject paths that escape that directory."
+    ),
+    "hardcoded secret": (
+        "Remove secrets from source code, rotate exposed credentials, "
+        "and use a secure secret manager."
+    ),
+    "hardcoded password": (
+        "Remove hardcoded passwords, rotate exposed credentials, "
+        "and load secrets from a secure configuration mechanism."
+    ),
+    "insecure deserialization": (
+        "Avoid deserializing untrusted data. Use safe data formats and "
+        "validate input before processing it."
+    ),
+    "weak cryptography": (
+        "Use established cryptographic libraries and modern algorithms. "
+        "Avoid custom cryptography and deprecated algorithms."
+    ),
+    "weak hash": (
+        "Use an appropriate modern cryptographic hash. For password storage, "
+        "use Argon2id, scrypt, or bcrypt."
+    ),
+    "missing authentication": (
+        "Require authentication for protected resources and verify identity "
+        "before allowing sensitive operations."
+    ),
+    "broken access control": (
+        "Enforce authorization checks on the server for every protected "
+        "operation. Do not rely only on client-side checks."
+    ),
+    "sensitive data exposure": (
+        "Minimize sensitive data collection and exposure. Protect data in "
+        "transit and at rest, and avoid logging secrets."
+    ),
+    "ssrf": (
+        "Validate destination URLs and IP addresses, restrict outbound "
+        "network access, and block internal or metadata endpoints."
+    ),
+    "insecure random": (
+        "Use a cryptographically secure random-number generator for tokens, "
+        "session identifiers, and other security-sensitive values."
+    ),
+    "information disclosure": (
+        "Avoid exposing secrets, internal paths, stack traces, or sensitive "
+        "system details. Return generic errors to clients."
+    ),
+}
+
+
+def get_recommendation(vulnerability):
+    """Return a recommendation matching a vulnerability name."""
+
+    normalized = (
+        str(vulnerability or "")
+        .lower()
+        .replace("_", " ")
+        .replace("-", " ")
+    )
+
+    for keyword, recommendation in RECOMMENDATION_MAP.items():
+        if keyword in normalized:
+            return recommendation
+
+    return (
+        "Validate the finding, identify its root cause, apply the appropriate "
+        "security controls, and add a regression test."
+    )
+
+
+# ======================================================
+# Normalize Input
+# ======================================================
+
+def _normalize_finding(vulnerability, **kwargs):
+    """Convert a finding model, dictionary, or string into a dictionary."""
+
+    if isinstance(vulnerability, dict):
+        finding = dict(vulnerability)
+
+    elif hasattr(vulnerability, "model_dump"):
+        finding = vulnerability.model_dump()
+
+    elif hasattr(vulnerability, "dict"):
+        finding = vulnerability.dict()
+
+    else:
+        finding = {
+            "vulnerability": str(vulnerability or "Unknown vulnerability")
+        }
+
+    finding.update({
+        key: value
+        for key, value in kwargs.items()
+        if value is not None
+    })
+
+    finding.setdefault("vulnerability", "Unknown vulnerability")
+    finding.setdefault("severity", "Unknown")
+    finding.setdefault("confidence", 0)
+    finding.setdefault("file", "Unknown")
+    finding.setdefault("line", 0)
+    finding.setdefault("code", "No code supplied")
+    finding.setdefault("owasp", "Unknown")
+    finding.setdefault("cwe", "Unknown")
+
+    return finding
+
+
+# ======================================================
+# General Security Prompt
+# ======================================================
+
+def build_security_prompt(
+    vulnerability,
+    code="",
+    severity="Unknown",
+    confidence=0,
+    file="Unknown",
+    line=0,
+    owasp=None,
+    cwe=None,
+):
+    """Build a security prompt from a finding or individual fields."""
+
+    finding = _normalize_finding(
+        vulnerability,
+        code=code,
+        severity=severity,
+        confidence=confidence,
+        file=file,
+        line=line,
+        owasp=owasp,
+        cwe=cwe,
+    )
+
+    name = str(finding.get("vulnerability", "Unknown vulnerability"))
+    code_text = str(finding.get("code") or "No code supplied")
+    recommendation = get_recommendation(name)
+
+    output_schema = {
+        "explanation": "Explain why this finding is a security issue.",
+        "impact": "Describe potential security consequences.",
+        "recommendation": "Explain how to fix the vulnerability.",
+        "secure_practice": "Describe the secure coding practice to prevent it.",
+        "owasp": str(finding.get("owasp") or "Unknown"),
+        "cwe": str(finding.get("cwe") or "Unknown"),
+    }
+
+    return f"""
+Analyze this application security finding.
+
+Finding:
+- Vulnerability: {name}
+- Severity: {finding.get("severity")}
+- Confidence: {finding.get("confidence")}
+- File: {finding.get("file")}
+- Line: {finding.get("line")}
+- OWASP: {finding.get("owasp")}
+- CWE: {finding.get("cwe")}
+
+Code:
+{code_text}
+
+Suggested remediation:
+{recommendation}
+
+Instructions:
+- Explain the potential weakness using the supplied evidence.
+- Describe its possible impact.
+- Provide specific remediation steps.
+- Explain the secure coding practice that prevents it.
+- Do not claim the vulnerability is confirmed if the evidence is insufficient.
+- Preserve the supplied OWASP and CWE identifiers unless evidence supports a correction.
+- Return a JSON object containing all the fields in this example.
+- Return JSON only, without Markdown fences or surrounding commentary.
+
+Required JSON structure:
+{json.dumps(output_schema, indent=2)}
+""".strip()
+
+
+# ======================================================
+# Compatibility: build_ai_input
+# ======================================================
+
+def build_ai_input(vulnerability, **kwargs):
+    """
+    Build the AI input used by ai.analysis.
+
+    Supports a dictionary or Pydantic finding model.
+    """
+
+    finding = _normalize_finding(vulnerability, **kwargs)
+
+    return build_security_prompt(finding)
+
+
+# ======================================================
+# Structured Analysis Prompt
+# ======================================================
+
+def build_structured_analysis_prompt(
+    vulnerability,
+    mapping=None,
+    risk_score=None,
+    risk_level=None,
+    **kwargs,
+):
+    """Build a prompt that includes deterministic risk and mapping data."""
+
+    finding = _normalize_finding(vulnerability, **kwargs)
+    prompt = build_security_prompt(finding)
+
+    extra_context = []
+
+    if mapping is not None:
+        if isinstance(mapping, dict):
+            mapping_text = json.dumps(mapping, indent=2, default=str)
+        else:
+            mapping_text = str(mapping)
+
+        extra_context.append(
+            f"Deterministic vulnerability mapping:\n{mapping_text}"
+        )
+
+    if risk_score is not None:
+        extra_context.append(f"Calculated risk score: {risk_score}")
+
+    if risk_level is not None:
+        extra_context.append(f"Calculated risk level: {risk_level}")
+
+    if extra_context:
+        prompt += (
+            "\n\nAdditional analysis context:\n"
+            + "\n\n".join(extra_context)
+        )
+
+    return prompt
+
+
+# ======================================================
+# Backward-Compatible Prompt Builder
+# ======================================================
+
+def build_prompt(*args, **kwargs):
+    """Backward-compatible alias for build_security_prompt."""
+
+    return build_security_prompt(*args, **kwargs)
+
+
+def get_security_prompt():
+    """Return the security system prompt."""
+
+    return SECURITY_SYSTEM_PROMPT

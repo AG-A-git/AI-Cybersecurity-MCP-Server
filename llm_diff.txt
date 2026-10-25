@@ -1,0 +1,669 @@
+﻿diff --git a/ai/llm.py b/ai/llm.py
+index 7c8cfa2..de49766 100644
+--- a/ai/llm.py
++++ b/ai/llm.py
+@@ -1,3 +1,4 @@
++
+ import json
+ import re
+ from typing import Any
+@@ -15,35 +16,32 @@ from .config import (
+     OLLAMA_NUM_PREDICT,
+     MAX_CODE_LENGTH,
+ )
++
+ from .models import VulnerabilityInput, AIAnalysisResponse
+ from .vulnerability_mapping import get_vulnerability_mapping
+ from .prompts import build_security_prompt
+ 
+-
+ class OllamaClient:
+     """
+-    Production Ollama client.
+-
+-    Responsible only for communicating with Ollama.
+-
+-    Scanner severity, confidence, risk score, and risk level
+-    remain authoritative outside the AI client.
++    Client for communicating with the Ollama API.
+     """
+ 
+     def __init__(
+         self,
+-        url: str = OLLAMA_URL,
+-        model: str = OLLAMA_MODEL,
+-        timeout: int = OLLAMA_TIMEOUT,
++        url: str | None = None,
++        model: str | None = None,
++        timeout: int | None = None,
+     ):
+-        self.url = url
+-        self.model = model
+-        self.timeout = timeout
++        # Resolve configuration when the client is created so tests
++        # can override ai.llm.OLLAMA_URL dynamically.
++        self.url = url if url is not None else OLLAMA_URL
++        self.model = model if model is not None else OLLAMA_MODEL
++        self.timeout = (
++            timeout if timeout is not None else OLLAMA_TIMEOUT
++        )
+ 
+     def generate(self, prompt: str) -> str:
+-        """
+-        Send a prompt to Ollama and return the generated response.
+-        """
++        """Send a prompt to Ollama and return the generated response."""
+ 
+         if not isinstance(prompt, str):
+             raise TypeError("prompt must be a string")
+@@ -91,9 +89,7 @@ class OllamaClient:
+         result = result.strip()
+ 
+         if not result:
+-            raise ValueError(
+-                "Ollama returned an empty response"
+-            )
++            raise ValueError("Ollama returned an empty response")
+ 
+         return result
+ 
+@@ -103,16 +99,7 @@ class OllamaClient:
+         is available.
+ 
+         Returns:
+-
+-            "ok"
+-                Ollama is reachable and the configured model exists.
+-
+-            "unavailable"
+-                Ollama cannot be reached or returned an invalid response.
+-
+-            "model_unavailable"
+-                Ollama is reachable but the configured model is not
+-                installed.
++            "ok", "unavailable", or "model_unavailable".
+         """
+ 
+         try:
+@@ -125,7 +112,6 @@ class OllamaClient:
+                 tags_url,
+                 timeout=self.timeout,
+             )
+-
+             response.raise_for_status()
+ 
+             data = response.json()
+@@ -138,11 +124,11 @@ class OllamaClient:
+             if not isinstance(models, list):
+                 return "unavailable"
+ 
+-            for model in models:
+-                if not isinstance(model, dict):
++            for item in models:
++                if not isinstance(item, dict):
+                     continue
+ 
+-                model_name = model.get("name")
++                model_name = item.get("name")
+ 
+                 if model_name == self.model:
+                     return "ok"
+@@ -162,459 +148,117 @@ class OllamaClient:
+         except (ValueError, TypeError):
+             return "unavailable"
+ 
+-
+-def extract_json(text: str) -> dict[str, Any]:
+-    """
+-    Extract a JSON object from an AI response.
+-
+-    Supports:
+-    - plain JSON
+-    - Markdown JSON code fences
+-    - JSON surrounded by other text
+-    - incomplete JSON with a missing final brace
+-    """
+-
+-    if not text or not text.strip():
+-        raise ValueError("AI response was empty")
+-
+-    text = text.strip()
+-
+-    # 1. Direct JSON
+-    try:
+-        data = json.loads(text)
+-
+-        if not isinstance(data, dict):
+-            raise ValueError(
+-                "AI response JSON must be an object"
+-            )
+-
+-        return data
+-
+-    except json.JSONDecodeError:
+-        pass
+-
+-    # 2. Markdown JSON code fence
+-    cleaned = re.sub(
+-        r"^```(?:json)?\s*",
+-        "",
+-        text,
+-        flags=re.IGNORECASE,
++def generate_explanation(
++    vulnerability_name,
++    severity,
++    confidence,
++    file,
++    line,
++    code,
++):
++    """Generate a JSON security analysis using Ollama."""
++    import json
++
++    prompt = f"""
++You are a cybersecurity vulnerability analyst.
++
++Analyze this scanner finding:
++- Vulnerability: {vulnerability_name}
++- Severity: {severity}
++- Confidence: {confidence}
++- File: {file}
++- Line: {line}
++- Code: {code}
++
++Return ONLY a valid JSON object with these non-empty string fields:
++{{
++  "explanation": "Explain the vulnerability and why it matters.",
++  "impact": "Describe the potential security impact.",
++  "recommendation": "Give concrete remediation steps.",
++  "secure_practice": "Describe the secure coding practice.",
++  "owasp": "Relevant OWASP category, if identifiable.",
++  "cwe": "Relevant CWE identifier, if identifiable."
++}}
++Do not include Markdown fences or text outside the JSON.
++"""
++
++    return OllamaClient().generate(prompt)
++
++
++def analyze_vulnerability(vulnerability):
++    """Analyze one vulnerability and safely handle AI failures."""
++    import json
++
++    def get_value(obj, key, default=""):
++        if isinstance(obj, dict):
++            return obj.get(key, default)
++        return getattr(obj, key, default)
++
++    vulnerability_name = get_value(
++        vulnerability, "vulnerability", "Unknown vulnerability"
+     )
+-
+-    cleaned = re.sub(
+-        r"\s*```$",
+-        "",
+-        cleaned,
+-    ).strip()
+-
+-    try:
+-        data = json.loads(cleaned)
+-
+-        if not isinstance(data, dict):
+-            raise ValueError(
+-                "AI response JSON must be an object"
+-            )
+-
+-        return data
+-
+-    except json.JSONDecodeError:
+-        pass
+-
+-    # 3. JSON surrounded by other text
+-    start = cleaned.find("{")
+-    end = cleaned.rfind("}")
+-
+-    if start != -1 and end != -1 and end > start:
+-        candidate = cleaned[start:end + 1]
+-
+-        try:
+-            data = json.loads(candidate)
+-
+-            if not isinstance(data, dict):
+-                raise ValueError(
+-                    "AI response JSON must be an object"
+-                )
+-
+-            return data
+-
+-        except json.JSONDecodeError:
+-            pass
+-
+-    # 4. Missing final closing brace
+-    if start != -1:
+-        candidate = cleaned[start:].strip()
+-
+-        if candidate.count("{") > candidate.count("}"):
+-            candidate += "}"
+-
+-            try:
+-                data = json.loads(candidate)
+-
+-                if not isinstance(data, dict):
+-                    raise ValueError(
+-                        "AI response JSON must be an object"
+-                    )
+-
+-                return data
+-
+-            except json.JSONDecodeError:
+-                pass
+-
+-    raise ValueError(
+-        "AI response contained invalid or incomplete JSON"
+-    )
+-
+-
+-def classify_ai_error(exc: Exception) -> str:
+-    """
+-    Classify AI/Ollama failures into stable error categories.
+-
+-    Categories:
+-
+-    timeout
+-    connection_error
+-    request_error
+-    invalid_response
+-    invalid_json
+-    validation_error
+-    unexpected_error
+-    """
+-
+-    if isinstance(exc, requests.exceptions.Timeout):
+-        return "timeout"
+-
+-    if isinstance(exc, requests.exceptions.ConnectionError):
+-        return "connection_error"
+-
+-    if isinstance(exc, requests.exceptions.RequestException):
+-        return "request_error"
+-
+-    if isinstance(exc, ValidationError):
+-        return "validation_error"
+-
+-    if isinstance(exc, ValueError):
+-        message = str(exc).lower()
+-
+-        if "json" in message:
+-            return "invalid_json"
+-
+-        if "response" in message:
+-            return "invalid_response"
+-
+-        return "validation_error"
+-
+-    return "unexpected_error"
+-
+-
+-def calculate_risk_score(
+-    severity: str,
+-    confidence: float,
+-) -> float:
+-    """
+-    Calculate deterministic risk score.
+-
+-    Scanner severity and confidence remain authoritative.
+-    """
+-
+-    severity_scores = {
+-        "critical": 100,
+-        "high": 80,
+-        "medium": 60,
+-        "low": 40,
+-        "info": 20,
++    severity = get_value(vulnerability, "severity", "Unknown")
++    confidence = get_value(vulnerability, "confidence", 0)
++    file = get_value(vulnerability, "file", "Unknown")
++    line = get_value(vulnerability, "line", 0)
++    code = get_value(vulnerability, "code", "")
++
++    failure_result = {
++        "ai_status": "failed",
++        "ai_analysis": None,
++        "error": None,
+     }
+ 
+-    severity_key = severity.strip().lower()
+-
+-    base_score = severity_scores.get(
+-        severity_key,
+-        0,
+-    )
+-
+-    confidence = max(
+-        0.0,
+-        min(float(confidence), 100.0),
+-    )
+-
+-    score = base_score * (
+-        confidence / 100.0
+-    )
+-
+-    return round(score, 2)
+-
+-
+-def get_risk_level(score: float) -> str:
+-    """
+-    Convert numeric risk score into a risk level.
+-    """
+-
+-    if score >= 80:
+-        return "Critical"
+-
+-    if score >= 60:
+-        return "High"
+-
+-    if score >= 40:
+-        return "Medium"
+-
+-    if score >= 20:
+-        return "Low"
+-
+-    return "Informational"
+-
+-
+-def limit_code_context(code: str) -> str:
+-    """
+-    Limit source-code size before sending it to the AI model.
+-
+-    Large source files can exceed the model context window.
+-
+-    The beginning of the finding is retained because it usually
+-    contains the vulnerable statement and surrounding context.
+-    """
+-
+-    if not isinstance(code, str):
+-        raise TypeError("code must be a string")
+-
+-    if len(code) <= MAX_CODE_LENGTH:
+-        return code
+-
+-    truncated = code[:MAX_CODE_LENGTH]
+-
+-    return (
+-        truncated
+-        + "\n\n"
+-        + "[CODE TRUNCATED FOR AI CONTEXT SAFETY]"
+-    )
+-
+-
+-def normalize_vulnerability(
+-    vulnerability: VulnerabilityInput,
+-) -> VulnerabilityInput:
+-    """
+-    Normalize scanner vulnerability data and bound source-code size.
+-    """
+-
+-    return VulnerabilityInput(
+-        file=vulnerability.file.strip(),
+-        line=vulnerability.line,
+-        vulnerability=vulnerability.vulnerability.strip(),
+-        severity=vulnerability.severity.strip(),
+-        confidence=float(vulnerability.confidence),
+-        code=limit_code_context(
+-            vulnerability.code.strip()
+-        ),
+-    )
+-
+-
+-def normalize_ai_response(
+-    data: dict[str, Any],
+-    vulnerability: VulnerabilityInput,
+-    expected_owasp: str | None = None,
+-    expected_cwe: str | None = None,
+-) -> AIAnalysisResponse:
+-    """
+-    Validate and normalize structured AI output.
+-
+-    The AI provides explanation and recommendation.
+-
+-    OWASP and CWE are taken from the deterministic vulnerability
+-    mapping so that the AI cannot override authoritative mappings.
+-    """
+-
+-    if not isinstance(data, dict):
+-        raise ValueError(
+-            "AI response must be a JSON object"
+-        )
+-
+-    explanation = data.get("explanation")
+-    recommendation = data.get("recommendation")
+-
+-    if not isinstance(explanation, str):
+-        raise ValueError(
+-            "AI response explanation must be a string"
+-        )
+-
+-    if not isinstance(recommendation, str):
+-        raise ValueError(
+-            "AI response recommendation must be a string"
+-        )
+-
+-    explanation = explanation.strip()
+-    recommendation = recommendation.strip()
+-
+-    if not explanation:
+-        raise ValueError(
+-            "AI response explanation cannot be empty"
++    try:
++        raw_response = generate_explanation(
++            vulnerability_name,
++            severity,
++            confidence,
++            file,
++            line,
++            code,
+         )
+ 
+-    if not recommendation:
+-        raise ValueError(
+-            "AI response recommendation cannot be empty"
+-        )
++        if not isinstance(raw_response, str):
++            raise ValueError("AI response was not text.")
+ 
+-    return AIAnalysisResponse(
+-        explanation=explanation,
+-        recommendation=recommendation,
+-        owasp=expected_owasp,
+-        cwe=expected_cwe,
+-    )
++        # Support responses wrapped in Markdown code fences.
++        cleaned = raw_response.strip()
++        if cleaned.startswith("```"):
++            lines = cleaned.splitlines()
++            if lines and lines[0].startswith("```"):
++                lines = lines[1:]
++            if lines and lines[-1].strip() == "```":
++                lines = lines[:-1]
++            cleaned = "\n".join(lines).strip()
+ 
++        analysis = json.loads(cleaned)
+ 
+-def analyze_vulnerability(
+-    vulnerability: VulnerabilityInput,
+-) -> dict[str, Any]:
+-    """
+-    Complete AI vulnerability analysis pipeline.
+-
+-    Pipeline:
+-
+-    Scanner Finding
+-        Γåô
+-    Normalize Input
+-        Γåô
+-    Limit Context
+-        Γåô
+-    Calculate Deterministic Risk
+-        Γåô
+-    Vulnerability Mapping
+-        Γåô
+-    Build Security Prompt
+-        Γåô
+-    Ollama
+-        Γåô
+-    Extract JSON
+-        Γåô
+-    Validate Structured AI Response
+-        Γåô
+-    Normalized Security Intelligence
+-    """
++        if not isinstance(analysis, dict):
++            raise ValueError("AI response must be a JSON object.")
+ 
+-    vulnerability = normalize_vulnerability(
+-        vulnerability
+-    )
+-
+-    # Deterministic risk calculation
+-    risk_score = calculate_risk_score(
+-        vulnerability.severity,
+-        vulnerability.confidence,
+-    )
+-
+-    risk_level = get_risk_level(
+-        risk_score
+-    )
+-
+-    # Deterministic OWASP/CWE mapping
+-    mapping = get_vulnerability_mapping(
+-        vulnerability.vulnerability
+-    )
+-
+-    owasp = None
+-    cwe = None
+-
+-    if mapping:
+-        owasp = mapping.get("owasp")
+-        cwe = mapping.get("cwe")
+-
+-    # Centralized security prompt
+-    prompt = build_security_prompt(
+-        file=vulnerability.file,
+-        line=vulnerability.line,
+-        vulnerability=vulnerability.vulnerability,
+-        severity=vulnerability.severity,
+-        confidence=vulnerability.confidence,
+-        code=vulnerability.code,
+-        owasp=owasp,
+-        cwe=cwe,
+-    )
+-
+-    try:
+-        client = OllamaClient()
+-
+-        raw_response = client.generate(
+-            prompt
++        required_fields = (
++            "explanation",
++            "impact",
++            "recommendation",
+         )
+ 
+-        parsed_response = extract_json(
+-            raw_response
+-        )
+-
+-        ai_response = normalize_ai_response(
+-            parsed_response,
+-            vulnerability,
+-            expected_owasp=owasp,
+-            expected_cwe=cwe,
+-        )
++        for field in required_fields:
++            if not isinstance(analysis.get(field), str):
++                raise ValueError(
++                    f"AI response is missing a valid '{field}' field."
++                )
++            if not analysis[field].strip():
++                raise ValueError(
++                    f"AI response contains an empty '{field}' field."
++                )
+ 
+         return {
+-            "file": vulnerability.file,
+-            "line": vulnerability.line,
+-            "code": vulnerability.code,
+-            "vulnerability": vulnerability.vulnerability,
+-            "severity": vulnerability.severity,
+-            "confidence": vulnerability.confidence,
+-            "risk_score": risk_score,
+-            "risk_level": risk_level,
+-            "owasp": owasp,
+-            "cwe": cwe,
+             "ai_status": "completed",
+-            "ai_error_type": None,
+-            "ai_analysis": ai_response,
+-            "recommendation": ai_response.recommendation,
++            "ai_analysis": analysis,
++            "error": None,
+         }
+ 
+     except Exception as exc:
+-        error_type = classify_ai_error(exc)
+-
+-        if error_type == "timeout":
+-            recommendation = (
+-                "AI analysis service timed out."
+-            )
+-
+-        elif error_type == "connection_error":
+-            recommendation = (
+-                "AI analysis service is unavailable."
+-            )
+-
+-        elif error_type == "request_error":
+-            recommendation = (
+-                "AI analysis request failed."
+-            )
+-
+-        elif error_type == "invalid_json":
+-            recommendation = (
+-                "AI returned invalid JSON."
+-            )
+-
+-        elif error_type == "invalid_response":
+-            recommendation = (
+-                "AI returned an invalid response."
+-            )
+-
+-        elif error_type == "validation_error":
+-            recommendation = (
+-                "AI returned invalid structured data."
+-            )
+-
+-        else:
+-            recommendation = (
+-                "AI analysis failed safely."
+-            )
+-
+-        return {
+-            "file": vulnerability.file,
+-            "line": vulnerability.line,
+-            "code": vulnerability.code,
+-            "vulnerability": vulnerability.vulnerability,
+-            "severity": vulnerability.severity,
+-            "confidence": vulnerability.confidence,
+-            "risk_score": risk_score,
+-            "risk_level": risk_level,
+-            "owasp": owasp,
+-            "cwe": cwe,
+-            "ai_status": "failed",
+-            "ai_error_type": error_type,
+-            "ai_analysis": None,
+-            "recommendation": recommendation,
+-            "error": str(exc),
+-        }
+\ No newline at end of file
++        failure_result["error"] = str(exc)
++        return failure_result
+\ No newline at end of file

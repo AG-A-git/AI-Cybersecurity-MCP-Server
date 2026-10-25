@@ -1,0 +1,124 @@
+
+class OllamaClient:
+    """
+    Production Ollama client.
+
+    Communicates with Ollama and returns generated text.
+    Scanner severity, confidence, risk score, and risk level
+    remain authoritative outside the AI client.
+    """
+
+    def __init__(
+        self,
+        url: str | None = None,
+        model: str | None = None,
+        timeout: int | None = None,
+    ):
+        # Read module-level settings at instantiation time so tests
+        # can override OLLAMA_URL when simulating connection failures.
+        self.url = url if url is not None else OLLAMA_URL
+        self.model = model if model is not None else OLLAMA_MODEL
+        self.timeout = (
+            timeout if timeout is not None else OLLAMA_TIMEOUT
+        )
+
+    def generate(self, prompt: str) -> str:
+        """Send a prompt to Ollama and return its generated response."""
+
+        if not isinstance(prompt, str):
+            raise TypeError("prompt must be a string")
+
+        prompt = prompt.strip()
+
+        if not prompt:
+            raise ValueError("prompt cannot be empty")
+
+        payload = {
+            "model": self.model,
+            "prompt": prompt,
+            "stream": False,
+            "format": "json",
+            "options": {
+                "temperature": OLLAMA_TEMPERATURE,
+                "top_p": OLLAMA_TOP_P,
+                "num_ctx": OLLAMA_NUM_CTX,
+                "num_predict": OLLAMA_NUM_PREDICT,
+            },
+        }
+
+        response = requests.post(
+            self.url,
+            json=payload,
+            timeout=self.timeout,
+        )
+
+        response.raise_for_status()
+
+        data = response.json()
+
+        if not isinstance(data, dict):
+            raise ValueError(
+                "Ollama returned an invalid response object"
+            )
+
+        result = data.get("response")
+
+        if not isinstance(result, str):
+            raise ValueError(
+                "Ollama response field is missing or invalid"
+            )
+
+        result = result.strip()
+
+        if not result:
+            raise ValueError(
+                "Ollama returned an empty response"
+            )
+
+        return result
+
+    def health_check(self) -> str:
+        """
+        Check whether Ollama is reachable and the configured model
+        is available.
+
+        Returns:
+            "ok" when the service and model are available.
+            "model_unavailable" when Ollama responds but the model
+            is not available.
+            "unavailable" when the service cannot be reached.
+        """
+        try:
+            response = requests.get(
+                self.url.rsplit("/api/generate", 1)[0]
+                + "/api/tags",
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+
+            data = response.json()
+            models = data.get("models", [])
+
+            if not isinstance(models, list):
+                return "unavailable"
+
+            available_models = [
+                item.get("name", "")
+                for item in models
+                if isinstance(item, dict)
+            ]
+
+            if any(
+                name == self.model
+                or name.startswith(self.model + ":")
+                for name in available_models
+            ):
+                return "ok"
+
+            return "model_unavailable"
+
+        except requests.exceptions.RequestException:
+            return "unavailable"
+
+        except (ValueError, TypeError):
+            return "unavailable"
