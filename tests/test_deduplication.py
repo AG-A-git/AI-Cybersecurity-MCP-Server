@@ -93,3 +93,82 @@ def test_different_code_on_same_line_is_preserved():
     )
 
     assert len(result) == 2
+
+def test_selected_finding_preserves_evidence_and_optional_metadata():
+    lower = {
+        **make_finding(confidence=60),
+        "evidence": {"source": "user_input"},
+        "remediation": "Use parameterized queries",
+    }
+    higher = {
+        **make_finding(confidence=90),
+        "evidence": {"source": "request.args", "sink": "execute"},
+        "remediation": "Use parameterized SQL queries",
+    }
+
+    result = deduplicate_findings([lower, higher])
+
+    assert len(result) == 1
+    assert result[0]["confidence"] == 90
+    assert result[0]["evidence"] == higher["evidence"]
+    assert result[0]["remediation"] == higher["remediation"]
+    for field in (
+        "vulnerability_type",
+        "file_name",
+        "line_number",
+        "severity",
+        "confidence",
+        "evidence",
+        "remediation",
+    ):
+        assert field in result[0]
+
+
+def test_deduplication_is_stable_when_input_order_is_reversed():
+    first = {
+        **make_finding(confidence=80),
+        "evidence": {"source": "source_a"},
+    }
+    second = {
+        **make_finding(confidence=80),
+        "evidence": {"source": "source_b"},
+    }
+
+    forward = deduplicate_findings([first, second])
+    reverse = deduplicate_findings([second, first])
+
+    assert forward == reverse
+
+
+def test_deduplicating_twice_does_not_change_results():
+    findings = [
+        make_finding(confidence=70),
+        make_finding(confidence=90),
+        make_finding(line_number=30, confidence=80),
+    ]
+
+    once = deduplicate_findings(findings)
+    twice = deduplicate_findings(once)
+
+    assert twice == once
+
+def test_equivalent_path_separators_are_deduplicated():
+    forward_slashes = make_finding(file_name="src/app.py")
+    backward_slashes = make_finding(file_name="src\\app.py")
+
+    result = deduplicate_findings(
+        [forward_slashes, backward_slashes]
+    )
+
+    assert len(result) == 1
+
+
+def test_redundant_path_segments_are_deduplicated():
+    normalized = make_finding(file_name="src/app.py")
+    redundant_segments = make_finding(file_name="src/./app.py")
+
+    result = deduplicate_findings(
+        [normalized, redundant_segments]
+    )
+
+    assert len(result) == 1

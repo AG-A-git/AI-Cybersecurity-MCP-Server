@@ -1,5 +1,7 @@
 
+import json
 import logging
+import os
 
 from scanner.context import build_rule_context
 
@@ -136,9 +138,17 @@ def deduplicate_findings(findings):
     unique = {}
 
     for finding in findings:
+        file_name = finding.get("file_name")
+        normalized_file_name = file_name
+
+        if isinstance(file_name, str):
+            normalized_file_name = os.path.normcase(
+                os.path.normpath(file_name.replace("\\", os.sep))
+            )
+
         key = (
             finding.get("vulnerability_type"),
-            finding.get("file_name"),
+            normalized_file_name,
             finding.get("line_number"),
             finding.get("code"),
         )
@@ -161,6 +171,17 @@ def deduplicate_findings(findings):
 
         if new_priority > current_priority:
             unique[key] = finding
+        elif new_priority == current_priority:
+            # Resolve complete priority ties deterministically so
+            # input order cannot decide which metadata is retained.
+            new_tie_break = json.dumps(
+                finding, sort_keys=True, ensure_ascii=True, default=str
+            )
+            current_tie_break = json.dumps(
+                current, sort_keys=True, ensure_ascii=True, default=str
+            )
+            if new_tie_break > current_tie_break:
+                unique[key] = finding
 
     return list(unique.values())
 
