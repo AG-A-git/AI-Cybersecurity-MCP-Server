@@ -1,3 +1,4 @@
+
 import hashlib
 import math
 
@@ -16,6 +17,8 @@ REQUIRED_FIELDS = {
 }
 
 
+# Must match the severity labels accepted by the existing
+# standardized finding contract and tests.
 VALID_SEVERITIES = {
     "Critical",
     "High",
@@ -57,6 +60,9 @@ def validate_finding(finding):
         severity
         confidence
         code
+
+    Confidence uses the scanner's 0-100 scale.
+    Evidence and fingerprint are optional metadata.
     """
 
     # --------------------------------------------------------
@@ -94,28 +100,23 @@ def validate_finding(finding):
         not isinstance(line_number, int)
         or isinstance(line_number, bool)
     ):
-        raise ValueError(
-            "line_number must be an integer"
-        )
+        raise ValueError("line_number must be an integer")
 
     if line_number < 1:
-        raise ValueError(
-            "line_number must be greater than 0"
-        )
+        raise ValueError("line_number must be greater than 0")
 
     # --------------------------------------------------------
     # Validate vulnerability type
     # --------------------------------------------------------
 
-    if not isinstance(
-        finding["vulnerability_type"],
-        str,
-    ):
+    vulnerability_type = finding["vulnerability_type"]
+
+    if not isinstance(vulnerability_type, str):
         raise ValueError(
             "vulnerability_type must be a string"
         )
 
-    if not finding["vulnerability_type"].strip():
+    if not vulnerability_type.strip():
         raise ValueError(
             "vulnerability_type must not be empty"
         )
@@ -126,9 +127,10 @@ def validate_finding(finding):
 
     severity = finding["severity"]
 
-    # Reject non-string values before checking set membership.
-    # This prevents TypeError for unhashable values such as [].
-    if not isinstance(severity, str) or severity not in VALID_SEVERITIES:
+    if (
+        not isinstance(severity, str)
+        or severity not in VALID_SEVERITIES
+    ):
         raise ValueError(
             f"Invalid severity: {severity}"
         )
@@ -143,9 +145,7 @@ def validate_finding(finding):
         isinstance(confidence, bool)
         or not isinstance(confidence, (int, float))
     ):
-        raise ValueError(
-            "confidence must be numeric"
-        )
+        raise ValueError("confidence must be numeric")
 
     if not math.isfinite(confidence):
         raise ValueError(
@@ -174,6 +174,16 @@ def validate_finding(finding):
                 "evidence must be a dictionary"
             )
 
+    # --------------------------------------------------------
+    # Validate optional fingerprint
+    # --------------------------------------------------------
+
+    if "fingerprint" in finding:
+        if not isinstance(finding["fingerprint"], str):
+            raise ValueError(
+                "fingerprint must be a string"
+            )
+
     return finding
 
 
@@ -193,17 +203,13 @@ def create_finding(
     evidence=None,
 ):
     """
-    Create a standardized vulnerability finding.
+    Create and validate a standardized vulnerability finding.
 
-    All scanner rules should use this helper so that
-    vulnerability output remains consistent.
+    All scanner rules should use this helper to maintain
+    consistent output structure.
 
-    The evidence field is optional and is intended for
-    context-aware analysis such as:
-
-        source -> variable -> sink
-
-    Existing scanner rules do not need to provide evidence.
+    Evidence is optional and can describe source-to-sink
+    relationships when supported by the scanner.
     """
 
     finding = {
@@ -223,13 +229,7 @@ def create_finding(
         ),
     }
 
-    # --------------------------------------------------------
-    # Optional evidence
-    # --------------------------------------------------------
-
     if evidence is not None:
         finding["evidence"] = evidence
 
-    # Validate before returning the finding.
     return validate_finding(finding)
-

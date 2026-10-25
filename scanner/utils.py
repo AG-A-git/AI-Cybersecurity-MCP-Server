@@ -1,3 +1,4 @@
+
 import logging
 
 from scanner.context import build_rule_context
@@ -9,9 +10,15 @@ from scanner.rules.crypto import scan_crypto
 from scanner.rules.input_validation import scan_input_validation
 from scanner.rules.command import scan_command
 from scanner.rules.ldap import scan_ldap
-from scanner.rules.insecure_deserialization import scan_insecure_deserialization
-from scanner.rules.security_misconfiguration import scan_security_misconfiguration
-from scanner.rules.authentication_access_control import scan_authentication_access_control
+from scanner.rules.insecure_deserialization import (
+    scan_insecure_deserialization,
+)
+from scanner.rules.security_misconfiguration import (
+    scan_security_misconfiguration,
+)
+from scanner.rules.authentication_access_control import (
+    scan_authentication_access_control,
+)
 from scanner.rules.ssrf import detect_ssrf
 from scanner.rules.sensitive import scan_sensitive_data_exposure
 
@@ -23,9 +30,7 @@ logger = logging.getLogger(__name__)
 # ============================================================
 
 def load_rules():
-    """
-    Load all implemented vulnerability detection rules.
-    """
+    """Load all implemented vulnerability detection rules."""
     return [
         scan_sql,
         scan_xss,
@@ -50,22 +55,13 @@ def run_all_rules(file_path):
     """
     Run all vulnerability rules against a file.
 
-    A shared rule context is built once per file so future
-    context-aware rules can reuse parsed source information.
-
-    Existing rules continue to receive file_path for backward
-    compatibility.
-
-    If context creation fails, the scanner returns no findings
-    for that file rather than crashing the complete scan.
-
-    If one rule fails, the error is logged and the remaining
-    rules continue to run.
+    Build shared context once for diagnostics, then execute each
+    rule independently. A failure in one rule does not prevent
+    the remaining rules from running.
     """
     results = []
     rules = load_rules()
 
-    # Build shared context once for this file.
     try:
         context = build_rule_context(file_path)
 
@@ -84,11 +80,10 @@ def run_all_rules(file_path):
         logger.exception(
             "Failed to build rule context for %s: %s",
             file_path,
-            error
+            error,
         )
         return results
 
-    # Existing rules continue to use the original file_path API.
     rule_failures = False
 
     for rule in rules:
@@ -100,16 +95,18 @@ def run_all_rules(file_path):
 
         except (SyntaxError, ValueError, OSError) as error:
             rule_failures = True
+
             logger.exception(
                 "Rule %s failed while scanning %s: %s",
                 rule.__name__,
                 file_path,
-                error
+                error,
             )
 
     if rule_failures:
         logger.warning(
-            "Scan for %s completed with rule failures; findings may be incomplete",
+            "Scan for %s completed with rule failures; "
+            "findings may be incomplete",
             file_path,
         )
 
@@ -122,37 +119,44 @@ def run_all_rules(file_path):
 
 def deduplicate_findings(findings):
     """
-    Remove duplicate findings, preferring higher confidence.
-    For equal confidence, prefer the more severe finding.
+    Remove identical findings while preferring higher confidence
+    and then higher severity.
+
+    Findings on different lines remain separate because they may
+    represent different detection points or vulnerabilities.
     """
     severity_rank = {
-        "Critical": 4,
-        "High": 3,
-        "Medium": 2,
-        "Low": 1,
+        "Critical": 5,
+        "High": 4,
+        "Medium": 3,
+        "Low": 2,
+        "Info": 1,
     }
+
     unique = {}
 
     for finding in findings:
         key = (
-            finding["vulnerability_type"],
-            finding["file_name"],
-            finding["line_number"],
-            finding["code"],
+            finding.get("vulnerability_type"),
+            finding.get("file_name"),
+            finding.get("line_number"),
+            finding.get("code"),
         )
 
         current = unique.get(key)
+
         if current is None:
             unique[key] = finding
             continue
 
         new_priority = (
-            finding["confidence"],
-            severity_rank.get(finding["severity"], 0),
+            finding.get("confidence", 0),
+            severity_rank.get(finding.get("severity"), 0),
         )
+
         current_priority = (
-            current["confidence"],
-            severity_rank.get(current["severity"], 0),
+            current.get("confidence", 0),
+            severity_rank.get(current.get("severity"), 0),
         )
 
         if new_priority > current_priority:
@@ -160,8 +164,7 @@ def deduplicate_findings(findings):
 
     return list(unique.values())
 
+
 def remove_duplicates(results):
-    """
-    Backward-compatible wrapper.
-    """
+    """Backward-compatible wrapper for finding deduplication."""
     return deduplicate_findings(results)
