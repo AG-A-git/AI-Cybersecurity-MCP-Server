@@ -120,6 +120,30 @@ def get_risk_score(db_path: str, scan_id: int) -> dict:
     }
 
 
+def _normalize_finding(finding: dict) -> dict:
+    """Normalize legacy finding fields while preserving metadata."""
+    normalized = dict(finding)
+
+    if normalized.get("vulnerability_type") is None:
+        normalized["vulnerability_type"] = next(
+            (finding[key] for key in ("vulnerability", "type", "name")
+             if finding.get(key) is not None),
+            None,
+        )
+
+    if normalized.get("file_name") is None:
+        normalized["file_name"] = next(
+            (finding[key] for key in ("file", "file_path")
+             if finding.get(key) is not None),
+            None,
+        )
+
+    if normalized.get("line_number") is None:
+        normalized["line_number"] = finding.get("line")
+
+    return normalized
+
+
 @mcp.tool()
 def generate_report(db_path: str, scan_id: int, format: str = "markdown") -> dict:
     """Generate a Markdown or JSON report from a persisted scan."""
@@ -133,6 +157,12 @@ def generate_report(db_path: str, scan_id: int, format: str = "markdown") -> dic
     result = get_scan(db_path=db_path, scan_id=scan_id)
     if result is None:
         return {"found": False, "scan_id": scan_id}
+
+    result = dict(result)
+    result["findings"] = [
+        _normalize_finding(finding)
+        for finding in result.get("findings", [])
+    ]
 
     if output_format == "json":
         content = json.dumps(result, indent=2, default=str)
