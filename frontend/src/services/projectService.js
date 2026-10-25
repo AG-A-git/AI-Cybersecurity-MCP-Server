@@ -18,8 +18,7 @@ export const createProject = async (projectData) => {
     return response.data;
 };
 
-// Fetch files for a project.
-// The backend does not currently expose a GET endpoint for project files.
+// Fetch files belonging to a project.
 
 export const getProjectFiles = async (projectId) => {
     if (

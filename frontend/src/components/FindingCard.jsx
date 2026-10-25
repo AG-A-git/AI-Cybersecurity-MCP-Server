@@ -1,5 +1,4 @@
-
-import SeverityBadge from "./SeverityBadge";
+﻿import SeverityBadge from "./SeverityBadge";
 import RiskBadge from "./RiskBadge";
 import FindingMetadata from "./FindingMetadata";
 import {

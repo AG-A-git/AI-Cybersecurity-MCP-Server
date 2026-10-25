@@ -4,6 +4,7 @@ import "../styles/Sidebar.css";
 
 const menuItems = [
     { name: "Dashboard", path: "/dashboard" },
+    { name: "Projects", path: "/projects" },
     { name: "Upload", path: "/upload" },
     { name: "Results", path: "/scan-results" },
     { name: "History", path: "/history" },
@@ -30,14 +31,17 @@ function Sidebar({
                 className="app-sidebar__nav"
             >
                 {menuItems.map((item) => {
-                    const isActive = location.pathname === item.path;
+                    const isActive =
+                        location.pathname === item.path;
 
                     return (
                         <Link
                             key={item.path}
                             to={item.path}
                             onClick={onNavigate}
-                            aria-current={isActive ? "page" : undefined}
+                            aria-current={
+                                isActive ? "page" : undefined
+                            }
                             className="app-sidebar-link"
                         >
                             {item.name}

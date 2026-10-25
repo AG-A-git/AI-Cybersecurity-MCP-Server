@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 import { getProjects } from "../services/projectService";
 import { getScans, getScanResults } from "../services/scanService";
+import { downloadScanReport } from "../services/reportService";
 
 import LoadingState from "../components/LoadingState";
 import ErrorState from "../components/ErrorState";
@@ -16,7 +17,9 @@ const getFindings = (data) => {
     if (Array.isArray(data?.results?.vulnerabilities)) {
         return data.results.vulnerabilities;
     }
-    if (Array.isArray(data?.results?.findings)) return data.results.findings;
+    if (Array.isArray(data?.results?.findings)) {
+        return data.results.findings;
+    }
     if (Array.isArray(data?.results)) return data.results;
     return [];
 };
@@ -52,7 +55,9 @@ const removeDuplicateFindings = (findings) => {
 
     return findings.filter((finding) => {
         const key = getFindingKey(finding);
+
         if (seen.has(key)) return false;
+
         seen.add(key);
         return true;
     });
@@ -80,7 +85,8 @@ const getScanStatus = (scan) =>
     scan?.status ?? scan?.scan_status ?? scan?.state ?? "Unknown";
 
 const getScanFindings = (scan) => {
-    const findings = scan?.findings ?? scan?.vulnerabilities ?? scan?.results;
+    const findings =
+        scan?.findings ?? scan?.vulnerabilities ?? scan?.results;
 
     if (Array.isArray(findings)) return findings;
     if (Array.isArray(findings?.findings)) return findings.findings;
@@ -99,9 +105,12 @@ const getSummaryFindingCount = (scan) => {
         scan?.vulnerability_count ??
         scan?.total_vulnerabilities;
 
-    if (count === null || count === undefined || count === "") return null;
+    if (count === null || count === undefined || count === "") {
+        return null;
+    }
 
     const parsed = Number(count);
+
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 };
 
@@ -109,7 +118,10 @@ const getErrorMessage = (error, fallback) => {
     if (error?.userMessage) return error.userMessage;
 
     const detail = error?.response?.data?.detail;
-    if (typeof detail === "string" && detail.trim()) return detail;
+
+    if (typeof detail === "string" && detail.trim()) {
+        return detail;
+    }
 
     if (typeof error?.message === "string" && error.message.trim()) {
         return error.message;
@@ -126,16 +138,17 @@ function Reports() {
     const [findingCounts, setFindingCounts] = useState({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [exportError, setExportError] = useState("");
+    const [exportingScanId, setExportingScanId] = useState(null);
+    const [exportingFormat, setExportingFormat] = useState(null);
 
     const loadReports = useCallback(async () => {
         setLoading(true);
         setError("");
 
         try {
-            const [projectsResult, scansResult] = await Promise.allSettled([
-                getProjects(),
-                getScans(),
-            ]);
+            const [projectsResult, scansResult] =
+                await Promise.allSettled([getProjects(), getScans()]);
 
             if (projectsResult.status === "rejected") {
                 throw projectsResult.reason;
@@ -143,8 +156,8 @@ function Reports() {
 
             const projectData =
                 projectsResult.value?.data ?? projectsResult.value;
-            const projectList = getProjectList(projectData);
-            setProjects(projectList);
+
+            setProjects(getProjectList(projectData));
 
             if (scansResult.status === "rejected") {
                 throw scansResult.reason;
@@ -152,12 +165,14 @@ function Reports() {
 
             const scanData = scansResult.value?.data ?? scansResult.value;
             const scanList = getScanList(scanData);
+
             setScans(scanList);
 
             const initialCounts = {};
 
             scanList.forEach((scan) => {
                 const id = getScanId(scan);
+
                 if (id == null) return;
 
                 const findings = getScanFindings(scan);
@@ -176,25 +191,24 @@ function Reports() {
             const detailResults = await Promise.allSettled(
                 scanList
                     .filter((scan) => getScanId(scan) != null)
-                    .map(async (scan) => {
-                        const id = getScanId(scan);
-                        const details = await getScanResults(id);
-                        return { id, details };
-                    })
+                    .map(async (scan) => ({
+                        id: getScanId(scan),
+                        details: await getScanResults(getScanId(scan)),
+                    }))
             );
 
             const resolvedCounts = { ...initialCounts };
 
-            detailResults.forEach((detailResult) => {
-                if (detailResult.status !== "fulfilled") {
+            detailResults.forEach((result) => {
+                if (result.status !== "fulfilled") {
                     console.warn(
                         "Could not retrieve scan finding count:",
-                        detailResult.reason
+                        result.reason
                     );
                     return;
                 }
 
-                const { id, details } = detailResult.value;
+                const { id, details } = result.value;
                 const findings = getFindings(details);
 
                 if (findings.length > 0) {
@@ -214,6 +228,7 @@ function Reports() {
             setFindingCounts(resolvedCounts);
         } catch (err) {
             console.error("Failed to load reports:", err);
+
             setError(
                 getErrorMessage(
                     err,
@@ -226,7 +241,7 @@ function Reports() {
     }, []);
 
     useEffect(() => {
-        void loadReports();
+        loadReports();
     }, [loadReports]);
 
     const getProjectName = (projectId, scan = null) => {
@@ -259,7 +274,149 @@ function Reports() {
         }
 
         const summaryCount = getSummaryFindingCount(scan);
+
         return summaryCount !== null ? summaryCount : "Not available";
+    };
+
+    const downloadReport = async (selectedScan, format = "json") => {
+        const scanId = getScanId(selectedScan);
+        const normalizedFormat = String(format).toLowerCase();
+
+        setExportError("");
+
+        if (
+            scanId == null ||
+            String(scanId).trim() === "" ||
+            !Number.isSafeInteger(Number(scanId)) ||
+            Number(scanId) <= 0
+        ) {
+            setExportError(
+                "A valid scan ID is required to export this report."
+            );
+            return;
+        }
+
+        if (!["json", "html", "pdf"].includes(normalizedFormat)) {
+            setExportError("Unsupported report format.");
+            return;
+        }
+
+        // Open the PDF window during the click so popup blockers
+        // are less likely to prevent it.
+        let printWindow = null;
+
+        if (normalizedFormat === "pdf") {
+            printWindow = window.open("", "_blank");
+
+            if (!printWindow) {
+                setExportError(
+                    "The print window was blocked. Allow pop-ups and try again."
+                );
+                return;
+            }
+
+            printWindow.document.write(
+                "<!doctype html><html><head><title>Preparing report</title></head><body>Preparing report...</body></html>"
+            );
+            printWindow.document.close();
+        }
+
+        setExportingScanId(scanId);
+        setExportingFormat(normalizedFormat);
+
+        let objectUrl;
+
+        try {
+            const response = await downloadScanReport(
+                Number(scanId),
+                normalizedFormat
+            );
+
+            if (normalizedFormat === "pdf") {
+                if (
+                    response?.method !== "print" ||
+                    typeof response.html !== "string" ||
+                    !response.html.trim()
+                ) {
+                    throw new Error(
+                        "The report could not be prepared for printing."
+                    );
+                }
+
+                let hasPrinted = false;
+
+                const printReport = () => {
+                    if (hasPrinted || printWindow.closed) return;
+
+                    hasPrinted = true;
+                    printWindow.focus();
+                    printWindow.print();
+                };
+
+                printWindow.document.open();
+                printWindow.document.write(response.html);
+                printWindow.document.close();
+
+                // Register the load handler and check the document state
+                // to cover both early and late load events.
+                printWindow.onload = printReport;
+
+                if (printWindow.document.readyState === "complete") {
+                    printReport();
+                }
+
+                return;
+            }
+
+            if (
+                !(response?.blob instanceof Blob) ||
+                response.blob.size === 0
+            ) {
+                throw new Error(
+                    "The report generator returned an empty file."
+                );
+            }
+
+            objectUrl = URL.createObjectURL(response.blob);
+
+            const link = document.createElement("a");
+            link.href = objectUrl;
+            link.download =
+                response.filename ??
+                `scan-report-${scanId}.${normalizedFormat}`;
+            link.style.display = "none";
+
+            document.body.appendChild(link);
+
+            try {
+                link.click();
+            } finally {
+                link.remove();
+            }
+        } catch (err) {
+            if (printWindow && !printWindow.closed) {
+                printWindow.close();
+            }
+
+            console.error("Failed to download scan report:", err);
+
+            setExportError(
+                getErrorMessage(
+                    err,
+                    `Unable to export the ${normalizedFormat.toUpperCase()} report. Please try again.`
+                )
+            );
+        } finally {
+            if (objectUrl) {
+                window.setTimeout(
+                    () => URL.revokeObjectURL(objectUrl),
+                    1000
+                );
+            }
+
+            setExportingScanId(null);
+            setExportingFormat(null);
+        }
     };
 
     if (loading) {
@@ -291,20 +448,24 @@ function Reports() {
             <header>
                 <h1 className="reports-title">Reports</h1>
                 <p className="reports-subtitle">
-                    Review projects, scan activity, and security findings.
+                    Review projects, scan activity, and export security findings.
                 </p>
             </header>
 
-            <div
-                role="status"
-                className="reports-export-error"
-            >
-                <p>
-                    Report downloads are currently unavailable because the
-                    backend does not yet provide a report-export endpoint.
-                    You can still view scan results and finding summaries.
-                </p>
-            </div>
+            {exportError && (
+                <div role="alert" className="reports-export-error">
+                    <div className="reports-error-content">
+                        <p>{exportError}</p>
+                        <button
+                            type="button"
+                            className="reports-button"
+                            onClick={() => setExportError("")}
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <section className="reports-stats">
                 {[
@@ -328,14 +489,16 @@ function Reports() {
                 {projects.length === 0 ? (
                     <EmptyState
                         title="No projects found"
-                        message="Create a project before reviewing scan reports."
+                        message="Create a project before generating reports."
                         buttonText="Go to Projects"
                         onButtonClick={() => navigate("/projects")}
                     />
                 ) : (
                     <div className="reports-project-grid">
                         {projects.map((project, index) => {
-                            const projectId = project.id ?? project.project_id;
+                            const projectId =
+                                project.id ?? project.project_id;
+
                             const projectScans = scans.filter(
                                 (scan) =>
                                     String(
@@ -358,9 +521,11 @@ function Reports() {
                                     <p className="reports-muted">
                                         Project ID: {projectId ?? "Not available"}
                                     </p>
+
                                     <p className="reports-muted">
                                         {project.description ?? "No description"}
                                     </p>
+
                                     <p className="reports-muted">
                                         Total scans: {projectScans.length}
                                     </p>
@@ -370,6 +535,9 @@ function Reports() {
                                         className="reports-button reports-button-primary"
                                         onClick={() => {
                                             if (projectId == null) {
+                                                setExportError(
+                                                    "This project does not have a valid ID."
+                                                );
                                                 return;
                                             }
 
@@ -377,9 +545,9 @@ function Reports() {
                                                 "selected_project_id",
                                                 String(projectId)
                                             );
+
                                             navigate("/upload");
                                         }}
-                                        disabled={projectId == null}
                                     >
                                         Open Project
                                     </button>
@@ -420,14 +588,11 @@ function Reports() {
                             <tbody>
                                 {scans.map((scan, index) => {
                                     const scanId = getScanId(scan);
-                                    const validScanId =
-                                        scanId != null &&
-                                        Number.isInteger(Number(scanId)) &&
-                                        Number(scanId) > 0;
 
                                     return (
                                         <tr key={scanId ?? index}>
                                             <td>{scanId ?? "N/A"}</td>
+
                                             <td>
                                                 {getProjectName(
                                                     scan.project_id ??
@@ -435,6 +600,7 @@ function Reports() {
                                                     scan
                                                 )}
                                             </td>
+
                                             <td>{getScanStatus(scan)}</td>
                                             <td>{getFindingCount(scan)}</td>
 
@@ -442,33 +608,56 @@ function Reports() {
                                                 <div className="reports-button-row">
                                                     <button
                                                         type="button"
-                                                        disabled={!validScanId}
+                                                        disabled={scanId == null}
                                                         className="reports-button"
-                                                        onClick={() => {
+                                                        onClick={() =>
                                                             navigate("/results", {
                                                                 state: {
                                                                     scanId,
                                                                     result: scan,
                                                                 },
-                                                            });
-                                                        }}
+                                                            })
+                                                        }
                                                     >
                                                         View Results
                                                     </button>
 
-                                                    {["JSON", "HTML", "PDF"].map(
-                                                        (format) => (
+                                                    {[
+                                                        "json",
+                                                        "html",
+                                                        "pdf",
+                                                    ].map((format) => {
+                                                        const isExporting =
+                                                            String(
+                                                                exportingScanId
+                                                            ) ===
+                                                                String(scanId) &&
+                                                            exportingFormat ===
+                                                                format;
+
+                                                        return (
                                                             <button
                                                                 key={format}
                                                                 type="button"
-                                                                disabled
-                                                                title="Report export is not supported by the current backend."
+                                                                disabled={
+                                                                    exportingScanId !==
+                                                                        null ||
+                                                                    scanId == null
+                                                                }
                                                                 className="reports-button reports-button-primary"
+                                                                onClick={() =>
+                                                                    downloadReport(
+                                                                        scan,
+                                                                        format
+                                                                    )
+                                                                }
                                                             >
-                                                                {format} Unavailable
+                                                                {isExporting
+                                                                    ? "Exporting..."
+                                                                    : `Export ${format.toUpperCase()}`}
                                                             </button>
-                                                        )
-                                                    )}
+                                                        );
+                                                    })}
                                                 </div>
                                             </td>
                                         </tr>
@@ -484,7 +673,7 @@ function Reports() {
                 <button
                     type="button"
                     className="reports-button"
-                    onClick={() => void loadReports()}
+                    onClick={loadReports}
                 >
                     Refresh Reports
                 </button>
