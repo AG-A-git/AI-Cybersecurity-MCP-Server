@@ -347,7 +347,7 @@ def test_file_upload():
 
     project_id = project_response.json()["data"]["id"]
 
-    with open("tests/sample_upload.py", "rb") as test_file:
+    with open(BACKEND_DIR / "tests" / "sample_upload.py", "rb") as test_file:
         response = client.post(
             "/upload/",
             params={
@@ -431,7 +431,7 @@ def test_upload_ownership_isolation():
     # Second user attempts unauthorized upload
     # ----------------------------------------------
 
-    with open("tests/sample_upload.py", "rb") as test_file:
+    with open(BACKEND_DIR / "tests" / "sample_upload.py", "rb") as test_file:
         response = client.post(
             "/upload/",
             params={
@@ -484,7 +484,7 @@ def test_scan_endpoint_integration(monkeypatch):
 
     project_id = project_response.json()["data"]["id"]
 
-    with open("tests/sample_upload.py", "rb") as test_file:
+    with open(BACKEND_DIR / "tests" / "sample_upload.py", "rb") as test_file:
         upload_response = client.post(
             "/upload/",
             params={
@@ -587,7 +587,7 @@ def test_scan_lifecycle():
 
     project_id = project_response.json()["data"]["id"]
 
-    with open("tests/sample_upload.py", "rb") as test_file:
+    with open(BACKEND_DIR / "tests" / "sample_upload.py", "rb") as test_file:
         upload_response = client.post(
             "/upload/",
             params={
@@ -690,7 +690,7 @@ def test_scan_results_and_risk_score():
 
     project_id = project_response.json()["data"]["id"]
 
-    with open("tests/sample_upload.py", "rb") as test_file:
+    with open(BACKEND_DIR / "tests" / "sample_upload.py", "rb") as test_file:
         upload_response = client.post(
             "/upload/",
             params={
@@ -894,7 +894,7 @@ def test_scan_result_ownership_isolation():
     # Upload file
     # --------------------------------------------------
 
-    with open("tests/sample_upload.py", "rb") as test_file:
+    with open(BACKEND_DIR / "tests" / "sample_upload.py", "rb") as test_file:
         upload_response = client.post(
             "/upload/",
             params={
@@ -1173,7 +1173,7 @@ def _create_retry_test_scan(
             db.add(
                 UploadedFile(
                     filename="retry_test.py",
-                    filepath="tests/sample_upload.py",
+                    filepath=str(BACKEND_DIR / "tests" / "sample_upload.py"),
                     language="python",
                     project_id=project.id,
                     user_id=user.id,
@@ -1319,7 +1319,7 @@ def test_upload_response_does_not_expose_internal_filepath():
     assert project_response.status_code == 200
     project_id = project_response.json()["data"]["id"]
 
-    with open("tests/sample_upload.py", "rb") as test_file:
+    with open(BACKEND_DIR / "tests" / "sample_upload.py", "rb") as test_file:
         response = client.post(
             "/upload/",
             params={"project_id": project_id},

@@ -43,29 +43,34 @@ def execute_scanner(filepath: str, scan_id: int):
         raise
 
 
+
 def normalize_scanner_finding(finding: dict) -> dict:
     """
-    Normalize a raw scanner finding into the backend finding contract.
+    Normalize canonical scanner findings and legacy findings
+    into the backend's internal finding contract.
     """
 
     if not isinstance(finding, dict):
-        raise ValueError(
-            "Scanner finding must be a dictionary"
-        )
+        raise ValueError("Scanner finding must be a dictionary")
 
-    file_path = finding.get("file")
-    line_number = finding.get("line")
-    vulnerability = finding.get("vulnerability")
+    file_path = finding.get("file_name")
+    if file_path is None:
+        file_path = finding.get("file")
+
+    line_number = finding.get("line_number")
+    if line_number is None:
+        line_number = finding.get("line")
+
+    vulnerability = finding.get("vulnerability_type")
+    if vulnerability is None:
+        vulnerability = finding.get("vulnerability")
+
     severity = finding.get("severity")
     confidence = finding.get("confidence")
     code = finding.get("code")
 
     return {
-        "file": (
-            str(file_path).strip()
-            if file_path is not None
-            else None
-        ),
+        "file": str(file_path).strip() if file_path is not None else None,
         "line": line_number,
         "vulnerability": (
             str(vulnerability).strip()
@@ -78,11 +83,7 @@ def normalize_scanner_finding(finding: dict) -> dict:
             else None
         ),
         "confidence": confidence,
-        "code": (
-            str(code).strip()
-            if code is not None
-            else None
-        ),
+        "code": str(code).strip() if code is not None else None,
     }
 
 

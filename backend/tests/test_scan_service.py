@@ -32,6 +32,31 @@ def test_normalize_scanner_finding():
     }
 
 
+def test_normalize_canonical_scanner_finding():
+    finding = {
+        "file_name": "src/security_test.py",
+        "line_number": 42,
+        "vulnerability_type": "SQL Injection",
+        "severity": "High",
+        "confidence": 90,
+        "code": "cursor.execute(query)",
+        "owasp": "A03:2021",
+        "cwe": "CWE-89",
+    }
+
+    normalized = normalize_scanner_finding(finding)
+
+    assert normalized == {
+        "file": "src/security_test.py",
+        "line": 42,
+        "vulnerability": "SQL Injection",
+        "severity": "High",
+        "confidence": 90,
+        "code": "cursor.execute(query)",
+    }
+
+
+
 def test_validate_valid_finding():
     finding = {
         "file": "test.py",

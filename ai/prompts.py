@@ -128,20 +128,19 @@ def build_prompt(scanner_result):
             Complete prompt ready to send to Ollama.
     """
 
-    vulnerability = scanner_result.get(
-        "vulnerability",
-        "Unknown"
-    )
 
-    file_name = scanner_result.get(
-        "file",
-        "Unknown"
-    )
+    vulnerability = scanner_result.get("vulnerability_type")
+    if vulnerability is None:
+        vulnerability = scanner_result.get("vulnerability", "Unknown")
 
-    line = scanner_result.get(
-        "line",
-        "Unknown"
-    )
+    file_name = scanner_result.get("file_name")
+    if file_name is None:
+        file_name = scanner_result.get("file", "Unknown")
+
+    line = scanner_result.get("line_number")
+    if line is None:
+        line = scanner_result.get("line", "Unknown")
+
 
     severity = scanner_result.get(
         "severity",
