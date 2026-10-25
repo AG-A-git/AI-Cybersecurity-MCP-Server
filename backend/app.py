@@ -1,295 +1,184 @@
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form
-from database import engine
-from models import Base
-from config import PROJECT_NAME
-from config import PROJECT_VERSION
-from config import PROJECT_DESCRIPTION
-from fastapi import Depends, HTTPException
-from sqlalchemy.orm import Session
 
-from database import get_db
-from models import User, Project, UploadedFile
-from schemas import (
-    UserRegister,
-    UserResponse,
-    ProjectCreate,
-    ProjectResponse,
-    UploadedFileResponse,
-)
-from utils import hash_password
-from schemas import UserLogin, Token
-from utils import verify_password
-from auth import create_access_token
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
-from auth import get_current_user
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+
+from database import engine, get_db
+from models import Base, User
+from config import (
+    PROJECT_NAME,
+    PROJECT_VERSION,
+    PROJECT_DESCRIPTION,
+)
+from schemas import UserRegister, UserResponse, UserLogin, Token
+from utils import hash_password, verify_password
+from auth import create_access_token, get_current_user
+from routers import projects, upload, scan
+
+
+# Create database tables
 Base.metadata.create_all(bind=engine)
 
+
+# Create FastAPI application
 app = FastAPI(
     title=PROJECT_NAME,
     version=PROJECT_VERSION,
-    description=PROJECT_DESCRIPTION
+    description=PROJECT_DESCRIPTION,
 )
+
+
+# Enable CORS for the React frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Register existing API routers
+app.include_router(projects.router)
+app.include_router(upload.router)
+app.include_router(scan.router)
+
+
+# OAuth2 token configuration
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+
+# Home endpoint
 @app.get("/")
 def home():
     return {
         "message": "Welcome to AI Cybersecurity MCP Server!"
     }
+
+
+# Register endpoint
 @app.post("/register", response_model=UserResponse)
 def register(
     user: UserRegister,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    existing_user = db.query(User).filter(
-        User.email == user.email
-    ).first()
+    # Check for an existing email
+    existing_email = (
+        db.query(User)
+        .filter(User.email == user.email)
+        .first()
+    )
 
-    if existing_user:
+    if existing_email:
         raise HTTPException(
             status_code=400,
-            detail="Email already registered"
+            detail="Email already registered",
         )
 
+    # Check for an existing username
+    existing_username = (
+        db.query(User)
+        .filter(User.username == user.username)
+        .first()
+    )
+
+    if existing_username:
+        raise HTTPException(
+            status_code=400,
+            detail="Username already taken",
+        )
+
+    # Create the user
     new_user = User(
         username=user.username,
         email=user.email,
-        password_hash=hash_password(user.password)
+        password_hash=hash_password(user.password),
     )
 
     db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+
+    try:
+        db.commit()
+        db.refresh(new_user)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Username or email already exists",
+        )
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to register user",
+        )
 
     return new_user
+
+
+# Login endpoint
 @app.post("/login", response_model=Token)
 def login(
     user: UserLogin,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    db_user = db.query(User).filter(
-        User.email == user.email
-    ).first()
+    db_user = (
+        db.query(User)
+        .filter(User.email == user.email)
+        .first()
+    )
 
-    if not db_user:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid email or password"
+    if (
+        not db_user
+        or not verify_password(
+            user.password,
+            db_user.password_hash,
         )
-
-    if not verify_password(
-        user.password,
-        db_user.password_hash
     ):
         raise HTTPException(
             status_code=401,
-            detail="Invalid email or password"
+            detail="Invalid email or password",
         )
 
     access_token = create_access_token(
-        data={
-            "sub": db_user.email
-        }
+        data={"sub": db_user.email}
     )
 
     return {
         "access_token": access_token,
-        "token_type": "bearer"
+        "token_type": "bearer",
     }
+
+
+# Profile endpoint
 @app.get("/profile", response_model=UserResponse)
 def profile(
     token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     email = get_current_user(token)
 
     if email is None:
         raise HTTPException(
             status_code=401,
-            detail="Invalid or expired token"
+            detail="Invalid or expired token",
         )
 
-    user = db.query(User).filter(
-        User.email == email
-    ).first()
+    user = (
+        db.query(User)
+        .filter(User.email == email)
+        .first()
+    )
 
     if user is None:
         raise HTTPException(
             status_code=404,
-            detail="User not found"
+            detail="User not found",
         )
 
     return user
-@app.post("/projects", response_model=ProjectResponse)
-def create_project(
-    project: ProjectCreate,
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
-):
-    email = get_current_user(token)
-
-    if email is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or expired token"
-        )
-
-    user = db.query(User).filter(
-        User.email == email
-    ).first()
-
-    if user is None:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found"
-        )
-
-    new_project = Project(
-        name=project.name,
-        description=project.description,
-        owner_id=user.id
-    )
-
-    db.add(new_project)
-    db.commit()
-    db.refresh(new_project)
-
-    return new_project
-@app.get("/projects", response_model=list[ProjectResponse])
-def get_projects(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
-):
-    email = get_current_user(token)
-
-    if email is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or expired token"
-        )
-
-    user = db.query(User).filter(
-        User.email == email
-    ).first()
-
-    if user is None:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found"
-        )
-
-    projects = db.query(Project).filter(
-        Project.owner_id == user.id
-    ).all()
-
-    return projects
-@app.get(
-    "/projects/{project_id}/files",
-    response_model=list[UploadedFileResponse]
-)
-def get_project_files(
-    project_id: int,
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
-):
-    email = get_current_user(token)
-
-    if email is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or expired token"
-        )
-
-    user = db.query(User).filter(
-        User.email == email
-    ).first()
-
-    if user is None:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found"
-        )
-
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == user.id
-    ).first()
-
-    if project is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Project not found"
-        )
-
-    files = db.query(UploadedFile).filter(
-        UploadedFile.project_id == project_id
-    ).all()
-
-    return files
-@app.post("/upload")
-async def upload_file(
-    project_id: int = Form(...),
-    file: UploadFile = File(...),
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
-):
-    email = get_current_user(token)
-
-    if email is None:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or expired token"
-        )
-
-    user = db.query(User).filter(
-        User.email == email
-    ).first()
-
-    if user is None:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found"
-        )
-
-    project = db.query(Project).filter(
-        Project.id == project_id,
-        Project.owner_id == user.id
-    ).first()
-
-    if project is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Project not found"
-        )
-
-    file_path = f"uploads/{file.filename}"
-
-    contents = await file.read()
-
-    with open(file_path, "wb") as buffer:
-        buffer.write(contents)
-
-    uploaded_file = UploadedFile(
-        filename=file.filename,
-        file_path=file_path,
-        project_id=project_id
-    )
-
-    db.add(uploaded_file)
-    db.commit()
-    db.refresh(uploaded_file)
-
-    return {
-        "message": "File uploaded successfully",
-        "file": uploaded_file
-    }
