@@ -1,0 +1,187 @@
+
+from scanner.rules.input_validation import scan_input_validation
+from scanner.scan import scan_file
+
+
+def test_sql_injection_from_user_input():
+    findings = scan_input_validation(
+        "scanner/test_files/input_validation_test.py"
+    )
+
+    sql_findings = [
+        finding
+        for finding in findings
+        if finding["vulnerability_type"] == "SQL Injection"
+    ]
+
+    assert sql_findings
+
+
+def test_command_injection_from_user_input():
+    findings = scan_input_validation(
+        "scanner/test_files/input_validation_test.py"
+    )
+
+    command_findings = [
+        finding
+        for finding in findings
+        if finding["vulnerability_type"] == "Command Injection"
+    ]
+
+    assert command_findings
+
+
+def test_standardized_fields():
+    findings = scan_input_validation(
+        "scanner/test_files/input_validation_test.py"
+    )
+
+    assert findings
+
+    required_fields = {
+        "vulnerability_type",
+        "file_name",
+        "line_number",
+        "severity",
+        "confidence",
+        "code",
+    }
+
+    for finding in findings:
+        assert required_fields.issubset(finding.keys())
+
+
+def test_validation_reduces_sql_confidence():
+    findings = scan_input_validation(
+        "scanner/test_files/input_validation_safe_test.py"
+    )
+
+    sql_findings = [
+        finding
+        for finding in findings
+        if finding["vulnerability_type"] == "SQL Injection"
+    ]
+
+    assert sql_findings
+    assert sql_findings[0]["confidence"] < 90
+
+
+def test_validation_reduces_command_confidence():
+    findings = scan_input_validation(
+        "scanner/test_files/input_validation_safe_test.py"
+    )
+
+    command_findings = [
+        finding
+        for finding in findings
+        if finding["vulnerability_type"] == "Command Injection"
+    ]
+
+    assert command_findings
+    assert command_findings[0]["confidence"] < 90
+
+
+def test_xss_from_user_input():
+    findings = scan_input_validation(
+        "scanner/test_files/xss_input_validation_test.js"
+    )
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["vulnerability_type"]
+        == "Cross-Site Scripting (XSS)"
+    ]
+
+    assert xss_findings
+
+
+def test_safe_text_content_not_detected_as_xss():
+    findings = scan_input_validation(
+        "scanner/test_files/xss_safe_input_test.js"
+    )
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["vulnerability_type"]
+        == "Cross-Site Scripting (XSS)"
+    ]
+
+    assert not xss_findings
+
+
+def test_static_command_not_detected_as_command_injection():
+    findings = scan_file("test_files/safe/command_safe.py")
+
+    command_findings = [
+        finding
+        for finding in findings
+        if finding["vulnerability_type"] == "Command Injection"
+    ]
+
+    assert not command_findings
+
+
+def test_command_injection_from_multi_hop_user_input():
+    test_file = "scanner/test_files/input_validation_multi_hop_test.py"
+
+    findings = scan_input_validation(test_file)
+
+    command_findings = [
+        finding
+        for finding in findings
+        if finding["vulnerability_type"] == "Command Injection"
+    ]
+
+    assert command_findings
+
+
+def test_multi_hop_validation_reduces_sql_confidence(tmp_path):
+    test_file = tmp_path / "sql_multi_hop_validated.py"
+
+    test_file.write_text(
+        """user_id = request.args.get("id")
+safe_id = user_id
+
+if safe_id.isdigit():
+    query = "SELECT * FROM users WHERE id=" + safe_id
+    cursor.execute(query)
+""",
+        encoding="utf-8",
+    )
+
+    findings = scan_input_validation(str(test_file))
+
+    sql_findings = [
+        finding
+        for finding in findings
+        if finding["vulnerability_type"] == "SQL Injection"
+    ]
+
+    assert sql_findings
+    assert sql_findings[0]["confidence"] < 90
+
+
+def test_parameterized_sql_query_not_detected_as_injection(tmp_path):
+    test_file = tmp_path / "parameterized_sql.py"
+
+    test_file.write_text(
+        '''user_id = input("Enter ID: ")
+cursor.execute(
+    "SELECT * FROM users WHERE id = ?",
+    (user_id,)
+)
+''',
+        encoding="utf-8",
+    )
+
+    findings = scan_input_validation(str(test_file))
+
+    sql_findings = [
+        finding
+        for finding in findings
+        if finding["vulnerability_type"] == "SQL Injection"
+    ]
+
+    assert not sql_findings

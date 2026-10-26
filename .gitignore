@@ -216,6 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# Streamlit
+.streamlit/secrets.toml
 
 # Local project database
 backend/scanner.db
@@ -228,3 +230,7 @@ backend/test.py
 
 # Locally generated security scan reports
 backend/generated_reports/
+
+# Generated scanner reports
+scan_report.json
+outputs/
