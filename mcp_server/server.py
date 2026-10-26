@@ -1,68 +1,48 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+"""
+MCP server for AI vulnerability analysis.
+"""
 
-from ai.analysis import analyze_vulnerability
-from ai.utils import format_ai_response
+from mcp.server.mcpserver import MCPServer
+
+from mcp_server.resources import register_resources
+from mcp_server.tools import run_ai_analysis
 
 
-app = FastAPI(
-    title="AI Cybersecurity MCP Server",
-    description="AI vulnerability analysis API",
-    version="1.0.0"
+mcp = MCPServer(
+    "AI Cybersecurity MCP Server"
 )
 
 
-class VulnerabilityRequest(BaseModel):
-    file: str
-    line: int
-    vulnerability: str
-    severity: str
-    confidence: float
+@mcp.tool()
+def analyze_vulnerability_tool(
+    file: str,
+    line: int,
+    vulnerability: str,
+    severity: str,
+    confidence: float,
     code: str
+) -> dict:
+    """
+    Analyze a single scanner vulnerability finding.
 
-
-class VulnerabilityResponse(BaseModel):
-    severity: str
-    risk_score: int | float
-    owasp: str
-    cwe: str
-    explanation: str
-    recommendation: str
-
-
-@app.get("/")
-def root():
-    return {
-        "message": "AI Cybersecurity MCP Server is running"
-    }
-
-
-@app.post("/analyze", response_model=VulnerabilityResponse)
-def analyze(request: VulnerabilityRequest):
+    Returns deterministic risk information together with
+    AI-generated explanation and recommendation.
+    """
 
     scanner_result = {
-        "file": request.file,
-        "line": request.line,
-        "vulnerability": request.vulnerability,
-        "severity": request.severity,
-        "confidence": request.confidence,
-        "code": request.code
+        "file": file,
+        "line": line,
+        "vulnerability": vulnerability,
+        "severity": severity,
+        "confidence": confidence,
+        "code": code
     }
 
-    try:
-        analysis = analyze_vulnerability(scanner_result)
-    except (RuntimeError, ValueError) as e:
-        raise HTTPException(
-            status_code=503,
-            detail="AI analysis unavailable"
-        ) from e
-    formatted_response = format_ai_response(
-        severity=analysis["severity"],
-        risk_score=analysis["risk_score"],
-        owasp=analysis["owasp"],
-        cwe=analysis["cwe"],
-        explanation=analysis["explanation"],
-        recommendation=analysis["recommendation"]
-    )
+    return run_ai_analysis(scanner_result)
 
-    return formatted_response
+
+register_resources(mcp)
+
+
+if __name__ == "__main__":
+    mcp.run(transport="stdio")

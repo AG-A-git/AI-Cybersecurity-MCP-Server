@@ -1,274 +1,109 @@
-import json
+
+import pytest
+from unittest.mock import patch
 
 import ai.llm as llm
-
 from ai.models import VulnerabilityInput
 
 
-# ======================================================
-# Test scanner finding
-# ======================================================
-
-scanner_result = {
-    "file": "login.py",
-    "line": 22,
-    "vulnerability": "SQL Injection",
-    "severity": "Critical",
-    "confidence": 95,
-    "code": "cursor.execute(query)"
-}
-
-
-vulnerability = VulnerabilityInput(
-    **scanner_result
-)
-
-
-# ======================================================
-# Test 1: Ollama unavailable
-# ======================================================
-
-print("\n======================================")
-print("TEST 1: OLLAMA UNAVAILABLE")
-print("======================================")
-
-
-# Save original URL
-original_url = llm.OLLAMA_URL
-
-
-# Use an invalid port to simulate Ollama being unavailable
-llm.OLLAMA_URL = "http://127.0.0.1:59999/api/generate"
-
-
-try:
-
-    result = llm.analyze_vulnerability(
-        vulnerability
-    )
-
-    print("\nResult:")
-    print(
-        json.dumps(
-            result,
-            indent=4
-        )
+@pytest.fixture
+def vulnerability():
+    return VulnerabilityInput(
+        file="login.py",
+        line=22,
+        vulnerability="SQL Injection",
+        severity="Critical",
+        confidence=95,
+        code="cursor.execute(query)",
     )
 
 
-    # The application should NOT crash
-    assert result is not None
-
-
-    # AI should report failure
-    assert result["ai_status"] == "failed"
-
-
-    print("\nOLLAMA FAILURE HANDLED: PASSED")
-
-
-finally:
-
-    # Restore original URL
-    llm.OLLAMA_URL = original_url
-
-
-print("\n======================================")
-print("TASK 8 TEST 1 PASSED")
-print("======================================")
-# ======================================================
-# Test 2: Invalid AI JSON
-# ======================================================
-
-print("\n======================================")
-print("TEST 2: INVALID AI JSON")
-print("======================================")
-
-
-original_generate_explanation = (
-    llm.generate_explanation
+@pytest.mark.parametrize(
+    ("fake_response", "expected_error"),
+    [
+        (RuntimeError("Connection refused"), "unexpected_error"),
+        ("This is not valid JSON", "invalid_json"),
+        ('{"unexpected_field": "value"}', "invalid_response"),
+        (RuntimeError("Ollama request timed out"), "unexpected_error"),
+    ],
+    ids=[
+        "connection-refused-runtime-error",
+        "invalid-json",
+        "missing-ai-fields",
+        "timeout-runtime-error",
+    ],
 )
-
-
-def fake_invalid_ai_response(
-    vulnerability_name,
-    severity,
-    confidence,
-    file,
-    line,
-    code
+def test_ai_failure_classification(
+    vulnerability, fake_response, expected_error
 ):
-
-    return "This is not valid JSON"
-
-
-llm.generate_explanation = fake_invalid_ai_response
-
-
-try:
-
-    result = llm.analyze_vulnerability(
-        vulnerability
-    )
-
-    print("\nResult:")
-    print(
-        json.dumps(
-            result,
-            indent=4
-        )
-    )
-
-
-    assert result is not None
+    if isinstance(fake_response, Exception):
+        with patch(
+            "ai.llm.OllamaClient.generate",
+            side_effect=fake_response,
+        ):
+            result = llm.analyze_vulnerability(vulnerability)
+    else:
+        with patch(
+            "ai.llm.OllamaClient.generate",
+            return_value=fake_response,
+        ):
+            result = llm.analyze_vulnerability(vulnerability)
 
     assert result["ai_status"] == "failed"
-
+    assert result["ai_error_type"] == expected_error
     assert result["ai_analysis"] is None
+    assert result["severity"] == "Critical"
+    assert result["confidence"] == 95
+    assert result["risk_score"] == 95
+    assert result["recommendation"]
 
 
-    print(
-        "\nINVALID JSON HANDLING: PASSED"
+def test_failure_followed_by_success_is_isolated(vulnerability):
+    successful_response = (
+        '{"explanation":"Hardcoded credential finding",'
+        '"recommendation":"Load credentials from a secure secret store"}'
     )
 
-
-finally:
-
-    llm.generate_explanation = (
-        original_generate_explanation
+    next_vulnerability = VulnerabilityInput(
+        file="profile.py",
+        line=41,
+        vulnerability="Hardcoded Credentials",
+        severity="Low",
+        confidence=70,
+        code='password = "example"',
     )
 
+    with patch(
+        "ai.llm.OllamaClient.generate",
+        side_effect=[
+            RuntimeError("Connection refused"),
+            successful_response,
+        ],
+    ) as mock_generate:
+        failed_result = llm.analyze_vulnerability(vulnerability)
+        successful_result = llm.analyze_vulnerability(next_vulnerability)
 
-print("\n======================================")
-print("TASK 8 TEST 2 PASSED")
-print("======================================")
-# ======================================================
-# Test 3: Missing AI fields
-# ======================================================
+    # The first finding fails safely and preserves its scanner metadata.
+    assert failed_result["ai_status"] == "failed"
+    assert failed_result["ai_analysis"] is None
+    assert failed_result["file"] == "login.py"
+    assert failed_result["severity"] == "Critical"
+    assert failed_result["confidence"] == 95
+    assert failed_result["risk_score"] == 95
 
-print("\n======================================")
-print("TEST 3: MISSING AI FIELDS")
-print("======================================")
-
-
-original_generate_explanation = (
-    llm.generate_explanation
-)
-
-
-def fake_missing_fields(
-    vulnerability_name,
-    severity,
-    confidence,
-    file,
-    line,
-    code
-):
-
-    return """
-    {
-        "severity": "High",
-        "risk_score": 90
-    }
-    """
-
-
-llm.generate_explanation = fake_missing_fields
-
-
-try:
-
-    result = llm.analyze_vulnerability(
-        vulnerability
+    # The next finding succeeds with its own scanner metadata and AI output.
+    assert successful_result["ai_status"] == "completed"
+    assert successful_result["file"] == "profile.py"
+    assert successful_result["line"] == 41
+    assert successful_result["vulnerability"] == "Hardcoded Credentials"
+    assert successful_result["severity"] == "Low"
+    assert successful_result["confidence"] == 70
+    assert successful_result["risk_score"] == 28
+    assert successful_result["ai_analysis"]["explanation"] == (
+        "Hardcoded credential finding"
+    )
+    assert successful_result["recommendation"] == (
+        "Load credentials from a secure secret store"
     )
 
-    print("\nResult:")
-    print(
-        json.dumps(
-            result,
-            indent=4
-        )
-    )
-
-
-    assert result is not None
-
-    assert result["ai_status"] == "failed"
-
-    assert result["ai_analysis"] is None
-
-
-    print(
-        "\nMISSING FIELD HANDLING: PASSED"
-    )
-
-
-finally:
-
-    llm.generate_explanation = (
-        original_generate_explanation
-    )
-
-
-print("\n======================================")
-print("TASK 8 TEST 3 PASSED")
-print("======================================")
-# ======================================================
-# Test 4: AI timeout
-# ======================================================
-
-print("\n======================================")
-print("TEST 4: AI TIMEOUT")
-print("======================================")
-
-
-original_generate = llm.OllamaClient.generate
-
-
-def fake_timeout(self, prompt):
-
-    raise RuntimeError(
-        "Ollama request timed out."
-    )
-
-
-llm.OllamaClient.generate = fake_timeout
-
-
-try:
-
-    result = llm.analyze_vulnerability(
-        vulnerability
-    )
-
-    print("\nResult:")
-    print(
-        json.dumps(
-            result,
-            indent=4
-        )
-    )
-
-
-    assert result is not None
-
-    assert result["ai_status"] == "failed"
-
-    assert result["ai_analysis"] is None
-
-
-    print(
-        "\nTIMEOUT HANDLING: PASSED"
-    )
-
-
-finally:
-
-    llm.OllamaClient.generate = (
-        original_generate
-    )
-
-
-print("\n======================================")
-print("TASK 8 TEST 4 PASSED")
-print("======================================")
+    assert mock_generate.call_count == 2

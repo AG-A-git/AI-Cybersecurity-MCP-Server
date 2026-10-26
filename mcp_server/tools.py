@@ -2,41 +2,60 @@
 MCP tools for AI vulnerability analysis.
 """
 
-from ai.analysis import (
-    analyze_vulnerability,
-    analyze_vulnerabilities
-)
+from ai.input import VulnerabilityInput
+from ai.analysis import analyze_finding
+from ai.batch import analyze_findings
 
+
+# ======================================================
+# Analyze One Vulnerability
+# ======================================================
 
 def run_ai_analysis(scanner_result):
     """
-    Analyze one scanner vulnerability.
+    Analyze one standardized scanner vulnerability.
 
     Args:
         scanner_result (dict):
-            One standardized scanner finding.
+            Scanner vulnerability finding.
 
     Returns:
         dict:
-            Structured AI vulnerability analysis.
+            Complete security analysis.
     """
 
-    return analyze_vulnerability(scanner_result)
+    finding = VulnerabilityInput(
+        file=scanner_result["file"],
+        line=scanner_result["line"],
+        vulnerability=scanner_result["vulnerability"],
+        severity=scanner_result["severity"],
+        confidence=scanner_result["confidence"],
+        code=scanner_result["code"]
+    )
 
+    # analyze_finding expects the standardized finding
+    # as a mapping/dictionary.
+    return analyze_finding(finding.model_dump())
+
+
+# ======================================================
+# Analyze Multiple Vulnerabilities
+# ======================================================
 
 def analyze_scan(findings):
     """
     Analyze multiple scanner vulnerabilities.
 
-    This is the main interface for backend/MCP integration.
+    Uses the batch AI analysis pipeline so that one failed
+    AI analysis does not stop the remaining findings.
 
     Args:
         findings (list):
-            List of standardized scanner findings.
+            List of scanner vulnerability dictionaries.
 
     Returns:
-        list:
-            Structured AI analysis results.
+        dict:
+            Batch security analysis result.
     """
 
-    return analyze_vulnerabilities(findings)
+    return analyze_findings(findings)

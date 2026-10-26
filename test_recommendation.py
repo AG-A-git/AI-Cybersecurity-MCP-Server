@@ -1,14 +1,19 @@
+
 from ai.recommendation import RecommendationGenerator
 
-finding = {
-    "type": "SQL Injection",
-    "file": "login.py",
-    "line": 42,
-    "code": "query = \"SELECT * FROM users WHERE username='\" + username + \"'\""
-}
 
-generator = RecommendationGenerator()
+def main():
+    finding = {
+        "type": "SQL Injection",
+        "file": "login.py",
+        "line": 42,
+        "code": "query = \"SELECT * FROM users WHERE username='\" + username + \"'\"",
+    }
 
-result = generator.generate_recommendation(finding)
+    generator = RecommendationGenerator()
+    result = generator.generate_recommendation(finding)
+    print(result)
 
-print(result)
+
+if __name__ == "__main__":
+    main()

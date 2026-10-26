@@ -1,66 +1,69 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
+﻿from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 
-from ai.llm import analyze_vulnerability
-from ai.utils import format_ai_response
+from ai.analysis import analyze_finding
 
 
 app = FastAPI(
     title="AI Cybersecurity MCP Server",
     description="AI vulnerability analysis API",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 
 class VulnerabilityRequest(BaseModel):
     file: str
-    line: int
-    vulnerability: str
+    line: int = Field(gt=0)
+    vulnerability: str = Field(min_length=1)
     severity: str
-    confidence: float
-    code: str
-
-
-class VulnerabilityResponse(BaseModel):
-    severity: str
-    risk_score: int | float
-    owasp: str
-    cwe: str
-    explanation: str
-    recommendation: str
+    confidence: float = Field(ge=0, le=100)
+    code: str = Field(max_length=10000)
 
 
 @app.get("/")
 def root():
-    return {
-        "message": "AI Cybersecurity MCP Server is running"
-    }
+    return {"message": "AI Cybersecurity MCP Server is running"}
 
 
-@app.post("/analyze", response_model=VulnerabilityResponse)
+@app.post("/analyze")
 def analyze(request: VulnerabilityRequest):
-
     scanner_result = {
         "file": request.file,
         "line": request.line,
         "vulnerability": request.vulnerability,
         "severity": request.severity,
         "confidence": request.confidence,
-        "code": request.code
+        "code": request.code,
     }
 
-    analysis = analyze_vulnerability(scanner_result)
+    try:
+        analysis = analyze_finding(scanner_result)
+        if not isinstance(analysis, dict):
+            raise TypeError("Analysis returned an invalid result")
 
-    formatted_response = format_ai_response(
-        severity=analysis["severity"],
-        risk_score=analysis["risk_score"],
-        owasp=analysis["owasp"],
-        cwe=analysis["cwe"],
-        explanation=analysis["explanation"],
-        recommendation=analysis["recommendation"]
-    )
+        result = {**scanner_result, **analysis}
+        result.setdefault(
+            "ai_status",
+            "completed" if result.get("explanation") else "failed",
+        )
+        result.setdefault("impact", None)
+        result.setdefault("explanation", None)
 
-    return formatted_response
+        if result["ai_status"] != "completed":
+            result["explanation"] = None
+            result["impact"] = None
+            result.setdefault(
+                "recommendation",
+                "AI analysis service unavailable.",
+            )
+
+        return result
+
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Vulnerability analysis failed.",
+        ) from None
 
 
 # Compatibility exports for the root MCP implementation.

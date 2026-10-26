@@ -1,5 +1,6 @@
 
 from pathlib import Path
+import ast
 import logging
 import os
 import time
@@ -73,7 +74,14 @@ def find_source_files(path):
     raise FileNotFoundError(f"Path does not exist: {path}")
 
 
-def scan_project(project_path, timeout_seconds=None, hard_timeout=False):
+def scan_project(
+    project_path,
+    timeout_seconds=None,
+    hard_timeout=False,
+    *,
+    max_file_size_bytes=10 * 1024 * 1024,
+    max_files=10000,
+):
     """Scan a source file, directory, or ZIP and return a list of findings.
 
     By default, timeout checks are cooperative between files. Set
@@ -85,6 +93,20 @@ def scan_project(project_path, timeout_seconds=None, hard_timeout=False):
     started = time.monotonic()
     files_scanned = 0
     error_count = 0
+
+    if (
+        isinstance(max_file_size_bytes, bool)
+        or not isinstance(max_file_size_bytes, int)
+        or max_file_size_bytes < 0
+    ):
+        raise ValueError("max_file_size_bytes must be a non-negative integer")
+
+    if (
+        isinstance(max_files, bool)
+        or not isinstance(max_files, int)
+        or max_files < 0
+    ):
+        raise ValueError("max_files must be a non-negative integer")
 
     if timeout_seconds is None:
         try:
@@ -110,10 +132,17 @@ def scan_project(project_path, timeout_seconds=None, hard_timeout=False):
         )
         return []
 
-    if timeout_seconds <= 0:
+    if timeout_seconds < 0:
+        _record_outcome(
+            ScanStatus.FAILED,
+            message="Timeout cannot be negative.",
+        )
+        raise ValueError("timeout_seconds must not be negative")
+
+    if timeout_seconds == 0:
         _record_outcome(
             ScanStatus.TIMED_OUT,
-            message="Timeout must be greater than zero.",
+            message="Timeout is zero.",
         )
         return []
 
@@ -141,8 +170,29 @@ def scan_project(project_path, timeout_seconds=None, hard_timeout=False):
         project_path = ensure_allowed_path(project_path)
         source_files = find_source_files(project_path)
         results = []
+        considered_files = 0
+        project_root = Path(project_path).resolve()
+        if project_root.is_file():
+            project_root = project_root.parent
 
         for file_path in source_files:
+            if considered_files >= max_files:
+                break
+            considered_files += 1
+
+            candidate = Path(file_path)
+            try:
+                resolved_file = candidate.resolve(strict=True)
+                if not resolved_file.is_relative_to(project_root):
+                    logger.warning("Skipping file outside project: %s", candidate)
+                    continue
+                if resolved_file.stat().st_size > max_file_size_bytes:
+                    logger.info("Skipping oversized file: %s", candidate)
+                    continue
+            except (OSError, ValueError):
+                error_count += 1
+                continue
+
             elapsed = time.monotonic() - started
             remaining = timeout_seconds - elapsed
 
@@ -161,7 +211,7 @@ def scan_project(project_path, timeout_seconds=None, hard_timeout=False):
             try:
                 if hard_timeout:
                     worker_status, worker_result = run_file_with_hard_timeout(
-                        str(file_path),
+                        str(resolved_file),
                         remaining,
                     )
 
@@ -194,9 +244,53 @@ def scan_project(project_path, timeout_seconds=None, hard_timeout=False):
 
                     file_results = worker_result[0]
                 else:
-                    file_results = run_all_rules(str(file_path))
+                    file_results = run_all_rules(str(resolved_file))
 
                 files_scanned += 1
+
+                if time.monotonic() - started >= timeout_seconds:
+                    _record_outcome(
+                        ScanStatus.TIMED_OUT,
+                        files_scanned=files_scanned,
+                        error_count=error_count,
+                        message="Scan deadline reached; partial findings discarded.",
+                    )
+                    logger.warning("Scan timed out: %s", project_path)
+                    return []
+
+                # Detect eval() as a code-injection sink if no rule found it.
+                try:
+                    text = resolved_file.read_text(
+                        encoding="utf-8", errors="replace"
+                    )
+                    tree = ast.parse(text)
+                    lines = text.splitlines()
+                    known_eval_lines = {
+                        f.get("line_number")
+                        for f in file_results
+                        if f.get("vulnerability_type") == "Code Injection"
+                    }
+                    from scanner.finding import create_finding
+                    for node in ast.walk(tree):
+                        if (
+                            isinstance(node, ast.Call)
+                            and isinstance(node.func, ast.Name)
+                            and node.func.id == "eval"
+                            and node.lineno not in known_eval_lines
+                        ):
+                            file_results.append(create_finding(
+                                file_name=str(resolved_file),
+                                line_number=node.lineno,
+                                vulnerability_type="Code Injection",
+                                severity="High",
+                                confidence=95,
+                                code=lines[node.lineno - 1].strip(),
+                                owasp="A03:2021 Injection",
+                                cwe="CWE-94",
+                            ))
+                            known_eval_lines.add(node.lineno)
+                except (SyntaxError, ValueError, OSError, UnicodeError):
+                    pass
 
             except (
                 SyntaxError,
@@ -214,6 +308,14 @@ def scan_project(project_path, timeout_seconds=None, hard_timeout=False):
 
             for finding in file_results:
                 try:
+                    # Keep the canonical schema and supply compatibility aliases.
+                    relative_finding_path = Path(
+                        finding.get("file_name", str(resolved_file))
+                    ).resolve().relative_to(project_root)
+                    finding["file_name"] = str(relative_finding_path)
+                    finding["file"] = finding["file_name"]
+                    finding["line"] = finding.get("line_number")
+                    finding["vulnerability"] = finding.get("vulnerability_type")
                     validate_finding(finding)
                 except (ValueError, TypeError):
                     error_count += 1

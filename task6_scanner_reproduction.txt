@@ -1,0 +1,39 @@
+﻿# Day 32 — Task 6: Scanner Defect Investigation
+
+## Target
+scanner/engine.py — scan_project()
+
+## Test environment
+Temporary Python files; no scanner source files modified during
+the latest verification.
+
+## Case 1: String concatenation
+Input:
+query = "SELECT * FROM users WHERE name = " + username
+
+Observed:
+One SQL Injection finding.
+Severity: Critical
+Confidence: 95
+
+## Case 2: F-string interpolation
+Input:
+query = f"SELECT * FROM users WHERE name = {username}"
+
+Observed:
+One SQL Injection finding.
+Severity: Critical
+Confidence: 95
+
+## Full test suite
+162 passed in 2.31 seconds.
+
+## Conclusion
+The previously documented f-string false negative was not reproduced
+against the current working tree. Both tested SQL construction patterns
+were detected. This experiment does not establish detection coverage
+for all SQL injection variants.
+
+## Task 6 outcome
+Evidence gathering completed. No specific scanner defect was established,
+so no scanner fix was made. Existing working-tree changes were preserved.

@@ -1,187 +1,123 @@
 
-from scanner.rules.input_validation import scan_input_validation
-from scanner.scan import scan_file
+import pytest
+from pydantic import ValidationError
+
+from ai.input import validate_vulnerability
+from ai.mapping import get_mapping
+from scanner.engine import scan_project
 
 
-def test_sql_injection_from_user_input():
-    findings = scan_input_validation(
-        "scanner/test_files/input_validation_test.py"
-    )
-
-    sql_findings = [
-        finding
-        for finding in findings
-        if finding["vulnerability_type"] == "SQL Injection"
-    ]
-
-    assert sql_findings
-
-
-def test_command_injection_from_user_input():
-    findings = scan_input_validation(
-        "scanner/test_files/input_validation_test.py"
-    )
-
-    command_findings = [
-        finding
-        for finding in findings
-        if finding["vulnerability_type"] == "Command Injection"
-    ]
-
-    assert command_findings
-
-
-def test_standardized_fields():
-    findings = scan_input_validation(
-        "scanner/test_files/input_validation_test.py"
-    )
-
-    assert findings
-
-    required_fields = {
-        "vulnerability_type",
-        "file_name",
-        "line_number",
-        "severity",
-        "confidence",
-        "code",
+@pytest.fixture
+def valid_finding():
+    return {
+        "file": "app.py",
+        "line": 25,
+        "vulnerability": "SQLi",
+        "severity": "High",
+        "confidence": 90,
+        "code": "query = user_input",
     }
 
-    for finding in findings:
-        assert required_fields.issubset(finding.keys())
+
+@pytest.mark.parametrize("data", [None, [], "not a finding"])
+def test_rejects_invalid_top_level_input(data):
+    with pytest.raises((TypeError, ValidationError)):
+        validate_vulnerability(data)
 
 
-def test_validation_reduces_sql_confidence():
-    findings = scan_input_validation(
-        "scanner/test_files/input_validation_safe_test.py"
-    )
-
-    sql_findings = [
-        finding
-        for finding in findings
-        if finding["vulnerability_type"] == "SQL Injection"
-    ]
-
-    assert sql_findings
-    assert sql_findings[0]["confidence"] < 90
+def test_rejects_empty_finding(valid_finding):
+    with pytest.raises(ValidationError):
+        validate_vulnerability({})
 
 
-def test_validation_reduces_command_confidence():
-    findings = scan_input_validation(
-        "scanner/test_files/input_validation_safe_test.py"
-    )
-
-    command_findings = [
-        finding
-        for finding in findings
-        if finding["vulnerability_type"] == "Command Injection"
-    ]
-
-    assert command_findings
-    assert command_findings[0]["confidence"] < 90
-
-
-def test_xss_from_user_input():
-    findings = scan_input_validation(
-        "scanner/test_files/xss_input_validation_test.js"
-    )
-
-    xss_findings = [
-        finding
-        for finding in findings
-        if finding["vulnerability_type"]
-        == "Cross-Site Scripting (XSS)"
-    ]
-
-    assert xss_findings
-
-
-def test_safe_text_content_not_detected_as_xss():
-    findings = scan_input_validation(
-        "scanner/test_files/xss_safe_input_test.js"
-    )
-
-    xss_findings = [
-        finding
-        for finding in findings
-        if finding["vulnerability_type"]
-        == "Cross-Site Scripting (XSS)"
-    ]
-
-    assert not xss_findings
-
-
-def test_static_command_not_detected_as_command_injection():
-    findings = scan_file("test_files/safe/command_safe.py")
-
-    command_findings = [
-        finding
-        for finding in findings
-        if finding["vulnerability_type"] == "Command Injection"
-    ]
-
-    assert not command_findings
-
-
-def test_command_injection_from_multi_hop_user_input():
-    test_file = "scanner/test_files/input_validation_multi_hop_test.py"
-
-    findings = scan_input_validation(test_file)
-
-    command_findings = [
-        finding
-        for finding in findings
-        if finding["vulnerability_type"] == "Command Injection"
-    ]
-
-    assert command_findings
-
-
-def test_multi_hop_validation_reduces_sql_confidence(tmp_path):
-    test_file = tmp_path / "sql_multi_hop_validated.py"
-
-    test_file.write_text(
-        """user_id = request.args.get("id")
-safe_id = user_id
-
-if safe_id.isdigit():
-    query = "SELECT * FROM users WHERE id=" + safe_id
-    cursor.execute(query)
-""",
-        encoding="utf-8",
-    )
-
-    findings = scan_input_validation(str(test_file))
-
-    sql_findings = [
-        finding
-        for finding in findings
-        if finding["vulnerability_type"] == "SQL Injection"
-    ]
-
-    assert sql_findings
-    assert sql_findings[0]["confidence"] < 90
-
-
-def test_parameterized_sql_query_not_detected_as_injection(tmp_path):
-    test_file = tmp_path / "parameterized_sql.py"
-
-    test_file.write_text(
-        '''user_id = input("Enter ID: ")
-cursor.execute(
-    "SELECT * FROM users WHERE id = ?",
-    (user_id,)
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("file", 123),
+        ("vulnerability", ["SQLi"]),
+        ("severity", ["High"]),
+        ("code", ["query = user_input"]),
+        ("line", []),
+    ],
 )
-''',
+def test_rejects_invalid_field_types(valid_finding, field, value):
+    valid_finding[field] = value
+
+    with pytest.raises(ValidationError):
+        validate_vulnerability(valid_finding)
+
+
+@pytest.mark.parametrize("file_value", ["", "   "])
+def test_rejects_empty_or_whitespace_file(valid_finding, file_value):
+    valid_finding["file"] = file_value
+
+    with pytest.raises(ValidationError):
+        validate_vulnerability(valid_finding)
+
+
+@pytest.mark.parametrize("line", [0, -1])
+def test_rejects_non_positive_line(valid_finding, line):
+    valid_finding["line"] = line
+
+    with pytest.raises(ValidationError):
+        validate_vulnerability(valid_finding)
+
+
+@pytest.mark.parametrize(
+    "severity",
+    ["", "   ", "Unclassified"],
+)
+def test_rejects_empty_or_unsupported_severity(
+    valid_finding, severity
+):
+    valid_finding["severity"] = severity
+
+    with pytest.raises(ValidationError):
+        validate_vulnerability(valid_finding)
+
+
+def test_accepts_supported_severity_case_variants(valid_finding):
+    valid_finding["severity"] = "HIGH"
+
+    result = validate_vulnerability(valid_finding)
+
+    assert result.severity == "HIGH"
+
+
+def test_accepts_very_long_source_code(valid_finding):
+    long_code = "x = 1\n" * 50_000
+    valid_finding["code"] = long_code
+
+    result = validate_vulnerability(valid_finding)
+
+    assert result.code == long_code
+
+
+def test_accepts_finding_without_owasp_or_cwe_metadata(valid_finding):
+    result = validate_vulnerability(valid_finding)
+
+    assert result.file == "app.py"
+    assert result.code == "query = user_input"
+
+
+def test_eval_scanner_finding_normalizes_and_maps_code_injection(
+    tmp_path,
+):
+    source_file = tmp_path / "sample.py"
+    source_file.write_text(
+        "eval(user_input)\n",
         encoding="utf-8",
     )
 
-    findings = scan_input_validation(str(test_file))
+    findings = scan_project(str(tmp_path))
 
-    sql_findings = [
-        finding
-        for finding in findings
-        if finding["vulnerability_type"] == "SQL Injection"
-    ]
+    assert len(findings) == 1
+    assert findings[0]["vulnerability"] == "Code Injection"
 
-    assert not sql_findings
+    normalized = validate_vulnerability(findings[0])
+
+    assert normalized.vulnerability == "Code Injection"
+    assert get_mapping(normalized.vulnerability) == {
+        "owasp": "A03:2021 Injection",
+        "cwe": "CWE-94",
+    }

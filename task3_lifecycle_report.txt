@@ -1,0 +1,68 @@
+﻿DAY 35 - TASK 3: AI EXECUTION LIFECYCLE TRACE
+
+1. SCANNER
+File: scanner/engine.py
+Entry point: scan_project(project_path)
+Scans Python files recursively.
+Finding fields: file, line, vulnerability, severity, confidence, code.
+Explicit project/file size limits: not established in inspected scanner code.
+
+2. INPUT VALIDATION
+Files: ai/input.py, ai/models.py
+Validates finding fields, types, line number, confidence bounds, and supported severity.
+
+3. AI ANALYSIS
+File: ai/analysis.py
+Entry points: analyze_finding(), analyze_findings()
+Validates input, builds prompts, calculates deterministic risk, maps vulnerabilities,
+calls the AI client, parses output, and constructs results.
+
+4. OLLAMA
+File: ai/llm.py
+Uses configured model, timeout, and JSON-format response.
+The active ai.analysis path retries selected transient failures once.
+Failures are handled through controlled AI failure statuses.
+
+5. RISK AND MAPPING
+Files: ai/risk_score.py, ai/mapping.py
+Risk is calculated deterministically and bounded from 0 to 100.
+OWASP/CWE mapping is centralized.
+
+6. API
+File: mcp_server/__init__.py
+Endpoint: POST /analyze
+Validates six input fields, calls ai.analysis.analyze_finding(),
+and formats the result using ai.utils.format_ai_response().
+Invalid request checks returned HTTP 422.
+A valid live HTTP request stalled and was interrupted, so successful live API execution remains unverified.
+
+7. MCP
+Files: mcp_server/server.py, mcp_server/tools.py
+Tool: analyze_vulnerability_tool
+Delegates finding analysis to the AI analysis pipeline.
+MCP tool tests passed.
+
+8. TEST EVIDENCE
+Focused AI/API tests: 33 passed in 1.19 seconds.
+Full test suite: 180 passed in 4.85 seconds.
+git diff --check completed without reported errors.
+A scanner-to-analysis pipeline test successfully produced a completed assessment.
+API/MCP boundary tests include mocks and do not prove full live end-to-end execution.
+
+9. OPEN ITEMS
+Database persistence and scan-to-finding association: not established.
+Authorization across the complete application: not established.
+Frontend response contract: no frontend application identified in the inspected tracked files.
+Live HTTP-to-Ollama execution: not verified.
+These are evidence gaps, not proof that the capabilities do not exist elsewhere.
+
+10. GIT STATE
+Previously observed branch: member3-ai.
+Previously observed ahead/behind count: 0/0.
+Untracked backup and review files must be preserved.
+
+CONCLUSION
+Core code paths were inspected, and the full test suite passed.
+The scanner-to-analysis pipeline was demonstrated, but the complete end-to-end lifecycle
+remains unverified because live HTTP execution, persistence, authorization, and frontend
+integration have not been established.

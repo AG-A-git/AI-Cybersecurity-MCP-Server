@@ -1,4 +1,5 @@
 
+import ast
 import re
 
 from scanner.context import (
@@ -206,5 +207,72 @@ def scan_sql(file_path):
         )
 
         results.append(finding)
+
+
+    # AST detection for multiline SQL f-strings.
+    try:
+        tree = ast.parse("".join(lines))
+        source_lines = "".join(lines).splitlines()
+        existing = {
+            (item.get("line_number"), item.get("vulnerability_type"))
+            for item in results
+        }
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.JoinedStr):
+                continue
+
+            literal = "".join(
+                value.value for value in node.values
+                if isinstance(value, ast.Constant)
+                and isinstance(value.value, str)
+            )
+            if not re.search(SQL_KEYWORDS, literal, re.IGNORECASE):
+                continue
+            if not any(
+                isinstance(value, ast.FormattedValue)
+                for value in node.values
+            ):
+                continue
+
+            line_number = node.lineno
+            if (line_number, "SQL Injection") in existing:
+                continue
+
+            variable = next(
+                (
+                    value.value.id
+                    for value in node.values
+                    if isinstance(value, ast.FormattedValue)
+                    and isinstance(value.value, ast.Name)
+                ),
+                None,
+            )
+            code = (
+                source_lines[line_number - 1].strip()
+                if 0 < line_number <= len(source_lines)
+                else "multiline SQL f-string"
+            )
+            results.append(create_finding(
+                file_name=file_path,
+                line_number=line_number,
+                vulnerability_type="SQL Injection",
+                severity="Critical",
+                confidence=95,
+                code=code,
+                owasp="A03: Injection",
+                cwe="CWE-89",
+                evidence=build_evidence(
+                    source=variable,
+                    source_line=line_number,
+                    tainted_variable=variable,
+                    sink="Multiline SQL f-string construction",
+                    sink_line=line_number,
+                    reason="SQL statement interpolates a value into a multiline query.",
+                ),
+            ))
+            existing.add((line_number, "SQL Injection"))
+    except (SyntaxError, ValueError, TypeError):
+        pass
 
     return results
