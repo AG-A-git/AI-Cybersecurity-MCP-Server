@@ -1,0 +1,219 @@
+
+.history-page {
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: var(--space-6);
+  color: var(--color-text);
+}
+
+.history-header,
+.history-scan-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.history-header {
+  align-items: center;
+  margin-bottom: var(--space-6);
+}
+
+.history-title {
+  margin: 0;
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-normal);
+}
+
+.history-description,
+.history-muted-text,
+.history-count {
+  color: var(--color-text-muted);
+}
+
+.history-description {
+  margin-top: var(--space-1);
+}
+
+.history-filter-panel,
+.history-empty-panel,
+.history-scan-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  padding: var(--space-5);
+}
+
+.history-filter-panel {
+  margin-bottom: var(--space-5);
+}
+
+.history-filter-grid,
+.history-metadata {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+.history-filter-label {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.history-filter-control {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.history-filter-control:focus {
+  border-color: var(--color-primary);
+  outline: 2px solid var(--color-primary-soft);
+  outline-offset: 1px;
+}
+
+.history-count {
+  margin: var(--space-3) 0 0;
+  font-size: var(--font-size-sm);
+}
+
+.history-error {
+  margin: var(--space-4) 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.history-empty-panel {
+  margin-top: var(--space-4);
+}
+
+.history-scan-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+}
+
+.history-scan-card {
+  min-width: 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.history-project-name {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.history-muted-text {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
+}
+
+.history-status {
+  display: inline-block;
+  max-width: 100%;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full, 999px);
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
+}
+
+.history-metadata {
+  margin-top: var(--space-4);
+}
+
+.history-metadata p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.history-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.history-refresh-button {
+  margin-top: 0;
+}
+
+.history-button:hover:not(:disabled) {
+  background: var(--color-surface-muted);
+}
+
+.history-results-button {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.history-results-button:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.history-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+@media (min-width: 640px) {
+  .history-page {
+    padding: var(--space-6);
+  }
+
+  .history-filter-grid,
+  .history-metadata {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .history-page {
+    padding: var(--space-4);
+  }
+
+  .history-filter-panel,
+  .history-empty-panel,
+  .history-scan-card {
+    padding: var(--space-4);
+  }
+
+  .history-header {
+    align-items: stretch;
+  }
+
+  .history-refresh-button {
+    width: 100%;
+  }
+}

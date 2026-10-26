@@ -1,3 +1,4 @@
+
 import { Routes, Route, Navigate } from "react-router-dom";
 
 import Login from "./pages/Login";
@@ -5,6 +6,8 @@ import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Projects from "./pages/Projects";
 import Upload from "./pages/Upload";
+import ScanResults from "./pages/ScanResults";
+import VulnerabilityDetails from "./pages/VulnerabilityDetails";
 import History from "./pages/History";
 import Reports from "./pages/Reports";
 import Profile from "./pages/Profile";
@@ -14,10 +17,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 function App() {
     return (
         <Routes>
-            {/* =========================
-                PUBLIC ROUTES
-            ========================== */}
-
+            {/* Public routes */}
             <Route
                 path="/login"
                 element={<Login />}
@@ -28,12 +28,7 @@ function App() {
                 element={<Register />}
             />
 
-
-            {/* =========================
-                PROTECTED ROUTES
-            ========================== */}
-
-            {/* Dashboard */}
+            {/* Protected dashboard */}
             <Route
                 path="/dashboard"
                 element={
@@ -43,7 +38,7 @@ function App() {
                 }
             />
 
-            {/* Projects */}
+            {/* Protected projects */}
             <Route
                 path="/projects"
                 element={
@@ -53,7 +48,7 @@ function App() {
                 }
             />
 
-            {/* Upload & Security Scan */}
+            {/* Protected file upload and scan */}
             <Route
                 path="/upload"
                 element={
@@ -63,7 +58,36 @@ function App() {
                 }
             />
 
-            {/* History */}
+            {/* Scan results: support both route paths */}
+            <Route
+                path="/results"
+                element={
+                    <ProtectedRoute>
+                        <ScanResults />
+                    </ProtectedRoute>
+                }
+            />
+
+            <Route
+                path="/scan-results"
+                element={
+                    <ProtectedRoute>
+                        <ScanResults />
+                    </ProtectedRoute>
+                }
+            />
+
+            {/* Vulnerability details */}
+            <Route
+                path="/vulnerability-details"
+                element={
+                    <ProtectedRoute>
+                        <VulnerabilityDetails />
+                    </ProtectedRoute>
+                }
+            />
+
+            {/* Scan history */}
             <Route
                 path="/history"
                 element={
@@ -83,7 +107,7 @@ function App() {
                 }
             />
 
-            {/* Profile */}
+            {/* User profile */}
             <Route
                 path="/profile"
                 element={
@@ -93,19 +117,16 @@ function App() {
                 }
             />
 
+            {/* Default route */}
+            <Route
+                path="/"
+                element={<Navigate to="/dashboard" replace />}
+            />
 
-            {/* =========================
-                UNKNOWN ROUTES
-            ========================== */}
-
+            {/* Unknown routes */}
             <Route
                 path="*"
-                element={
-                    <Navigate
-                        to="/login"
-                        replace
-                    />
-                }
+                element={<Navigate to="/login" replace />}
             />
         </Routes>
     );

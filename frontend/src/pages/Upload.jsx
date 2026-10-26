@@ -1,404 +1,514 @@
-import React, { useState } from "react";
-import api from "../services/api";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { getProjects, getProjectFiles } from "../services/projectService";
+import { uploadFile } from "../services/uploadService";
+import { startScan } from "../services/scanService";
+import "../styles/Upload.css";
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const ALLOWED_EXTENSIONS = [".py", ".js", ".java", ".html", ".zip"];
+
+const getErrorMessage = (error, fallback) => {
+    if (error?.userMessage) return error.userMessage;
+
+    const detail = error?.response?.data?.detail;
+
+    if (typeof detail === "string" && detail.trim()) {
+        return detail;
+    }
+
+    return fallback;
+};
 
 function Upload() {
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    const fileInputRef = useRef(null);
+    const requestIdRef = useRef(0);
+
+    // Synchronously prevents duplicate scan submissions.
+    const scanInFlightRef = useRef(false);
+    const uploadInFlightRef = useRef(false);
+
+    const [projects, setProjects] = useState([]);
+    const [projectId, setProjectId] = useState("");
     const [file, setFile] = useState(null);
-    const [loading, setLoading] = useState(false);
+    const [projectFiles, setProjectFiles] = useState([]);
+
+    const [loadingProjects, setLoadingProjects] = useState(true);
+    const [loadingFiles, setLoadingFiles] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [scanning, setScanning] = useState(false);
+
     const [error, setError] = useState("");
-    const [result, setResult] = useState(null);
+    const [message, setMessage] = useState("");
+    const [filesError, setFilesError] = useState("");
 
-    const handleFileChange = (event) => {
-        const selectedFile = event.target.files?.[0] || null;
+    const fetchProjectFiles = useCallback(async (selectedProjectId) => {
+        if (!selectedProjectId) {
+            setProjectFiles([]);
+            setFilesError("");
+            return;
+        }
 
-        setFile(selectedFile);
+        const requestId = ++requestIdRef.current;
+
+        setLoadingFiles(true);
+        setFilesError("");
+
+        try {
+            const response = await getProjectFiles(selectedProjectId);
+
+            if (requestId !== requestIdRef.current) return;
+
+            const data = response?.data ?? response;
+            const files = Array.isArray(data)
+                ? data
+                : data?.files ?? data?.uploaded_files ?? [];
+
+            setProjectFiles(Array.isArray(files) ? files : []);
+        } catch (err) {
+            if (requestId !== requestIdRef.current) return;
+
+            console.error("Failed to load project files:", err);
+            setProjectFiles([]);
+            setFilesError(
+                getErrorMessage(
+                    err,
+                    "Could not load this project's uploaded files."
+                )
+            );
+        } finally {
+            if (requestId === requestIdRef.current) {
+                setLoadingFiles(false);
+            }
+        }
+    }, []);
+
+    const fetchProjects = useCallback(async () => {
+        setLoadingProjects(true);
         setError("");
-        setResult(null);
+
+        try {
+            const response = await getProjects();
+            const data = response?.data ?? response;
+            const list = Array.isArray(data)
+                ? data
+                : data?.projects ?? [];
+
+            setProjects(Array.isArray(list) ? list : []);
+
+            const savedProjectId =
+                localStorage.getItem("selected_project_id");
+
+            const requestedProjectId =
+                location.state?.projectId ??
+                savedProjectId ??
+                "";
+
+            const matchingProject = list.find(
+                (project) =>
+                    String(project.id) === String(requestedProjectId)
+            );
+
+            if (matchingProject) {
+                setProjectId(String(matchingProject.id));
+            } else if (list.length === 1) {
+                setProjectId(String(list[0].id));
+            } else {
+                setProjectId("");
+            }
+        } catch (err) {
+            console.error("Failed to load projects:", err);
+            setProjects([]);
+            setError(
+                getErrorMessage(
+                    err,
+                    "Could not load projects. Please try again."
+                )
+            );
+        } finally {
+            setLoadingProjects(false);
+        }
+    }, [location.state]);
+
+    useEffect(() => {
+        void fetchProjects();
+    }, [fetchProjects]);
+
+    useEffect(() => {
+        if (projectId) {
+            localStorage.setItem("selected_project_id", projectId);
+            void fetchProjectFiles(projectId);
+        } else {
+            ++requestIdRef.current;
+            setProjectFiles([]);
+            setFilesError("");
+            setLoadingFiles(false);
+        }
+    }, [projectId, fetchProjectFiles]);
+
+    const handleProjectChange = (event) => {
+        const nextProjectId = event.target.value;
+
+        setProjectId(nextProjectId);
+        setFile(null);
+        setError("");
+        setMessage("");
+
+        if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+        }
     };
 
-    const getErrorMessage = (error) => {
-        if (!error.response) {
-            return "Could not connect to the backend server.";
+    const handleFileChange = (event) => {
+        setError("");
+        setMessage("");
+
+        const selectedFile = event.target.files?.[0];
+
+        if (!selectedFile) {
+            setFile(null);
+            return;
         }
 
-        const status = error.response.status;
-        const data = error.response.data;
+        const lowerName = selectedFile.name.toLowerCase();
+        const extension = ALLOWED_EXTENSIONS.find((ext) =>
+            lowerName.endsWith(ext)
+        );
 
-        // 401 - Authentication required
-        if (status === 401) {
-            return "Login required. Please log in again.";
-        }
-
-        // 403 - Not authorized
-        if (status === 403) {
-            return "You are not authorized to perform this action.";
-        }
-
-        // 404 - Resource not found
-        if (status === 404) {
-            return "Resource not found.";
-        }
-
-        // 422 - Validation error
-        if (status === 422) {
-            if (Array.isArray(data?.detail)) {
-                return data.detail
-                    .map((item) => {
-                        if (typeof item === "string") {
-                            return item;
-                        }
-
-                        if (item?.msg) {
-                            const location = Array.isArray(item.loc)
-                                ? item.loc.join(" → ")
-                                : "";
-
-                            return location
-                                ? `${location}: ${item.msg}`
-                                : item.msg;
-                        }
-
-                        return JSON.stringify(item);
-                    })
-                    .join("\n");
-            }
-
-            if (typeof data?.detail === "string") {
-                return data.detail;
-            }
-
-            return "Invalid request. Please check the selected file.";
-        }
-
-        // 500 - Server error
-        if (status === 500) {
-            return (
-                data?.detail ||
-                "Server error. Please try again later."
+        if (!extension) {
+            setFile(null);
+            event.target.value = "";
+            setError(
+                "Unsupported file type. Choose a .py, .js, .java, .html, or .zip file."
             );
+            return;
         }
 
-        // Other backend errors
-        if (typeof data?.detail === "string") {
-            return data.detail;
+        if (selectedFile.size > MAX_FILE_SIZE) {
+            setFile(null);
+            event.target.value = "";
+            setError("File size must be 10 MB or less.");
+            return;
         }
 
-        return `Server error: ${status}`;
+        setFile(selectedFile);
     };
 
     const handleUpload = async (event) => {
         event.preventDefault();
 
-        if (!file) {
-            setError("Please select a file first.");
+        if (
+            uploadInFlightRef.current ||
+            scanInFlightRef.current ||
+            uploading ||
+            scanning
+        ) {
             return;
         }
 
-        setLoading(true);
         setError("");
-        setResult(null);
+        setMessage("");
 
-        console.log("Starting security scan...");
-        console.log("File:", file.name);
+        if (!projectId) {
+            setError("Please create or select a project first.");
+            return;
+        }
+
+        if (!file) {
+            setError("Please choose a file to upload.");
+            return;
+        }
+
+        if (file.size > MAX_FILE_SIZE) {
+            setError("File size must be 10 MB or less.");
+            return;
+        }
+
+        uploadInFlightRef.current = true;
+        setUploading(true);
 
         try {
-            const formData = new FormData();
+            const response = await uploadFile(projectId, file);
+            const result = response?.data ?? response;
 
-            formData.append("file", file);
-
-            console.log("Sending file to /upload");
-
-            const response = await api.post(
-                "/upload",
-                formData
+            setMessage(
+                result?.message ||
+                `File "${file.name}" uploaded successfully.`
             );
 
-            console.log("SCAN RESPONSE:", response.data);
+            setFile(null);
 
-            setResult(response.data);
-        } catch (error) {
-            console.error("Scan error:", error);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
 
-            setError(getErrorMessage(error));
+            await fetchProjectFiles(projectId);
+        } catch (err) {
+            console.error("Upload failed:", err);
+            setError(
+                getErrorMessage(
+                    err,
+                    "Upload failed. Check the backend upload endpoint."
+                )
+            );
         } finally {
-            setLoading(false);
+            uploadInFlightRef.current = false;
+            setUploading(false);
         }
     };
 
-    const getSeverityIndicator = (severity) => {
-        if (!severity) {
-            return "⚪ Unknown";
+    const handleStartScan = async () => {
+        // Ref guard works immediately, before React rerenders.
+        if (
+            uploadInFlightRef.current ||
+            scanInFlightRef.current ||
+            uploading ||
+            scanning
+        ) {
+            return;
         }
 
-        const normalizedSeverity =
-            severity.toLowerCase();
+        setError("");
+        setMessage("");
 
-        switch (normalizedSeverity) {
-            case "critical":
-                return "🔴 Critical";
+        if (!projectId) {
+            setError("Please select a project first.");
+            return;
+        }
 
-            case "high":
-                return "🟠 High";
+        scanInFlightRef.current = true;
+        setScanning(true);
 
-            case "medium":
-                return "🟡 Medium";
+        try {
+            const response = await startScan(projectId);
+            const envelope = response?.data ?? response;
+            const result = envelope?.data ?? envelope;
 
-            case "low":
-                return "🟢 Low";
+            const scanId = result?.scan_id ?? result?.id;
 
-            default:
-                return `⚪ ${severity}`;
+            if (
+                scanId == null ||
+                String(scanId).trim() === ""
+            ) {
+                setError(
+                    "The backend did not return a scan ID. Check the scan response."
+                );
+                return;
+            }
+
+            navigate("/results", {
+                state: {
+                    scanId,
+                    result,
+                },
+            });
+        } catch (err) {
+            console.error("Scan failed:", err);
+            setError(
+                getErrorMessage(
+                    err,
+                    "Could not start the scan. Check the backend scan endpoint."
+                )
+            );
+        } finally {
+            scanInFlightRef.current = false;
+            setScanning(false);
         }
     };
+
+    const busy = loadingProjects || uploading || scanning;
 
     return (
-        <div
-            style={{
-                padding: "40px",
-                maxWidth: "900px",
-                margin: "0 auto",
-            }}
-        >
-            <h1>Security Scan</h1>
+        <main className="upload-page">
+            <header className="upload-header">
+                <div>
+                    <p className="upload-eyebrow">SECURITY WORKSPACE</p>
+                    <h1>Upload &amp; Scan</h1>
+                    <p>
+                        Select a project, upload source code, and start a
+                        vulnerability scan.
+                    </p>
+                </div>
 
-            <p>
-                Upload a source-code file to scan for
-                security vulnerabilities.
-            </p>
-
-            {/* Upload Section */}
-            <form onSubmit={handleUpload}>
-                <div
-                    style={{
-                        marginTop: "30px",
-                        padding: "30px",
-                        border: "1px solid #ddd",
-                        borderRadius: "10px",
-                    }}
+                <button
+                    type="button"
+                    className="upload-button upload-button-secondary"
+                    onClick={fetchProjects}
+                    disabled={loadingProjects || uploading || scanning}
                 >
+                    {loadingProjects ? "Loading..." : "Reload Projects"}
+                </button>
+            </header>
+
+            {error && (
+                <div className="upload-error" role="alert">
+                    {error}
+                </div>
+            )}
+
+            {message && (
+                <div className="upload-success" role="status">
+                    {message}
+                </div>
+            )}
+
+            <section className="upload-section">
+                <h2>Select a project</h2>
+
+                <label htmlFor="project-select">Project</label>
+
+                <select
+                    id="project-select"
+                    value={projectId}
+                    onChange={handleProjectChange}
+                    disabled={loadingProjects || projects.length === 0 || busy}
+                >
+                    <option value="">
+                        {loadingProjects
+                            ? "Loading projects..."
+                            : projects.length === 0
+                              ? "No projects available"
+                              : "Choose a project"}
+                    </option>
+
+                    {projects.map((project) => (
+                        <option key={project.id} value={String(project.id)}>
+                            {project.name ?? project.title ?? `Project ${project.id}`}
+                        </option>
+                    ))}
+                </select>
+
+                {!loadingProjects && projects.length === 0 && (
+                    <p role="status">
+                        Create a project before uploading files.
+                    </p>
+                )}
+            </section>
+
+            <section className="upload-section">
+                <h2>Upload source code</h2>
+
+                <form onSubmit={handleUpload}>
+                    <label htmlFor="source-file">Choose a file</label>
+
                     <input
+                        ref={fileInputRef}
+                        id="source-file"
+                        name="file"
                         type="file"
+                        accept=".py,.js,.java,.html,.zip"
                         onChange={handleFileChange}
-                        disabled={loading}
+                        disabled={busy || !projectId}
                     />
 
+                    <p>
+                        Supported formats: .py, .js, .java, .html, .zip.
+                        Maximum size: 10 MB.
+                    </p>
+
                     {file && (
-                        <p>
-                            Selected file:{" "}
-                            <strong>{file.name}</strong>
+                        <p role="status">
+                            Selected: {file.name}
                         </p>
                     )}
 
                     <button
                         type="submit"
-                        disabled={!file || loading}
-                        style={{
-                            marginTop: "20px",
-                            padding: "12px 25px",
-                            cursor:
-                                !file || loading
-                                    ? "not-allowed"
-                                    : "pointer",
-                        }}
+                        className="upload-button upload-button-primary"
+                        disabled={!projectId || !file || busy}
                     >
-                        {loading
-                            ? "Scanning..."
-                            : "Upload & Scan"}
+                        {uploading ? "Uploading..." : "Upload File"}
+                    </button>
+                </form>
+            </section>
+
+            <section className="upload-section">
+                <div className="upload-section-heading">
+                    <h2>Project files</h2>
+
+                    <button
+                        type="button"
+                        className="upload-button upload-button-secondary"
+                        onClick={() => fetchProjectFiles(projectId)}
+                        disabled={
+                            !projectId ||
+                            loadingFiles ||
+                            uploading ||
+                            scanning
+                        }
+                    >
+                        {loadingFiles ? "Loading files..." : "Refresh Files"}
                     </button>
                 </div>
-            </form>
 
-            {/* Error Message */}
-            {error && (
-                <div
-                    style={{
-                        marginTop: "25px",
-                        padding: "15px",
-                        border: "1px solid red",
-                        borderRadius: "8px",
-                        color: "red",
-                        backgroundColor: "#fff5f5",
-                        whiteSpace: "pre-wrap",
-                    }}
-                >
-                    <strong>Error:</strong>
+                {filesError && (
+                    <div className="upload-error" role="alert">
+                        <p>{filesError}</p>
 
-                    <div style={{ marginTop: "8px" }}>
-                        {error}
-                    </div>
-                </div>
-            )}
-
-            {/* Scan Results */}
-            {result && (
-                <div
-                    style={{
-                        marginTop: "30px",
-                        padding: "25px",
-                        border: "1px solid #ddd",
-                        borderRadius: "10px",
-                    }}
-                >
-                    <h2>Scan Results</h2>
-
-                    {/* File Information */}
-                    <p>
-                        <strong>File:</strong>{" "}
-                        {result.filename}
-                    </p>
-
-                    <p>
-                        <strong>
-                            Total vulnerabilities:
-                        </strong>{" "}
-                        {result.total_vulnerabilities}
-                    </p>
-
-                    {/* Severity Summary */}
-                    {result.summary && (
-                        <div
-                            style={{
-                                marginTop: "20px",
-                                padding: "20px",
-                                border: "1px solid #ddd",
-                                borderRadius: "8px",
-                            }}
+                        <button
+                            type="button"
+                            className="upload-button upload-button-secondary"
+                            onClick={() => fetchProjectFiles(projectId)}
+                            disabled={!projectId || loadingFiles || busy}
                         >
-                            <h3>Severity Summary</h3>
+                            Retry
+                        </button>
+                    </div>
+                )}
 
-                            <p>
-                                🔴 <strong>Critical:</strong>{" "}
-                                {result.summary.critical ?? 0}
-                            </p>
+                {!filesError && loadingFiles && (
+                    <p role="status">Loading project files...</p>
+                )}
 
-                            <p>
-                                🟠 <strong>High:</strong>{" "}
-                                {result.summary.high ?? 0}
-                            </p>
-
-                            <p>
-                                🟡 <strong>Medium:</strong>{" "}
-                                {result.summary.medium ?? 0}
-                            </p>
-
-                            <p>
-                                🟢 <strong>Low:</strong>{" "}
-                                {result.summary.low ?? 0}
-                            </p>
-                        </div>
-                    )}
-
-                    {/* Vulnerability List */}
-                    <h3
-                        style={{
-                            marginTop: "25px",
-                        }}
-                    >
-                        Vulnerabilities
-                    </h3>
-
-                    {result.vulnerabilities &&
-                    result.vulnerabilities.length > 0 ? (
-                        result.vulnerabilities.map(
-                            (item, index) => (
-                                <div
-                                    key={index}
-                                    style={{
-                                        marginTop: "15px",
-                                        padding: "18px",
-                                        border: "1px solid #ddd",
-                                        borderRadius: "8px",
-                                    }}
-                                >
-                                    {/* Severity */}
-                                    <div
-                                        style={{
-                                            fontSize: "18px",
-                                            fontWeight: "bold",
-                                            marginBottom: "10px",
-                                        }}
-                                    >
-                                        {getSeverityIndicator(
-                                            item.severity
-                                        )}
-                                    </div>
-
-                                    {/* Vulnerability Name */}
-                                    <div
-                                        style={{
-                                            fontSize: "17px",
-                                            fontWeight: "bold",
-                                            marginBottom: "8px",
-                                        }}
-                                    >
-                                        {item.vulnerability ||
-                                            "Unknown vulnerability"}
-                                    </div>
-
-                                    {/* Description */}
-                                    {item.description && (
-                                        <div
-                                            style={{
-                                                marginBottom: "8px",
-                                            }}
-                                        >
-                                            {item.description}
-                                        </div>
-                                    )}
-
-                                    {/* File */}
-                                    {item.file && (
-                                        <div>
-                                            <strong>
-                                                File:
-                                            </strong>{" "}
-                                            {item.file}
-                                        </div>
-                                    )}
-
-                                    {/* Line */}
-                                    {item.line && (
-                                        <div>
-                                            <strong>
-                                                Line:
-                                            </strong>{" "}
-                                            {item.line}
-                                        </div>
-                                    )}
-
-                                    {/* Confidence */}
-                                    {item.confidence && (
-                                        <div>
-                                            <strong>
-                                                Confidence:
-                                            </strong>{" "}
-                                            {item.confidence}
-                                        </div>
-                                    )}
-
-                                    {/* Status */}
-                                    {item.status && (
-                                        <div
-                                            style={{
-                                                marginTop: "8px",
-                                            }}
-                                        >
-                                            <strong>
-                                                Status:
-                                            </strong>{" "}
-                                            {item.status}
-                                        </div>
-                                    )}
-                                </div>
-                            )
-                        )
-                    ) : (
-                        <p>
-                            No vulnerabilities were detected.
+                {!filesError && !loadingFiles && projectId &&
+                    projectFiles.length === 0 && (
+                        <p role="status">
+                            No uploaded files found for this project yet.
                         </p>
                     )}
-                </div>
-            )}
-        </div>
+
+                {!filesError && projectFiles.length > 0 && (
+                    <ul>
+                        {projectFiles.map((item, index) => (
+                            <li
+                                key={
+                                    item.id ??
+                                    `${item.filename ?? item.file_name ?? "file"}-${index}`
+                                }
+                            >
+                                {item.filename ??
+                                    item.file_name ??
+                                    item.name ??
+                                    "Uploaded file"}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </section>
+
+            <section className="upload-section">
+                <h2>Start security scan</h2>
+
+                <p>
+                    The scanner will analyze uploaded files associated with
+                    the selected project.
+                </p>
+
+                <button
+                    type="button"
+                    className="upload-button upload-button-scan"
+                    onClick={handleStartScan}
+                    disabled={!projectId || busy}
+                >
+                    {scanning ? "Starting scan..." : "Start Scan"}
+                    {!scanning && <span aria-hidden="true"> →</span>}
+                </button>
+            </section>
+        </main>
     );
 }
 
