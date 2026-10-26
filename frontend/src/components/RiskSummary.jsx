@@ -1,4 +1,4 @@
-
+﻿
 function RiskSummary({ summary, riskScore, riskLevel }) {
     const safeSummary = summary || {};
 
@@ -13,7 +13,24 @@ function RiskSummary({ summary, riskScore, riskLevel }) {
         score >= 0 &&
         score <= 100;
 
-    const level = String(riskLevel ?? "Not available");
+    const hasValidRiskLevel =
+        typeof riskLevel === "string" && riskLevel.trim() !== "";
+
+    const derivedLevel = !hasValidScore
+        ? "Not available"
+        : score >= 80
+          ? "Critical"
+          : score >= 60
+            ? "High"
+            : score >= 30
+              ? "Medium"
+              : score > 0
+                ? "Low"
+                : "Informational";
+
+    const level = hasValidRiskLevel
+        ? riskLevel.trim()
+        : derivedLevel;
     const normalizedLevel = level.toLowerCase();
 
     const levelColor =
@@ -146,7 +163,7 @@ function RiskSummary({ summary, riskScore, riskLevel }) {
                                     color: "#6b7280",
                                 }}
                             >
-                                {score}% on a 0–100 scale
+                                {score}% on a 0â€“100 scale
                             </p>
                         </>
                     )}

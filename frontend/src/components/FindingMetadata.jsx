@@ -1,4 +1,4 @@
-function FindingMetadata({ finding }) {
+﻿function FindingMetadata({ finding }) {
     const confidence = finding.confidence;
 
     const formattedConfidence =
@@ -39,17 +39,17 @@ function FindingMetadata({ finding }) {
 
             <div>
                 <strong>OWASP</strong>
-                <p>{finding.owasp || "Not available"}</p>
+                <p>{finding.owasp || finding.owasp_category || "Not available"}</p>
             </div>
 
             <div>
                 <strong>CWE</strong>
-                <p>{finding.cwe || "Not available"}</p>
+                <p>{finding.cwe || finding.cwe_id || "Not available"}</p>
             </div>
 
             <div>
-                <strong>Status</strong>
-                <p>{finding.status || "Not available"}</p>
+                <strong>Scan Status</strong>
+                <p>{finding.scan_status || "Not available"}</p>
             </div>
         </div>
     );
